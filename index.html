@@ -9,8 +9,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="FitCoach 5K">
   <meta name="mobile-web-app-capable" content="yes">
-  <!-- PWA manifest embedded as a data URI so the single HTML file stays self-contained -->
-  <link rel="manifest" href='data:application/manifest+json,{"name":"FitCoach 5K Tactical","short_name":"FitCoach 5K","start_url":".","display":"standalone","background_color":"#0a0d08","theme_color":"#0a0d08","orientation":"portrait","icons":[{"src":"data:image/svg%2bxml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 192 192%22%3E%3Crect width=%22192%22 height=%22192%22 fill=%22%230a0d08%22/%3E%3Ctext x=%2296%22 y=%22120%22 font-size=%2280%22 text-anchor=%22middle%22 fill=%22%23c9a961%22 font-family=%22sans-serif%22 font-weight=%22bold%22%3E5K%3C/text%3E%3C/svg%3E","sizes":"192x192","type":"image/svg+xml"}]}'>
+  <!-- PWA manifest: real file (manifest.json) served alongside this page -->
+  <link rel="manifest" href="manifest.json">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2957,7 +2957,7 @@
         title: { en: 'Identity & Physical Profile', es: 'Identidad y Perfil Físico' },
         subtitle: { en: 'Baseline data for mission calibration.', es: 'Datos base para calibrar la misión.' },
         fields: [
-          { key: 'name', type: 'text', label: { en: 'Full name / callsign', es: 'Nombre completo / indicativo' }, hint: { en: 'SSG Josue', es: 'SSG Josue' }, required: true },
+          { key: 'name', type: 'text', label: { en: 'Full name / callsign', es: 'Nombre completo / indicativo' }, hint: { en: 'e.g. SSG Smith', es: 'ej. SSG Pérez' }, required: true },
           { key: 'age', type: 'number', label: { en: 'Age', es: 'Edad' }, min: 18, max: 70, required: true },
           { key: 'weightLb', type: 'number', label: { en: 'Current weight (lb)', es: 'Peso actual (lb)' }, min: 100, max: 350, required: true },
           { key: 'goalWeightLb', type: 'number', label: { en: 'Target weight (lb)', es: 'Peso meta (lb)' }, hint: { en: '~180', es: '~180' } },
@@ -2995,7 +2995,7 @@
         title: { en: 'Terrain Context', es: 'Contexto de Terreno' },
         subtitle: { en: 'Mission-specific load factors.', es: 'Factores de carga específicos de la misión.' },
         fields: [
-          { key: 'unit', type: 'text', label: { en: 'Unit (optional)', es: 'Unidad (opcional)' }, hint: { en: '124th MP HHD', es: '124th MP HHD' } },
+          { key: 'unit', type: 'text', label: { en: 'Unit (optional)', es: 'Unidad (opcional)' }, hint: { en: 'e.g. 1-1 IN BN', es: 'ej. 1-1 IN BN' } },
           { key: 'terrain', type: 'select', label: { en: 'Primary training terrain', es: 'Terreno principal de entrenamiento' }, options: [{ en: 'Flat / garrison', es: 'Plano / guarnición' }, { en: 'Mountain', es: 'Montaña' }, { en: 'Mixed', es: 'Mixto' }], required: true }
         ]
       },
@@ -6239,7 +6239,7 @@
 
           <div class="card">
             <div class="card-title">${L('IDENTIDAD Y FÍSICO','IDENTITY & PHYSICAL')}</div>
-            ${field('name', L('Nombre / indicativo','Name / callsign'), p.name, {type:'text', ph:'SSG Josue'})}
+            ${field('name', L('Nombre / indicativo','Name / callsign'), p.name, {type:'text', ph:'SSG Smith'})}
             ${field('age', L('Edad','Age'), p.age, {min:18, max:70})}
             ${field('heightIn', L('Estatura (pulgadas)','Height (inches)'), p.heightIn, {step:0.5, min:48, max:84, ph:'70'})}
             ${field('weightLb', L('Peso actual (lb)','Current weight (lb)'), p.weightLb, {min:100, max:350})}
@@ -6294,7 +6294,7 @@
 
           <div class="card">
             <div class="card-title">${L('TERRENO Y MISIÓN','TERRAIN & MISSION')}</div>
-            ${field('unit', L('Unidad','Unit'), p.unit, {type:'text', ph:'124th MP HHD'})}
+            ${field('unit', L('Unidad','Unit'), p.unit, {type:'text', ph:'1-1 IN BN'})}
             ${selectField('terrain', L('Terreno principal','Primary terrain'), p.terrain, [
               {val:'', label:L('— elige —','— select —')},
               {val:'Flat', label:L('Plano / guarnición','Flat / garrison')},
@@ -8167,41 +8167,13 @@
       }
     }
 
-    // ── PWA: best-effort offline via an inline service worker ──
+    // ── PWA: offline support via a real service worker file (sw.js) ──
     // Only works over http(s) (not file://). Caches the app shell so it opens offline.
     // Weather fetch still needs a connection; everything else works offline.
     (function registerSW() {
       if (!('serviceWorker' in navigator)) return;
       if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
-      try {
-        const swCode = `
-          const CACHE = 'fitcoach5k-v1';
-          self.addEventListener('install', (e) => { self.skipWaiting(); });
-          self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); });
-          self.addEventListener('fetch', (e) => {
-            const url = e.request.url;
-            // Never cache the weather/geo APIs — always go to network.
-            if (url.includes('open-meteo.com') || url.includes('nominatim')) return;
-            e.respondWith(
-              caches.open(CACHE).then(async (cache) => {
-                const cached = await cache.match(e.request);
-                const network = fetch(e.request).then((resp) => {
-                  if (resp && resp.status === 200 && (e.request.method === 'GET')) {
-                    cache.put(e.request, resp.clone());
-                  }
-                  return resp;
-                }).catch(() => cached);
-                return cached || network;
-              })
-            );
-          });
-        `;
-        const blob = new Blob([swCode], { type: 'text/javascript' });
-        const swUrl = URL.createObjectURL(blob);
-        navigator.serviceWorker.register(swUrl).catch((err) => console.warn('SW registration skipped:', err));
-      } catch (e) {
-        console.warn('SW setup failed:', e);
-      }
+      navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW registration skipped:', err));
     })();
 
     render();
