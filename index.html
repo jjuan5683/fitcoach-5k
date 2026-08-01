@@ -1348,7 +1348,7 @@
       }
 
       // Check TSS impact
-      const estimatedTSS = estimateTSS(10, sessionType === 'easy' ? 1800 : 1200, 140, state.profile?.lthr || 180);
+      const estimatedTSS = estimateTSS(10, sessionType === 'easy' ? 1800 : 1200, 140, state.profile?.lthr || 174);
       if (isFaster && estimatedTSS > 120) {
         reasons.push(lang === 'es'
           ? 'Generará TSS alto — cuidado con acumulación de fatiga'
@@ -1428,12 +1428,34 @@
       return paceSecPerMi / efFactor;
     }
 
-    const hrZoneFromBpm = (hr, lthr = 180) => {
-      const pct = hr / lthr;
-      if (pct < 0.75) return 1;
-      if (pct < 0.85) return 2;
-      if (pct < 0.95) return 3;
-      if (pct < 1.05) return 4;
+    // ── SINGLE SOURCE OF TRUTH for HR zone boundaries (fractions of LTHR) ──
+    // Every zone calculation in the app (zone classification, reference table, markdown
+    // export, structured steps) reads from this one object. Previously the boundaries were
+    // duplicated as literals in hrZoneFromBpm() and buildHRZoneReference(), which allowed the
+    // profile config and the generated report to disagree about where Z2 ended.
+    // Boundary = LOWER edge of that zone, as a fraction of LTHR.
+    // At LTHR 174 this yields: Z1 <125 | Z2 125-140 | Z3 141-157 | Z4 158-174 | Z5 175+
+    // LTHR itself is the CEILING of Z4, not a midpoint — threshold work tops out at LTHR.
+    const ZONE_PCT = { z2: 0.72, z3: 0.81, z4: 0.91, z5: 1.005 };
+
+    // Rounded bpm floor for each zone. Everything else in the app derives from this, so the
+    // classifier and the printed table can never disagree by a rounding step.
+    function zoneFloors(lthr) {
+      lthr = lthr || 174;
+      return {
+        z2: Math.round(lthr * ZONE_PCT.z2),
+        z3: Math.round(lthr * ZONE_PCT.z3),
+        z4: Math.round(lthr * ZONE_PCT.z4),
+        z5: Math.round(lthr * ZONE_PCT.z5)
+      };
+    }
+
+    const hrZoneFromBpm = (hr, lthr = 174) => {
+      const f = zoneFloors(lthr);
+      if (hr < f.z2) return 1;
+      if (hr < f.z3) return 2;
+      if (hr < f.z4) return 3;
+      if (hr < f.z5) return 4;
       return 5;
     };
 
@@ -1449,13 +1471,14 @@
 
     // Reference HR zone table derived from LTHR — used in both the UI card and markdown export
     function buildHRZoneReference(lthr) {
-      lthr = lthr || 180;
+      lthr = lthr || 174;
+      const f = zoneFloors(lthr);
       const bounds = [
-        { num: 1, low: null, high: Math.round(lthr * 0.75) },
-        { num: 2, low: Math.round(lthr * 0.75), high: Math.round(lthr * 0.85) },
-        { num: 3, low: Math.round(lthr * 0.85), high: Math.round(lthr * 0.95) },
-        { num: 4, low: Math.round(lthr * 0.95), high: Math.round(lthr * 1.05) },
-        { num: 5, low: Math.round(lthr * 1.05), high: null }
+        { num: 1, low: null, high: f.z2 - 1 },
+        { num: 2, low: f.z2, high: f.z3 - 1 },
+        { num: 3, low: f.z3, high: f.z4 - 1 },
+        { num: 4, low: f.z4, high: f.z5 - 1 },
+        { num: 5, low: f.z5, high: null }
       ];
       return bounds.map(b => ({
         num: b.num, label: ZONE_LABELS[b.num], color: ZONE_COLORS[b.num],
@@ -1464,8 +1487,9 @@
     }
 
     function fmtZoneRange(z) {
-      if (z.low == null) return `< ${z.high}`;
-      if (z.high == null) return `> ${z.low}`;
+      // Bounds are inclusive on both ends: Z1 ends AT z.high, Z5 starts AT z.low.
+      if (z.low == null) return `≤ ${z.high}`;
+      if (z.high == null) return `≥ ${z.low}`;
       return `${z.low}–${z.high}`;
     }
 
@@ -1692,7 +1716,7 @@
       };
     }
 
-    function calcTimeInZones(points, lthr = 180) {
+    function calcTimeInZones(points, lthr = 174) {
       const valid = points.filter(p => p.hr != null && p.hr > 0 && p.time != null);
       const zoneSecs = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
       for (let i = 1; i < valid.length; i++) {
@@ -1848,7 +1872,7 @@
     // since most runners don't have a calibrated running power meter.
     // TSS formula: (duration_sec * avgHR * IF) / (LTHR * 3600) * 100, where IF = avgHR/LTHR
     function estimateTSS(distMi, timeSec, avgHR, lthr) {
-      lthr = lthr || 180;
+      lthr = lthr || 174;
       if (avgHR && avgHR > 50 && timeSec > 0) {
         const IF = avgHR / lthr;
         return (timeSec * avgHR * IF) / (lthr * 3600) * 100;
@@ -1870,7 +1894,7 @@
 
     // Build the daily TSS map from all logged activities + manual strength sessions
     function buildDailyTSSMap() {
-      const lthr = state.profile?.lthr || 180;
+      const lthr = state.profile?.lthr || 174;
       const dailyTSS = new Map();
 
       const addTSS = (dateISO, tss) => {
@@ -2332,7 +2356,7 @@
       return fullFile;
     }
 
-    function parseTCX(xmlText, lthr = 180) {
+    function parseTCX(xmlText, lthr = 174) {
       try {
         const parser = new DOMParser();
         const doc = parser.parseFromString(xmlText, 'text/xml');
@@ -2509,16 +2533,6 @@
           if (runTime > 30 && runDist > 0) workPaceSecPerMi = 1609.344 / (runDist / runTime);
         }
 
-        let score = 70;
-        if (decoupling != null) {
-          if (decoupling < 5) score += 15;
-          else if (decoupling < 7.5) score += 8;
-          else if (decoupling < 12) score += 2;
-          else score -= 10;
-        }
-        score = Math.min(100, Math.max(0, score));
-        const grade = score >= 93 ? 'A+' : score >= 87 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
-
         const findings = [];
         if (heatBpmPenalty != null && heatBpmPenalty > 3) findings.push({ type: 'warn', text: `Heat load ${Math.round(effectiveTempF)}°F → +${Math.round(heatBpmPenalty)} bpm penalty. Adjusted pace: ${fmtPace(heatAdjPace)}` });
         if (decoupling != null) {
@@ -2526,7 +2540,7 @@
           else if (decoupling > 7.5) findings.push({ type: 'warn', text: `Decoupling ${decoupling.toFixed(1)}% — acceptable, target sub-7.5%` });
           else findings.push({ type: 'pos', text: `Decoupling ${decoupling.toFixed(1)}% — strong aerobic base` });
         }
-        if (sport === 'running' && pred5K > 0) findings.push({ type: 'pos', text: `VDOT ${vdot.toFixed(1)} → 5K projection: ${secToMMSS(pred5K)}` });
+        // (VDOT finding is emitted after the terrain guard is evaluated — see below)
 
         const points = parseTrackpoints(doc);
         const sharedAltMap = smoothAltitudeSeries(points); // single source of truth for elevation
@@ -2542,6 +2556,59 @@
         const hrvProxy = calcHRVProxy(points);
         const elevGainFt = Math.round(realElevation.gainM * 3.28084);
         const elevLossFt = Math.round(realElevation.lossM * 3.28084);
+
+        // ── VDOT terrain guard ────────────────────────────────────────────
+        // Daniels' VDOT assumes flat ground. On steep terrain a runner covers far less distance
+        // for the same aerobic cost, so the formula reports a fitness collapse that did not
+        // happen (e.g. a mountain run at 878 m with +20% grades scoring VDOT 19.8 two days after
+        // a flat effort scored 27.4). Above ~30 m of climb per mile the number is terrain, not
+        // fitness — suppress it rather than pollute the VDOT trend and race prediction.
+        const elevGainPerMi = distMi > 0 ? realElevation.gainM / distMi : 0;
+        const vdotTerrainInvalid = sport === 'running' && elevGainPerMi > 30;
+        const vdotReported  = vdotTerrainInvalid ? null : (vdot || null);
+        const pred5KReported = vdotTerrainInvalid ? null : (pred5K || null);
+        if (vdotTerrainInvalid) {
+          findings.push({ type: 'warn', text: `VDOT suprimido — ${Math.round(elevGainPerMi)} m de desnivel por milla. Terreno, no pérdida de forma.` });
+        }
+
+        // ── Session score (rebalanced) ────────────────────────────────────
+        // Previously the score was 70 +/- decoupling only, so a clean aerobic session with
+        // 0.7% cardiac drift and RPE 3/10 could still be graded C off a single (and, on hilly
+        // ground, meaningless) decoupling number. Cardiac drift is the more reliable signal
+        // because it is not confounded by pace changes, so it now carries the most weight.
+        //   Cardiac drift 40 | Time in target zone 30 | Pacing consistency 20 | Decoupling 10
+        // Decoupling is dropped entirely (and its weight redistributed) when terrain invalidates it.
+        let score = 0, weightUsed = 0;
+        const addComponent = (pts, weight) => { score += pts; weightUsed += weight; };
+
+        // Cardiac drift — 40 pts
+        if (cardiacDrift && cardiacDrift.driftPct != null) {
+          const d = Math.abs(cardiacDrift.driftPct);
+          addComponent(d < 5 ? 40 : d < 8 ? 32 : d < 10 ? 22 : d < 15 ? 12 : 4, 40);
+        }
+        // Time in zone — 30 pts. Rewards staying out of Z4/Z5 on aerobic days and hitting them
+        // on quality days; without a linked plan type, default to the aerobic expectation.
+        if (timeInZones && timeInZones.pct && timeInZones.totalSec > 0) {
+          const hardPct = (timeInZones.pct.z4 || 0) + (timeInZones.pct.z5 || 0);
+          addComponent(hardPct < 10 ? 30 : hardPct < 25 ? 24 : hardPct < 45 ? 16 : 8, 30);
+        }
+        // Pacing consistency — 20 pts
+        if (pacingConsistency && pacingConsistency.cvPct != null) {
+          const cv = pacingConsistency.cvPct;
+          addComponent(cv < 3 ? 20 : cv < 6 ? 16 : cv < 10 ? 11 : 5, 20);
+        }
+        // Decoupling — 10 pts, only when terrain did not invalidate it
+        if (decoupling != null && !vdotTerrainInvalid) {
+          addComponent(decoupling < 0 ? 10 : decoupling < 5 ? 10 : decoupling < 7.5 ? 7 : decoupling < 12 ? 4 : 1, 10);
+        }
+        // Normalize to 100 across whatever components actually had data
+        score = weightUsed > 0 ? Math.round((score / weightUsed) * 100) : 70;
+        score = Math.min(100, Math.max(0, score));
+        const grade = score >= 93 ? 'A+' : score >= 87 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
+
+        if (sport === 'running' && !vdotTerrainInvalid && pred5K > 0) {
+          findings.push({ type: 'pos', text: `VDOT ${vdot.toFixed(1)} → 5K projection: ${secToMMSS(pred5K)}` });
+        }
 
         // ── NEW: altitude min/max from smoothed series ──
         const altValues = [...sharedAltMap.values()];
@@ -2641,8 +2708,9 @@
           },
           elevGainFt, elevLossFt,
           analysis: {
-            vdot: vdot || null, predicted5KSec: pred5K || null,
-            heatAdjPred5K: heatAdjVdot ? vdotTo5K(heatAdjVdot) : null,
+            vdot: vdotReported, predicted5KSec: pred5KReported,
+            vdotTerrainInvalid, elevGainPerMi: Math.round(elevGainPerMi),
+            heatAdjPred5K: (!vdotTerrainInvalid && heatAdjVdot) ? vdotTo5K(heatAdjVdot) : null,
             aerobicDecouplingPct: decoupling, decouplingRating: decRating,
             sessionScore: score, sessionGrade: grade, keyFindings: findings,
             realSplitsMi, realSplitsKm, cardiacDrift, cadenceSegments,
@@ -3017,7 +3085,7 @@
         title: { en: 'Physiological Parameters', es: 'Parámetros Fisiológicos' },
         subtitle: { en: 'For personalized HR zones.', es: 'Para zonas de FC personalizadas.' },
         fields: [
-          { key: 'lthr', type: 'number', label: { en: 'LTHR (bpm)', es: 'LTHR (bpm)' }, hint: { en: 'Default 180 (from Garmin)', es: 'Default 180 (de Garmin)' }, min: 120, max: 200 },
+          { key: 'lthr', type: 'number', label: { en: 'LTHR (bpm)', es: 'LTHR (bpm)' }, hint: { en: 'Certified 174 (threshold test)', es: 'Certificado 174 (prueba de umbral)' }, min: 120, max: 200 },
           { key: 'sleepAvg', type: 'select', label: { en: 'Average sleep', es: 'Sueño promedio' }, options: [{ en: '< 6h', es: '< 6h' }, { en: '6-7h', es: '6-7h' }, { en: '7-8h', es: '7-8h' }, { en: '8+ h', es: '8+ h' }], required: true },
           { key: 'stressLevel', type: 'select', label: { en: 'Current stress level', es: 'Nivel de estrés actual' }, options: [{ en: 'Low', es: 'Bajo' }, { en: 'Moderate', es: 'Moderado' }, { en: 'High', es: 'Alto' }, { en: 'Very high', es: 'Muy alto' }], required: true }
         ]
@@ -3062,7 +3130,7 @@
           { en: 'Start 30-45s/mi slower than your target pace shows — most runners start easy days too fast.', es: 'Empieza 30-45s/mi más lento que tu pace objetivo — la mayoría de corredores empieza los días fáciles demasiado rápido.' },
           { en: 'Breathing should allow full sentences without gasping. If you can\'t talk, slow down.', es: 'La respiración debe permitirte hablar frases completas sin ahogarte. Si no puedes hablar, baja el ritmo.' },
           { en: 'Keep cadence light and quick rather than long, reaching strides.', es: 'Mantén la cadencia ligera y rápida en vez de zancadas largas y estiradas.' },
-          { en: 'Heart rate should stay in Z1-Z2 (roughly 70-80% of LTHR) for the whole run.', es: 'La frecuencia cardíaca debe mantenerse en Z1-Z2 (aprox. 70-80% del LTHR) durante toda la carrera.' }
+          { en: 'Heart rate should stay in Z1-Z2 (under 81% of LTHR) for the whole run.', es: 'La frecuencia cardíaca debe mantenerse en Z1-Z2 (bajo 81% del LTHR) durante toda la carrera.' }
         ],
         tips: [
           { en: 'In PR heat, easy pace will naturally drift 20-40s/mi slower than cool-weather pace — that\'s expected, not a fitness loss.', es: 'Con el calor de PR, el pace fácil naturalmente será 20-40s/mi más lento que en clima frío — eso es esperado, no una pérdida de condición.' },
@@ -3080,7 +3148,7 @@
         },
         howToDo: [
           { en: 'Warm up 10 min easy before starting the tempo segment — don\'t go in cold.', es: 'Calienta 10 min fácil antes de empezar el segmento de tempo — no entres en frío.' },
-          { en: 'Target HR ceiling is 180 bpm (your LTHR) — if you\'re consistently over that, back the pace off 5-10s/mi.', es: 'El techo de FC objetivo es 180 bpm (tu LTHR) — si estás consistentemente por encima, baja el pace 5-10s/mi.' },
+          { en: 'Target HR ceiling is your LTHR — if you\'re consistently over that, back the pace off 5-10s/mi.', es: 'El techo de FC objetivo es tu LTHR — si estás consistentemente por encima, baja el pace 5-10s/mi.' },
           { en: 'Effort should feel sustainable but not comfortable — you should be able to say a short sentence, not hold a conversation.', es: 'El esfuerzo debe sentirse sostenible pero no cómodo — deberías poder decir una frase corta, no mantener una conversación.' },
           { en: 'Cool down 5-10 min easy after finishing the tempo segment.', es: 'Enfría 5-10 min fácil después de terminar el segmento de tempo.' }
         ],
@@ -3226,7 +3294,7 @@
 
     function generateStructuredSteps(session, lthr) {
       const pace = session.pacePerMi; // sec/mi
-      const hrCeiling = lthr || 180;
+      const hrCeiling = lthr || 174;
       const steps = [];
 
       switch (session.type) {
@@ -3237,7 +3305,7 @@
           steps.push({
             durationType: 'time', durationValue: Math.max(60, totalSec - 180 - 180),
             intensity: 'active', targetType: 'heart_rate',
-            targetLow: Math.round(hrCeiling * 0.70), targetHigh: Math.round(hrCeiling * 0.85),
+            targetLow: zoneFloors(hrCeiling).z2, targetHigh: zoneFloors(hrCeiling).z3 - 1,
             note: session.type === 'long' ? 'Long run pace' : 'Easy pace'
           });
           steps.push({ durationType: 'time', durationValue: 180, intensity: 'cooldown', targetType: 'open', note: 'Cool-down walk' });
@@ -3364,7 +3432,7 @@
         goalWeightLb: parseInt(formData.goalWeightLb) || 180,
         currentFiveKSec: best5KSec,
         goalFiveKSec: goalSec || 1800,
-        lthr: parseInt(formData.lthr) || 180,
+        lthr: parseInt(formData.lthr) || 174,
         raceDateISO: '2026-08-16',
         raceInBoots: true, // race is run in boots + OCP — affects prediction
         taperDays: 10, // 5K-optimal taper length; editable in Profile
@@ -3779,7 +3847,7 @@
 
     // Static LTHR-based reference table (not tied to a specific activity) — shown in MORE tab
     function renderHRZoneReferenceCard() {
-      const lthr = state.profile?.lthr || 180;
+      const lthr = state.profile?.lthr || 174;
       const zones = buildHRZoneReference(lthr);
       const lang = getLang();
       const es = lang === 'es';
@@ -4803,7 +4871,7 @@
       const unlinkedActivities = state.tcxSessions.filter(act => !act.linkedPlanDay || act.linkedPlanDay === day);
       const cfg = SESSION_TAGS[s.type];
       const info = getWorkoutInfo(s.type);
-      const structuredSteps = s.type !== 'rest' ? generateStructuredSteps(s, state.profile?.lthr || 180) : [];
+      const structuredSteps = s.type !== 'rest' ? generateStructuredSteps(s, state.profile?.lthr || 174) : [];
       const dayWord = getLang() === 'es' ? 'DÍA' : 'DAY';
 
       return `
@@ -5977,7 +6045,7 @@
         s.analysis?.predicted5KSec ? secToMMSS(s.analysis.predicted5KSec) : '--',
         s.analysis?.aerobicDecouplingPct != null ? s.analysis.aerobicDecouplingPct.toFixed(1) : '--',
         s.analysis?.sessionGrade || '--',
-        estimateTSS(s.totalDistMi, s.totalTimeSec, s.avgHR, state.profile?.lthr || 180).toFixed(1)
+        estimateTSS(s.totalDistMi, s.totalTimeSec, s.avgHR, state.profile?.lthr || 174).toFixed(1)
       ]);
 
       const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
@@ -6132,7 +6200,7 @@
 
       p += `## ${lang==='es' ? 'Qué debo mantener' : 'What to maintain'}\n`;
       p += `- ${lang==='es' ? 'Estructura semanal actual: intervalos, fácil, tempo progresivo, fácil+strides, larga.' : 'Current weekly structure: intervals, easy, progressive tempo, easy+strides, long run.'}\n`;
-      p += `- ${lang==='es' ? 'LTHR de referencia' : 'Reference LTHR'}: ${state.profile?.lthr || 180} bpm.\n\n`;
+      p += `- ${lang==='es' ? 'LTHR de referencia' : 'Reference LTHR'}: ${state.profile?.lthr || 174} bpm.\n\n`;
 
       p += `## ${lang==='es' ? 'Instrucciones' : 'Instructions'}\n`;
       p += lang==='es'
@@ -6170,7 +6238,7 @@
       let block = '# FitCoach Context Block\n';
       block += 'Generated: ' + today + ' | Race: ' + (state.profile?.raceDateISO || '2026-08-16') + ' | Days Left: ' + daysLeft + '\n\n';
       block += '## Profile\n';
-      block += (state.profile?.name || 'Athlete') + ' | ' + (state.profile?.age || '?') + 'y | ' + (state.profile?.weightLb || '?') + 'lb | Goal: sub-30min 5K | LTHR: ' + (state.profile?.lthr || 180) + 'bpm\n\n';
+      block += (state.profile?.name || 'Athlete') + ' | ' + (state.profile?.age || '?') + 'y | ' + (state.profile?.weightLb || '?') + 'lb | Goal: sub-30min 5K | LTHR: ' + (state.profile?.lthr || 174) + 'bpm\n\n';
       block += '## Progress\n';
       block += completed + '/' + total + ' sessions (' + (total > 0 ? Math.round(completed/total*100) : 0) + '%) | Days Left: ' + daysLeft + '\n\n';
       
@@ -6329,7 +6397,7 @@
               {val:'Very high', label:L('Muy alto','Very high')}
             ])}
             <p style="font-size:10px; color:var(--paper-dim); margin-top:8px; line-height:1.4;">
-              ${L('El LTHR define tus zonas de FC. Si tu Garmin lo reinició, verifica que sea 180 bpm.','LTHR defines your HR zones. If your Garmin reset it, verify it reads 180 bpm.')}
+              ${L('El LTHR define tus zonas de FC. Si tu Garmin lo reinició, verifica que coincida con tu prueba de umbral más reciente.','LTHR defines your HR zones. If your Garmin reset it, verify it matches your most recent threshold test.')}
             </p>
           </div>
 
@@ -6398,8 +6466,8 @@
             <div class="card-title">${t('settings_label')}</div>
             <div style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; color:var(--paper-dim); margin-bottom:4px;">LTHR (bpm)</label>
-              <input type="number" id="lthrInput" value="${state.profile?.lthr || 180}" min="120" max="200" style="width:100%; padding:8px; font-size:12px; border:1px solid var(--field-line); border-radius:4px; background:var(--field-surface); color:var(--paper);" onchange="updateLTHR(parseInt(this.value))" />
-              <p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">Garmin → ${state.profile?.lthr || 180} bpm · HR zones will update automatically</p>
+              <input type="number" id="lthrInput" value="${state.profile?.lthr || 174}" min="120" max="200" style="width:100%; padding:8px; font-size:12px; border:1px solid var(--field-line); border-radius:4px; background:var(--field-surface); color:var(--paper);" onchange="updateLTHR(parseInt(this.value))" />
+              <p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">Garmin → ${state.profile?.lthr || 174} bpm · HR zones will update automatically</p>
             </div>
             <label class="checkbox-item">
               <input type="checkbox" ${getLang() === 'es' ? 'checked' : ''} onchange="toggleLang()" />
@@ -6874,7 +6942,7 @@
       for (let i = 0; i < files.length; i++) {
         try {
           const xmlText = await readFileAsText(files[i]);
-          const parsed = parseTCX(xmlText, state.profile?.lthr || 180);
+          const parsed = parseTCX(xmlText, state.profile?.lthr || 174);
           if (!parsed) { errors++; continue; }
           const existingById = state.tcxSessions.find(t => t.id === parsed.id);
           // Secondary dedup: same date + near-identical distance & duration = same run re-exported.
@@ -6967,15 +7035,15 @@
       lines.push(`Sport: ${isBike ? 'Biking' : 'Running'}`);
       lines.push(`Type: ${typeLabel}`);
       if (linkedSession) lines.push(`Linked Plan Day: ${linkedSession.day}`);
-      lines.push(`LTHR: ${state.profile?.lthr || 180} bpm`);
+      lines.push(`LTHR: ${state.profile?.lthr || 174} bpm`);
       if (isBike) {
         lines.push(`Avg Speed: ${(t.avgSpeedMph || 0).toFixed(1)} mph`);
       } else {
-        lines.push(`VDOT: ${(a.vdot || 0).toFixed(1)}`);
+        lines.push(`VDOT: ${a.vdot ? a.vdot.toFixed(1) : 'N/D'}`);
         let pred5K = a.predicted5KSec ? secToMMSS(a.predicted5KSec) : ND;
         lines.push(`Predicted 5K: ${pred5K}`);
       }
-      let tss = estimateTSS(t.totalDistMi, t.totalTimeSec, t.avgHR, state.profile?.lthr || 180).toFixed(1);
+      let tss = estimateTSS(t.totalDistMi, t.totalTimeSec, t.avgHR, state.profile?.lthr || 174).toFixed(1);
       lines.push(`TSS: ${tss}`);
       if (a.aerobicDecoupling != null) lines.push(`Aerobic Decoupling: ${a.aerobicDecoupling.toFixed(1)}%`);
       lines.push(`Session Grade: ${a.sessionGrade || ND}`);
@@ -6997,7 +7065,7 @@
       }
       lines.push(`| FC Promedio / Máxima | ${t.avgHR} / ${t.maxHR} bpm | ${a.sessionGrade || '?'} |`);
       if (!isBike) {
-        lines.push(`| VDOT | ${(a.vdot || 0).toFixed(1)} | ${a.vdot && a.vdot > 31.5 ? '↑' : (a.vdot && a.vdot < 31.5 ? '↓' : '=') } |`);
+        lines.push(`| VDOT | ${a.vdot ? a.vdot.toFixed(1) : (a.vdotTerrainInvalid ? 'N/D (terreno)' : 'N/D')} | ${a.vdot && a.vdot > 31.5 ? '↑' : (a.vdot && a.vdot < 31.5 ? '↓' : '—') } |`);
       }
       lines.push(`| TSS | ${tss} | — |`);
       lines.push('');
@@ -7078,12 +7146,12 @@
       lines.push(`**FC Máxima:** ${t.maxHR} bpm`);
       
       // VDOT calculation — running only, meaningless for a bike ride
-      const vdot = a.vdot ? a.vdot.toFixed(1) : '0';
+      const vdot = a.vdot ? a.vdot.toFixed(1) : (a.vdotTerrainInvalid ? `N/D — terreno (${a.elevGainPerMi} m/mi de desnivel)` : 'N/D');
       pred5K = a.predicted5KSec ? secToMMSS(a.predicted5KSec) : 'N/D';
       // tss already computed above from estimateTSS() using real session data — reuse it
       
       if (!isBike) {
-        lines.push(`**VDOT (VO2max):** ${vdot} ml/kg/min`)  ;
+        lines.push(`**VDOT (VO2max):** ${a.vdot ? vdot + ' ml/kg/min' : vdot}`)  ;
         lines.push(`**Predicción 5K:** ${pred5K}`)  ;
       }
       lines.push(`**TSS (Training Stress Score):** ${tss}`)  ;
@@ -7127,7 +7195,7 @@
       lines.push('');
       lines.push('### Configuración de Zonas (basada en LTHR)');
       lines.push('');
-      const lthr = state.profile?.lthr || 180;
+      const lthr = state.profile?.lthr || 174;
       const zoneRef = buildHRZoneReference(lthr);
       const zoneNames = { 1: 'Z1 Recuperación', 2: 'Z2 Aeróbica', 3: 'Z3 Aeróbica Moderada', 4: 'Z4 Umbral', 5: 'Z5 Máxima' };
       lines.push(`| Zona | Rango (LTHR ${lthr} bpm) | Objetivo |`);
@@ -7206,20 +7274,43 @@
         const secondHalfAvgHR = Math.round(secondHalf.reduce((s, sp) => s + sp.avgHR, 0) / secondHalf.length);
         const secondHalfAvgPace = secondHalf.reduce((s, sp) => s + sp.paceSecPerUnit, 0) / secondHalf.length;
         
-        const decoupling = ((secondHalfAvgHR / secondHalfAvgPace) / (firstHalfAvgHR / firstHalfAvgPace) - 1) * 100;
-        
+        // Efficiency Factor = speed / HR. Pace is stored as sec/unit, so speed = 1/pace.
+        // Decoupling = how much EF DEGRADED from first half to second half.
+        //   positive  -> efficiency dropped (real aerobic decoupling / cardiac fatigue)
+        //   negative  -> efficiency improved (ran faster at the same or lower HR) — this is GOOD
+        // The previous formula was (HR2/pace2)/(HR1/pace1), which INVERTS the sign: speeding up
+        // in the second half made the number large and positive and got reported as "significant
+        // cardiac fatigue". Fixed to match the efficiency-factor math used in parseTCX().
+        const efFirst  = (1 / firstHalfAvgPace)  / firstHalfAvgHR;
+        const efSecond = (1 / secondHalfAvgPace) / secondHalfAvgHR;
+        const decoupling = ((efFirst - efSecond) / efFirst) * 100;
+
+        // Elevation validity guard: on an asymmetric course (climb out / descend back) the pace
+        // difference between halves is driven by gradient, not by fitness, so the comparison is
+        // physiologically meaningless. Threshold: 30 m of net elevation difference between halves.
+        const netElev = (arr) => arr.reduce((sum, sp) => sum + ((sp.elevGainM || 0) - (sp.elevLossM || 0)), 0);
+        const elevSkewM = Math.abs(netElev(secondHalf) - netElev(firstHalf));
+        const decouplingValid = elevSkewM <= 30;
+
         lines.push('## Decoupling Aeróbico (HR/Pace Divergence)');
         lines.push('');
         lines.push(`**Primera Mitad:** ${firstHalfAvgHR} bpm avg, ${fmtPace(firstHalfAvgPace)} pace`)  ;
         lines.push(`**Segunda Mitad:** ${secondHalfAvgHR} bpm avg, ${fmtPace(secondHalfAvgPace)} pace`)  ;
-        lines.push(`**Decoupling:** ${decoupling.toFixed(1)}%`)  ;
-        
-        if (decoupling < 5) {
-          lines.push('**Interpretación:** Excelente — motor aeróbico consistente y eficiente.');
-        } else if (decoupling < 10) {
-          lines.push('**Interpretación:** Normal — fatiga acumulada leve.');
+
+        if (!decouplingValid) {
+          lines.push(`**Decoupling:** N/D — no válido`);
+          lines.push(`**Motivo:** Perfil de elevación asimétrico (${Math.round(elevSkewM)} m de diferencia neta entre mitades). El cambio de ritmo lo explica la pendiente, no la fatiga.`);
         } else {
-          lines.push('**Interpretación:** Alto — fatiga cardíaca significativa. Considera más volumen Z2.');
+          lines.push(`**Decoupling:** ${decoupling.toFixed(1)}%`)  ;
+          if (decoupling < 0) {
+            lines.push(`**Interpretación:** Eficiencia mejoró ${Math.abs(decoupling).toFixed(1)}% — ritmo más rápido al mismo costo cardíaco.`);
+          } else if (decoupling < 5) {
+            lines.push('**Interpretación:** Excelente — motor aeróbico consistente y eficiente.');
+          } else if (decoupling < 10) {
+            lines.push('**Interpretación:** Normal — fatiga acumulada leve.');
+          } else {
+            lines.push('**Interpretación:** Alto — fatiga cardíaca significativa. Considera más volumen Z2.');
+          }
         }
         lines.push('');
       }
@@ -7303,7 +7394,10 @@
       lines.push('');
 
       // ── HRV PROXY ────────────────────────────────────────────────────────
-      if (a.hrvProxy) {
+      // Only show the estimated proxy when the athlete has NOT entered a real measured HRV.
+      // Printing both (e.g. "HRV: 44 ms" above and "HRV Proxy: 0.9" here) invites reading the
+      // proxy as a second, contradictory measurement of the same thing.
+      if (a.hrvProxy && !(mf && mf.hrv)) {
         lines.push('---');
         lines.push('');
         lines.push('## HRV (Aproximado del TCX)');
@@ -7355,11 +7449,36 @@
         lines.push('');
         lines.push('## Planeado vs Real');
         lines.push('');
-        lines.push(`**Pace objetivo:** ${fmtPace(linkedSession.pacePerMi)}`);
-        lines.push(`**Pace real:** ${fmtPace(t.avgPaceSecPerMi)}`);
-        lines.push(`**Distancia objetivo:** ${(linkedSession.targetDistM/1609.344).toFixed(2)} mi`);
-        lines.push(`**Distancia real:** ${t.totalDistMi.toFixed(2)} mi`);
-        lines.push(`**Sub-pasos completados:** ${linkedSession.substeps.filter(s=>s.done).length}/${linkedSession.substeps.length}`);
+        // Plan days imported without pace/distance targets carry pacePerMi = 0 and
+        // targetDistM = 0. Printing those raw produced meaningless rows ("Distancia objetivo:
+        // 0.00 mi", "Sub-pasos: 0/4") that read as a failed session rather than a plan day with
+        // no targets set. Print only what actually exists, and say so when nothing does.
+        const hasPaceTarget = linkedSession.pacePerMi > 0;
+        const hasDistTarget = linkedSession.targetDistM > 0;
+        const subs = linkedSession.substeps || [];
+        const hasSubsteps = subs.length > 0 && subs.some(s => s.done !== undefined);
+
+        if (hasPaceTarget) {
+          lines.push(`**Pace objetivo:** ${fmtPace(linkedSession.pacePerMi)}`);
+          const paceDelta = Math.round(t.avgPaceSecPerMi - linkedSession.pacePerMi);
+          lines.push(`**Pace real:** ${fmtPace(t.avgPaceSecPerMi)} (${paceDelta >= 0 ? '+' : ''}${paceDelta}s/mi)`);
+        } else {
+          lines.push(`**Pace real:** ${fmtPace(t.avgPaceSecPerMi)}`);
+        }
+        if (hasDistTarget) {
+          const tgtMi = linkedSession.targetDistM / 1609.344;
+          lines.push(`**Distancia objetivo:** ${tgtMi.toFixed(2)} mi`);
+          lines.push(`**Distancia real:** ${t.totalDistMi.toFixed(2)} mi (${(t.totalDistMi - tgtMi >= 0 ? '+' : '')}${(t.totalDistMi - tgtMi).toFixed(2)} mi)`);
+        } else {
+          lines.push(`**Distancia real:** ${t.totalDistMi.toFixed(2)} mi`);
+        }
+        if (hasSubsteps) {
+          lines.push(`**Sub-pasos completados:** ${subs.filter(s=>s.done).length}/${subs.length}`);
+        }
+        if (!hasPaceTarget && !hasDistTarget) {
+          lines.push('');
+          lines.push(`> El día ${linkedSession.day} del plan no tiene pace ni distancia objetivo configurados, así que no hay comparación posible. Edita el día en la pestaña PLAN para fijar objetivos.`);
+        }
         lines.push('');
       }
 
@@ -7405,7 +7524,7 @@
       const s = state.plan.find(p => p.day === day);
       if (!s || s.type === 'rest') return;
       try {
-        const lthr = state.profile?.lthr || 180;
+        const lthr = state.profile?.lthr || 174;
         const steps = generateStructuredSteps(s, lthr);
         const fitBytes = buildFitWorkout({ name: sessionTitle(s), steps });
         const blob = new Blob([fitBytes], { type: 'application/octet-stream' });
