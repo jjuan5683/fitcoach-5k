@@ -1262,6 +1262,48 @@
     const danielsVO2 = (v) => -4.60 + 0.182258 * v + 0.000104 * v * v;
     const danielsPct = (t) => 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t);
 
+    // Decides whether a VDOT number from this session is physiologically meaningful.
+    // Returns { valid, reason, reasonEs } — callers suppress the value when valid is false.
+    function vdotValidity({ sport, avgHR, lthr, elevGainPerMi, totalTimeSec, sessionType }) {
+      if (sport !== 'running') {
+        return { valid: false, reason: 'not a run', reasonEs: 'no aplica a ciclismo' };
+      }
+      // An explicitly easy/recovery/cross session is never a valid VDOT effort, whatever the
+      // heart rate happened to do. Matched as substrings because the label arrives in several
+      // shapes: a plan-day type ('easy', 'cross_training') or a free-text manual tag
+      // ('Z2 / Easy', 'Recovery run').
+      if (sessionType) {
+        const st = String(sessionType).toLowerCase();
+        const easyMarkers = ['easy', 'facil', 'fácil', 'rest', 'descanso', 'recovery',
+                             'recuperacion', 'recuperación', 'cross', 'z1', 'z2'];
+        if (easyMarkers.some(m => st.includes(m))) {
+          return { valid: false, reason: `session type '${sessionType}' is not a race effort`,
+                   reasonEs: 'sesión fácil/recuperación' };
+        }
+      }
+      if (elevGainPerMi > 30) {
+        return {
+          valid: false,
+          reason: `${Math.round(elevGainPerMi)} m climb per mile`,
+          reasonEs: `terreno (${Math.round(elevGainPerMi)} m/mi de desnivel)`
+        };
+      }
+      if (totalTimeSec > 0 && totalTimeSec < 480) {
+        return { valid: false, reason: 'effort under 8 minutes', reasonEs: 'esfuerzo menor a 8 minutos' };
+      }
+      // Threshold floor: below Z4 the runner was not racing, so the time does not represent
+      // what they are capable of.
+      const floor = zoneFloors(lthr || 174).z4;
+      if (avgHR > 0 && avgHR < floor) {
+        return {
+          valid: false,
+          reason: `avg HR ${Math.round(avgHR)} below threshold floor ${floor}`,
+          reasonEs: `esfuerzo aeróbico (FC prom ${Math.round(avgHR)} < ${floor} bpm de umbral)`
+        };
+      }
+      return { valid: true, reason: null, reasonEs: null };
+    }
+
     function calcVDOT(distanceMeters, timeSecs) {
       if (distanceMeters < 400 || timeSecs < 60) return 0;
       const v = danielsVO2(distanceMeters / (timeSecs / 60));
@@ -1337,7 +1379,12 @@
       // Check recent decoupling
       const recentSessions = state.tcxSessions.slice(0, 3); // Last 3 activities
       const avgRecentDecoupling = recentSessions.length > 0
-        ? recentSessions.reduce((s, a) => s + (a.analysis?.aerobicDecoupling || 0), 0) / recentSessions.length
+        ? recentSessions.reduce((s, a) => {
+            // Only positive decoupling represents fatigue; an invalid (terrain-skewed) or
+            // negative reading must not average in as if the athlete were fresh or failing.
+            const d = a.analysis?.decouplingValid ? (a.analysis.aerobicDecouplingPct || 0) : 0;
+            return s + Math.max(0, d);
+          }, 0) / recentSessions.length
         : 0;
 
       if (avgRecentDecoupling > 8) {
@@ -1486,6 +1533,44 @@
       }));
     }
 
+    // Aerobic decoupling: how much the efficiency factor (speed per heartbeat) degraded from the
+    // first half of the session to the second.
+    //   positive -> efficiency fell: real cardiac drift under load
+    //   negative -> efficiency rose: faster for the same or lower heart rate
+    // Returns valid:false when the course profile makes the comparison meaningless — on an
+    // out-and-back that climbs then descends, the second half is faster because of gravity, not
+    // fitness, and the resulting number says nothing about the athlete.
+    function calcAerobicDecoupling(splits) {
+      const usable = (splits || []).filter(sp => sp.avgHR != null && sp.avgHR > 0 && sp.paceSecPerUnit > 0);
+      if (usable.length < 2) {
+        return { value: null, valid: false, reasonEs: 'datos insuficientes', reasonEn: 'insufficient data' };
+      }
+      const mid = Math.floor(usable.length / 2);
+      const first = usable.slice(0, mid), second = usable.slice(mid);
+
+      const avgHR1 = first.reduce((a, sp) => a + sp.avgHR, 0) / first.length;
+      const avgPace1 = first.reduce((a, sp) => a + sp.paceSecPerUnit, 0) / first.length;
+      const avgHR2 = second.reduce((a, sp) => a + sp.avgHR, 0) / second.length;
+      const avgPace2 = second.reduce((a, sp) => a + sp.paceSecPerUnit, 0) / second.length;
+
+      // Efficiency factor = speed / HR; pace is sec-per-unit, so speed is its reciprocal.
+      const ef1 = (1 / avgPace1) / avgHR1;
+      const ef2 = (1 / avgPace2) / avgHR2;
+      const value = ef1 > 0 ? ((ef1 - ef2) / ef1) * 100 : null;
+
+      const netElev = (arr) => arr.reduce((sum, sp) => sum + ((sp.elevGainM || 0) - (sp.elevLossM || 0)), 0);
+      const elevSkewM = Math.abs(netElev(second) - netElev(first));
+      const valid = value != null && elevSkewM <= 30;
+
+      return {
+        value, valid, elevSkewM: Math.round(elevSkewM),
+        avgHRFirst: Math.round(avgHR1), avgPaceFirst: avgPace1,
+        avgHRSecond: Math.round(avgHR2), avgPaceSecond: avgPace2,
+        reasonEs: valid ? null : `perfil de elevación asimétrico (${Math.round(elevSkewM)} m de diferencia neta entre mitades)`,
+        reasonEn: valid ? null : `asymmetric elevation profile (${Math.round(elevSkewM)} m net difference between halves)`
+      };
+    }
+
     function fmtZoneRange(z) {
       // Bounds are inclusive on both ends: Z1 ends AT z.high, Z5 starts AT z.low.
       if (z.low == null) return `≤ ${z.high}`;
@@ -1497,28 +1582,86 @@
     // ADVANCED ANALYSIS ENGINE — raw trackpoint analysis
     // ═══════════════════════════════════════════════════════════════════════
 
+    // Namespace-agnostic element lookup. TCX puts core elements in the Garmin default namespace
+    // and extension elements under an ns3: prefix; getElementsByTagNameNS('*', name) matches on
+    // localName regardless of prefix and is markedly faster than the CSS selector engine.
+    const tagsNS = (root, name) => root.getElementsByTagNameNS('*', name);
+
+    // Reads every field of one <Trackpoint> in a single walk of its child elements.
+    function readTrackpoint(tp) {
+      let time = null, lat = null, lon = null, alt = null, dist = null,
+          hr = null, speed = null, cad = null, runCad = null, watts = null, temp = null;
+      for (let el = tp.firstElementChild; el; el = el.nextElementSibling) {
+        switch (el.localName) {
+          case 'Time': time = Date.parse(el.textContent); break;
+          case 'Position':
+            for (let q = el.firstElementChild; q; q = q.nextElementSibling) {
+              if (q.localName === 'LatitudeDegrees') lat = parseFloat(q.textContent);
+              else if (q.localName === 'LongitudeDegrees') lon = parseFloat(q.textContent);
+            }
+            break;
+          case 'AltitudeMeters': alt = parseFloat(el.textContent); break;
+          case 'DistanceMeters': dist = parseFloat(el.textContent); break;
+          case 'HeartRateBpm': {
+            const v = el.firstElementChild;
+            if (v) hr = parseFloat(v.textContent);
+            break;
+          }
+          case 'Cadence': cad = parseFloat(el.textContent); break;
+          case 'Extensions':
+            // <Extensions><ns3:TPX><ns3:Speed/><ns3:RunCadence/><ns3:Watts/></ns3:TPX></Extensions>
+            for (let x = el.firstElementChild; x; x = x.nextElementSibling) {
+              for (let y = x.firstElementChild; y; y = y.nextElementSibling) {
+                switch (y.localName) {
+                  case 'Speed': speed = parseFloat(y.textContent); break;
+                  case 'RunCadence': runCad = parseFloat(y.textContent); break;
+                  case 'Watts': watts = parseFloat(y.textContent); break;
+                  case 'Temp': temp = parseFloat(y.textContent); break;
+                }
+              }
+            }
+            break;
+        }
+      }
+      // A direct <Cadence> child precedes <Extensions> in document order, so it wins over
+      // ns3:RunCadence — matching the document-order semantics of the old 'RunCadence, Cadence'
+      // selector. Stored doubled: TCX reports one foot, runners count both.
+      const rawCad = cad != null ? cad : runCad;
+      return {
+        time,
+        lat: (lat == null || isNaN(lat)) ? null : lat,
+        lon: (lon == null || isNaN(lon)) ? null : lon,
+        alt, dist, hr, speed,
+        cadence: rawCad != null ? rawCad * 2 : null,
+        watts, temp
+      };
+    }
+
+    // Memoized per parsed XML document — parseTCX() consumes the point array several times and
+    // re-extracting it each time was the single largest cost in the whole import path.
+    const _trackpointCache = new WeakMap();
+
+    // parseTCX() already walks every trackpoint lap-by-lap; handing that result to the cache
+    // means the whole-document pass below never has to run at all.
+    function primeTrackpointCache(doc, points) {
+      if (doc && points && points.length) _trackpointCache.set(doc, points);
+    }
+
     function parseTrackpoints(doc) {
-      const tps = [...doc.querySelectorAll('Trackpoint')];
-      const points = [];
-      tps.forEach(tp => {
-        const timeEl = tp.querySelector('Time');
-        const time = timeEl ? new Date(timeEl.textContent).getTime() : null;
-        const lat = parseFloat(tp.querySelector('LatitudeDegrees')?.textContent ?? 'NaN');
-        const lon = parseFloat(tp.querySelector('LongitudeDegrees')?.textContent ?? 'NaN');
-        const altEl = tp.querySelector('AltitudeMeters');
-        const alt = altEl ? parseFloat(altEl.textContent) : null;
-        const distEl = tp.querySelector('DistanceMeters');
-        const dist = distEl ? parseFloat(distEl.textContent) : null;
-        const hrEl = tp.querySelector('HeartRateBpm Value');
-        const hr = hrEl ? parseFloat(hrEl.textContent) : null;
-        const speedEl = tp.querySelector('Speed');
-        const speed = speedEl ? parseFloat(speedEl.textContent) : null;
-        const cadEl = tp.querySelector('RunCadence, Cadence');
-        const cadence = cadEl ? parseFloat(cadEl.textContent) * 2 : null;
-        const wattsEl = tp.querySelector('Watts');
-        const watts = wattsEl ? parseFloat(wattsEl.textContent) : null;
-        points.push({ time, lat: isNaN(lat) ? null : lat, lon: isNaN(lon) ? null : lon, alt, dist, hr, speed, cadence, watts });
-      });
+      const cached = _trackpointCache.get(doc);
+      if (cached) return cached;
+      const tps = tagsNS(doc, 'Trackpoint');
+      const points = new Array(tps.length);
+      for (let i = 0; i < tps.length; i++) points[i] = readTrackpoint(tps[i]);
+      _trackpointCache.set(doc, points);
+      return points;
+    }
+
+    // Same walk, but scoped to one <Lap> and returning that lap's own slice of trackpoints.
+    function lapTrackpoints(lapEl) {
+      const tps = tagsNS(lapEl, 'Trackpoint');
+      const points = new Array(tps.length);
+      for (let i = 0; i < tps.length; i++) points[i] = readTrackpoint(tps[i]);
       return points;
     }
 
@@ -1812,8 +1955,12 @@
 
     // ── Automatic evaluation based on parsed data ──
     function calcAutoEvaluation(analysis, recentSessions) {
-      const { aerobicDecouplingPct, cardiacDrift, pacingConsistency, timeInZones, sessionScore } = analysis;
+      const { cardiacDrift, pacingConsistency, timeInZones, sessionScore, decouplingValid } = analysis;
       const fatigue = recentSessions?.signal;
+
+      // A decoupling number the elevation guard rejected carries no information about the
+      // athlete, so treat it as absent rather than as evidence of fatigue.
+      const aerobicDecouplingPct = decouplingValid ? analysis.aerobicDecouplingPct : null;
 
       // Aerobic state
       let aerobicState = 'Aceptable';
@@ -1833,7 +1980,8 @@
       let driftInterp = null;
       if (cardiacDrift) {
         const d = cardiacDrift.driftPct;
-        if (d < 5) driftInterp = 'Excelente eficiencia aeróbica';
+        if (d < -3) driftInterp = 'FC descendió durante la sesión — muy buen control aeróbico';
+        else if (d < 5) driftInterp = 'Excelente eficiencia aeróbica';
         else if (d < 8) driftInterp = 'Normal';
         else if (d < 10) driftInterp = 'Fatiga, calor o intensidad elevada';
         else driftInterp = 'Posible exceso de intensidad o fatiga acumulada';
@@ -2372,67 +2520,94 @@
         const sport = sportRaw.includes('bik') ? 'biking' : sportRaw.includes('run') ? 'running' : (sportRaw || 'running');
 
         const id = doc.querySelector('Id')?.textContent || new Date().toISOString();
-        const lapEls = [...doc.querySelectorAll('Lap')];
+        const lapEls = [...tagsNS(doc, 'Lap')];
         if (!lapEls.length) return null;
 
+        // TCX nests every <Trackpoint> inside a <Lap>, so parsing lap-by-lap yields the same
+        // points, in the same document order, as a whole-document scan — for free, since the lap
+        // aggregates need those points anyway. Priming the cache with the concatenation means
+        // parseTrackpoints(doc) later in this function is a map lookup rather than a second
+        // full pass over 2,000+ elements.
+        const lapPointSlices = lapEls.map(lapTrackpoints);
+        const allPoints = lapPointSlices.length === 1 ? lapPointSlices[0] : [].concat(...lapPointSlices);
+        primeTrackpointCache(doc, allPoints);
+
+        // Temperature rides in the trackpoint extensions, which readTrackpoint() already collects
+        // — no separate document-wide scan needed.
         let avgTempC = null;
-        const tempEls = [...doc.querySelectorAll('Temp')];
-        if (tempEls.length) {
-          const vals = tempEls.map(e => parseFloat(e.textContent || 'NaN')).filter(v => !isNaN(v) && v > 0 && v < 50);
-          if (vals.length) avgTempC = vals.reduce((a, b) => a + b) / vals.length;
+        {
+          const tempVals = [];
+          const allPts = parseTrackpoints(doc);
+          for (let i = 0; i < allPts.length; i++) {
+            const v = allPts[i].temp;
+            if (v != null && !isNaN(v) && v > 0 && v < 50) tempVals.push(v);
+          }
+          if (tempVals.length) avgTempC = tempVals.reduce((a, b) => a + b, 0) / tempVals.length;
         }
         const avgTempF = avgTempC != null ? celsiusToF(avgTempC) : null;
 
         const laps = lapEls.map((lap, i) => {
-          const totalTimeSec = parseFloat(lap.querySelector('TotalTimeSeconds')?.textContent || '0');
-          const distM = parseFloat(lap.querySelector('DistanceMeters')?.textContent || '0');
-          const cals = parseFloat(lap.querySelector('Calories')?.textContent || '0');
-          const avgHREl = lap.querySelector('AverageHeartRateBpm Value');
-          const maxHREl = lap.querySelector('MaximumHeartRateBpm Value');
-          const avgHR = avgHREl ? parseFloat(avgHREl.textContent || '0') : 0;
-          const maxHR = maxHREl ? parseFloat(maxHREl.textContent || '0') : 0;
+          // Lap header fields sit at a known depth, so read them with one child walk instead of
+          // five subtree selector queries.
+          let totalTimeSec = 0, distM = 0, cals = 0, avgHR = 0, maxHR = 0;
+          for (let el = lap.firstElementChild; el; el = el.nextElementSibling) {
+            switch (el.localName) {
+              case 'TotalTimeSeconds': totalTimeSec = parseFloat(el.textContent || '0'); break;
+              case 'DistanceMeters': distM = parseFloat(el.textContent || '0'); break;
+              case 'Calories': cals = parseFloat(el.textContent || '0'); break;
+              case 'AverageHeartRateBpm': {
+                const v = el.firstElementChild;
+                if (v) avgHR = parseFloat(v.textContent || '0');
+                break;
+              }
+              case 'MaximumHeartRateBpm': {
+                const v = el.firstElementChild;
+                if (v) maxHR = parseFloat(v.textContent || '0');
+                break;
+              }
+            }
+          }
 
-          const tps = [...lap.querySelectorAll('Trackpoint')];
+          // Aggregate from already-parsed point objects rather than re-crawling the DOM. The old
+          // path ran another ~6 querySelector() calls per trackpoint here, duplicating work
+          // parseTrackpoints() had already done for the same elements.
+          const tps = lapPointSlices[i];
           let sumSpd = 0, spdCt = 0, sumCad = 0, cadCt = 0, minHR = 999, elevGain = 0, lastElev = null;
           let sumHR = 0, hrCt = 0;
           let hrZoneSecs = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
           let lastTime = null;
 
-          tps.forEach(tp => {
-            const speedEl = tp.querySelector('Speed');
-            const speedVal = speedEl ? parseFloat(speedEl.textContent || '0') : 0;
-            if (speedVal > 0) { sumSpd += speedVal; spdCt++; }
+          for (let k = 0; k < tps.length; k++) {
+            const tp = tps[k];
 
-            const cadEl = tp.querySelector('RunCadence, Cadence');
-            const cadVal = cadEl ? parseFloat(cadEl.textContent || '0') : 0;
-            if (cadVal > 0) { sumCad += cadVal; cadCt++; }
+            if (tp.speed > 0) { sumSpd += tp.speed; spdCt++; }
 
-            const hrVal = parseFloat(tp.querySelector('HeartRateBpm Value')?.textContent || '0');
+            // points store cadence already doubled; lap averages double at the end, so halve here
+            // to keep the arithmetic identical to the original.
+            if (tp.cadence > 0) { sumCad += tp.cadence / 2; cadCt++; }
+
+            const hrVal = tp.hr > 0 ? tp.hr : 0;
             if (hrVal > 0) {
               sumHR += hrVal; hrCt++;
               if (hrVal < minHR) minHR = hrVal;
             }
 
-            const timeEl = tp.querySelector('Time');
-            if (timeEl && hrVal > 0) {
-              const t2 = new Date(timeEl.textContent || 0).getTime();
+            if (tp.time != null && hrVal > 0) {
               if (lastTime) {
-                const dt = (t2 - lastTime) / 1000;
+                const dt = (tp.time - lastTime) / 1000;
                 if (dt > 0 && dt < 300) {
                   const z = hrZoneFromBpm(hrVal, lthr);
                   hrZoneSecs[z] = (hrZoneSecs[z] || 0) + dt;
                 }
               }
-              lastTime = t2;
+              lastTime = tp.time;
             }
 
-            const elevEl = tp.querySelector('AltitudeMeters');
-            const elevVal = parseFloat(elevEl?.textContent || 'NaN');
-            if (!isNaN(elevVal)) {
-              if (lastElev !== null && elevVal > lastElev) elevGain += elevVal - lastElev;
-              lastElev = elevVal;
+            if (tp.alt != null && !isNaN(tp.alt)) {
+              if (lastElev !== null && tp.alt > lastElev) elevGain += tp.alt - lastElev;
+              lastElev = tp.alt;
             }
-          });
+          }
 
           const avgSpd = spdCt > 0 ? sumSpd / spdCt : distM / Math.max(totalTimeSec, 1);
           const avgPaceSecPerMi = avgSpd > 0 ? 1609.344 / avgSpd : 0;
@@ -2466,18 +2641,9 @@
         const heatAdjPace = hasTempData ? heatAdjustedPace(avgPace, effectiveTempF, avgHR) : null;
         const heatAdjVdot = hasTempData ? calcVDOT(totalDist, heatAdjPace > 0 ? totalDist / (heatAdjPace / 1609.344) : totalTime) : null;
 
-        const actLaps = laps.filter(l => l.avgPaceSecPerMi > 300 && l.avgPaceSecPerMi < 960 && l.totalTimeSec > 30);
-        let decoupling = null, decRating = null;
-        if (actLaps.length >= 4) {
-          const half = Math.floor(actLaps.length / 2);
-          const first = actLaps.slice(0, half), second = actLaps.slice(half);
-          const efF = first.reduce((a, l) => a + (1 / l.avgPaceSecPerMi), 0) / first.length / (first.reduce((a, l) => a + l.avgHR, 0) / first.length);
-          const efS = second.reduce((a, l) => a + (1 / l.avgPaceSecPerMi), 0) / second.length / (second.reduce((a, l) => a + l.avgHR, 0) / second.length);
-          if (efF > 0) {
-            decoupling = ((efF - efS) / efF) * 100;
-            decRating = decoupling < 5 ? 'excellent' : decoupling < 7.5 ? 'good' : decoupling < 10 ? 'fair' : 'poor';
-          }
-        }
+        // Decoupling is computed further down, once the per-mile splits exist — see
+        // calcAerobicDecoupling(). It used to be derived here from lap averages, which produced a
+        // second, conflicting number that silently drove the session grade.
 
         const totalZoneSecs = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
         laps.forEach(l => {
@@ -2523,7 +2689,7 @@
         // reps) — reuse the same speed threshold as the run/walk split to isolate running-only
         // distance/time. Still gated on hasRealPauses for the same reason as above.
         if (hasRealPauses && workPaceSecPerMi == null) {
-          const valid = parseTrackpoints(doc).filter(p => p.speed != null && p.time != null);
+          const valid = parseTrackpoints(doc).filter(p => p.speed != null && p.time != null); // memoized
           let runDist = 0, runTime = 0;
           for (let i = 1; i < valid.length; i++) {
             const dt = (valid[i].time - valid[i - 1].time) / 1000;
@@ -2535,12 +2701,6 @@
 
         const findings = [];
         if (heatBpmPenalty != null && heatBpmPenalty > 3) findings.push({ type: 'warn', text: `Heat load ${Math.round(effectiveTempF)}°F → +${Math.round(heatBpmPenalty)} bpm penalty. Adjusted pace: ${fmtPace(heatAdjPace)}` });
-        if (decoupling != null) {
-          if (decoupling > 10) findings.push({ type: 'crit', text: `Decoupling ${decoupling.toFixed(1)}% — reduce intensity until under 7.5%` });
-          else if (decoupling > 7.5) findings.push({ type: 'warn', text: `Decoupling ${decoupling.toFixed(1)}% — acceptable, target sub-7.5%` });
-          else findings.push({ type: 'pos', text: `Decoupling ${decoupling.toFixed(1)}% — strong aerobic base` });
-        }
-        // (VDOT finding is emitted after the terrain guard is evaluated — see below)
 
         const points = parseTrackpoints(doc);
         const sharedAltMap = smoothAltitudeSeries(points); // single source of truth for elevation
@@ -2557,56 +2717,76 @@
         const elevGainFt = Math.round(realElevation.gainM * 3.28084);
         const elevLossFt = Math.round(realElevation.lossM * 3.28084);
 
-        // ── VDOT terrain guard ────────────────────────────────────────────
-        // Daniels' VDOT assumes flat ground. On steep terrain a runner covers far less distance
-        // for the same aerobic cost, so the formula reports a fitness collapse that did not
-        // happen (e.g. a mountain run at 878 m with +20% grades scoring VDOT 19.8 two days after
-        // a flat effort scored 27.4). Above ~30 m of climb per mile the number is terrain, not
-        // fitness — suppress it rather than pollute the VDOT trend and race prediction.
-        const elevGainPerMi = distMi > 0 ? realElevation.gainM / distMi : 0;
-        const vdotTerrainInvalid = sport === 'running' && elevGainPerMi > 30;
-        const vdotReported  = vdotTerrainInvalid ? null : (vdot || null);
-        const pred5KReported = vdotTerrainInvalid ? null : (pred5K || null);
-        if (vdotTerrainInvalid) {
-          findings.push({ type: 'warn', text: `VDOT suprimido — ${Math.round(elevGainPerMi)} m de desnivel por milla. Terreno, no pérdida de forma.` });
+        // ── Aerobic decoupling (single shared implementation) ─────────────
+        const decouplingInfo = calcAerobicDecoupling(realSplitsMi);
+        const decoupling = decouplingInfo.value;
+        const decouplingValid = decouplingInfo.valid;
+        const decRating = !decouplingValid ? null
+          : decoupling < 5 ? 'excellent' : decoupling < 7.5 ? 'good' : decoupling < 10 ? 'fair' : 'poor';
+
+        if (!decouplingValid && decoupling != null) {
+          findings.push({ type: 'warn', text: `Decoupling no válido — ${decouplingInfo.reasonEs}.` });
+        } else if (decouplingValid) {
+          if (decoupling < 0) findings.push({ type: 'pos', text: `Eficiencia mejoró ${Math.abs(decoupling).toFixed(1)}% en la segunda mitad` });
+          else if (decoupling > 10) findings.push({ type: 'crit', text: `Decoupling ${decoupling.toFixed(1)}% — baja la intensidad hasta quedar bajo 7.5%` });
+          else if (decoupling > 7.5) findings.push({ type: 'warn', text: `Decoupling ${decoupling.toFixed(1)}% — aceptable, apunta a menos de 7.5%` });
+          else findings.push({ type: 'pos', text: `Decoupling ${decoupling.toFixed(1)}% — base aeróbica sólida` });
         }
 
-        // ── Session score (rebalanced) ────────────────────────────────────
-        // Previously the score was 70 +/- decoupling only, so a clean aerobic session with
-        // 0.7% cardiac drift and RPE 3/10 could still be graded C off a single (and, on hilly
-        // ground, meaningless) decoupling number. Cardiac drift is the more reliable signal
-        // because it is not confounded by pace changes, so it now carries the most weight.
-        //   Cardiac drift 40 | Time in target zone 30 | Pacing consistency 20 | Decoupling 10
-        // Decoupling is dropped entirely (and its weight redistributed) when terrain invalidates it.
+        // ── VDOT validity guard ───────────────────────────────────────────
+        // See vdotValidity() for the reasoning. Session type isn't known at parse time (the plan
+        // link and manual training-type are set afterwards), so the check runs again in the
+        // report builder, where it is.
+        const elevGainPerMi = distMi > 0 ? realElevation.gainM / distMi : 0;
+        const vdotCheck = vdotValidity({ sport, avgHR, lthr, elevGainPerMi, totalTimeSec: totalTime });
+        const vdotTerrainInvalid = !vdotCheck.valid;   // legacy field name, kept for stored sessions
+        const vdotReported  = vdotCheck.valid ? (vdot || null) : null;
+        const pred5KReported = vdotCheck.valid ? (pred5K || null) : null;
+        if (!vdotCheck.valid && sport === 'running') {
+          findings.push({ type: 'warn', text: `VDOT suprimido — ${vdotCheck.reasonEs}. No es un esfuerzo de carrera.` });
+        }
+
+        // ── Session score ─────────────────────────────────────────────────
+        // The original score was 70 ± decoupling and nothing else, so a clean aerobic session
+        // (0.7% drift, RPE 3/10, zero time above threshold) could still be graded C off one
+        // number that was itself wrong on hilly ground.
+        //
+        //   Aerobic efficiency  45 | Time in target zone 35 | Pacing consistency 20
+        //
+        // Decoupling and cardiac drift measure the same underlying thing, so they share one
+        // component rather than being counted twice. Decoupling is the better instrument when it
+        // is valid, because it accounts for pace changes between halves; raw drift is the
+        // fallback when terrain invalidates decoupling, since drift at least stays interpretable
+        // when the athlete held a steady pace. Components with no data drop out and the rest are
+        // renormalized, so a session missing HR isn't silently penalised.
         let score = 0, weightUsed = 0;
         const addComponent = (pts, weight) => { score += pts; weightUsed += weight; };
 
-        // Cardiac drift — 40 pts
-        if (cardiacDrift && cardiacDrift.driftPct != null) {
+        // Aerobic efficiency — 45 pts
+        if (decouplingValid && decoupling != null) {
+          addComponent(decoupling < 0 ? 45 : decoupling < 5 ? 45 : decoupling < 7.5 ? 34 : decoupling < 12 ? 20 : 6, 45);
+        } else if (cardiacDrift && cardiacDrift.driftPct != null) {
           const d = Math.abs(cardiacDrift.driftPct);
-          addComponent(d < 5 ? 40 : d < 8 ? 32 : d < 10 ? 22 : d < 15 ? 12 : 4, 40);
+          addComponent(d < 5 ? 45 : d < 8 ? 36 : d < 10 ? 25 : d < 15 ? 13 : 5, 45);
         }
-        // Time in zone — 30 pts. Rewards staying out of Z4/Z5 on aerobic days and hitting them
-        // on quality days; without a linked plan type, default to the aerobic expectation.
+        // Time in target zone — 35 pts. Rewards staying out of Z4/Z5 on aerobic days; without a
+        // linked plan type the aerobic expectation is the safe default.
         if (timeInZones && timeInZones.pct && timeInZones.totalSec > 0) {
           const hardPct = (timeInZones.pct.z4 || 0) + (timeInZones.pct.z5 || 0);
-          addComponent(hardPct < 10 ? 30 : hardPct < 25 ? 24 : hardPct < 45 ? 16 : 8, 30);
+          addComponent(hardPct < 10 ? 35 : hardPct < 25 ? 28 : hardPct < 45 ? 19 : 9, 35);
         }
-        // Pacing consistency — 20 pts
-        if (pacingConsistency && pacingConsistency.cvPct != null) {
+        // Pacing consistency — 20 pts. Meaningless on a bike in hilly terrain, where speed is
+        // dictated by gradient, so it is skipped for rides.
+        if (sport === 'running' && pacingConsistency && pacingConsistency.cvPct != null) {
           const cv = pacingConsistency.cvPct;
           addComponent(cv < 3 ? 20 : cv < 6 ? 16 : cv < 10 ? 11 : 5, 20);
-        }
-        // Decoupling — 10 pts, only when terrain did not invalidate it
-        if (decoupling != null && !vdotTerrainInvalid) {
-          addComponent(decoupling < 0 ? 10 : decoupling < 5 ? 10 : decoupling < 7.5 ? 7 : decoupling < 12 ? 4 : 1, 10);
         }
         // Normalize to 100 across whatever components actually had data
         score = weightUsed > 0 ? Math.round((score / weightUsed) * 100) : 70;
         score = Math.min(100, Math.max(0, score));
         const grade = score >= 93 ? 'A+' : score >= 87 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
 
-        if (sport === 'running' && !vdotTerrainInvalid && pred5K > 0) {
+        if (vdotCheck.valid && pred5K > 0) {
           findings.push({ type: 'pos', text: `VDOT ${vdot.toFixed(1)} → 5K projection: ${secToMMSS(pred5K)}` });
         }
 
@@ -2709,9 +2889,11 @@
           elevGainFt, elevLossFt,
           analysis: {
             vdot: vdotReported, predicted5KSec: pred5KReported,
-            vdotTerrainInvalid, elevGainPerMi: Math.round(elevGainPerMi),
+            vdotTerrainInvalid, vdotInvalidReasonEs: vdotCheck.reasonEs,
+            elevGainPerMi: Math.round(elevGainPerMi),
             heatAdjPred5K: (!vdotTerrainInvalid && heatAdjVdot) ? vdotTo5K(heatAdjVdot) : null,
             aerobicDecouplingPct: decoupling, decouplingRating: decRating,
+            decouplingValid, decouplingInfo,
             sessionScore: score, sessionGrade: grade, keyFindings: findings,
             realSplitsMi, realSplitsKm, cardiacDrift, cadenceSegments,
             powerStats, runWalk, timeInZones, pacingConsistency, hrvProxy
@@ -6157,8 +6339,9 @@
         const label = `${s.dateISO} (${s.manualFields?.trainingType || 'sin tipo'}, ${s.totalDistMi?.toFixed(1)}mi)`;
         if (grade && ['A','A-','B+','B'].includes(grade)) wentWell.push(`${label}: grade ${grade}`);
         if (grade && ['D','D-','F'].includes(grade)) toImprove.push(`${label}: grade ${grade}`);
-        if (decoupling != null && decoupling > 8) toImprove.push(`${label}: aerobic decoupling ${decoupling.toFixed(1)}% (alto)`);
-        if (decoupling != null && decoupling <= 5) wentWell.push(`${label}: decoupling ${decoupling.toFixed(1)}% (bueno)`);
+        const decOK = s.analysis?.decouplingValid;
+        if (decOK && decoupling != null && decoupling > 8) toImprove.push(`${label}: aerobic decoupling ${decoupling.toFixed(1)}% (alto)`);
+        if (decOK && decoupling != null && decoupling <= 5) wentWell.push(`${label}: decoupling ${decoupling.toFixed(1)}% (bueno)`);
       });
       const missedSessions = weekPlanned.filter(s => !s.completed);
 
@@ -7008,6 +7191,24 @@
       const typeLabel = linkedSession ? (SESSION_TYPE_LABELS[linkedSession.type] || linkedSession.type) : (mf.trainingType || 'Sin vincular a sesión del plan');
       const ND = 'N/D';
 
+      // ── VDOT validity, re-checked ──────────────────────────────────────
+      // parseTCX() can only test terrain, intensity and duration. The session TYPE — the single
+      // strongest signal that a VDOT number is meaningless — is only known once the activity is
+      // linked to a plan day or tagged manually, which happens after parsing. Re-running the
+      // check here means an easy run never reports a race-equivalent fitness number, and every
+      // display site below agrees on one verdict.
+      const vdotSessionType = (linkedSession && linkedSession.type) || mf.trainingType || null;
+      const vdotRecheck = vdotValidity({
+        sport: isBike ? 'biking' : 'running',
+        avgHR: t.avgHR,
+        lthr: state.profile?.lthr || 174,
+        elevGainPerMi: a.elevGainPerMi || 0,
+        totalTimeSec: t.totalTimeSec,
+        sessionType: vdotSessionType
+      });
+      const vdotOK = !!a.vdot && vdotRecheck.valid;
+      const vdotWhy = vdotRecheck.reasonEs || a.vdotInvalidReasonEs || null;
+
       // Auto-evaluation
       const { history, sameTypeOnly: fatigueSameTypeOnly } = buildFatigueHistory(t);
       const fatigue = calcFatigueIndex({ avgHR: t.avgHR, avgPaceSecPerMi: t.avgPaceSecPerMi }, history);
@@ -7039,13 +7240,13 @@
       if (isBike) {
         lines.push(`Avg Speed: ${(t.avgSpeedMph || 0).toFixed(1)} mph`);
       } else {
-        lines.push(`VDOT: ${a.vdot ? a.vdot.toFixed(1) : 'N/D'}`);
+        lines.push(`VDOT: ${vdotOK ? a.vdot.toFixed(1) : 'N/D'}`);
         let pred5K = a.predicted5KSec ? secToMMSS(a.predicted5KSec) : ND;
         lines.push(`Predicted 5K: ${pred5K}`);
       }
       let tss = estimateTSS(t.totalDistMi, t.totalTimeSec, t.avgHR, state.profile?.lthr || 174).toFixed(1);
       lines.push(`TSS: ${tss}`);
-      if (a.aerobicDecoupling != null) lines.push(`Aerobic Decoupling: ${a.aerobicDecoupling.toFixed(1)}%`);
+      if (a.decouplingValid && a.aerobicDecouplingPct != null) lines.push(`Aerobic Decoupling: ${a.aerobicDecouplingPct.toFixed(1)}%`);
       lines.push(`Session Grade: ${a.sessionGrade || ND}`);
       lines.push('```');
       lines.push('');
@@ -7063,9 +7264,10 @@
       } else {
         lines.push(`| Pace Promedio | ${fmtPace(t.avgPaceSecPerMi)} | — |`);
       }
-      lines.push(`| FC Promedio / Máxima | ${t.avgHR} / ${t.maxHR} bpm | ${a.sessionGrade || '?'} |`);
+      const hrZoneLabel = t.avgHR > 0 ? 'Z' + hrZoneFromBpm(t.avgHR, state.profile?.lthr || 174) : ND;
+      lines.push(`| FC Promedio / Máxima | ${t.avgHR} / ${t.maxHR} bpm | ${hrZoneLabel} |`);
       if (!isBike) {
-        lines.push(`| VDOT | ${a.vdot ? a.vdot.toFixed(1) : (a.vdotTerrainInvalid ? 'N/D (terreno)' : 'N/D')} | ${a.vdot && a.vdot > 31.5 ? '↑' : (a.vdot && a.vdot < 31.5 ? '↓' : '—') } |`);
+        lines.push(`| VDOT | ${vdotOK ? a.vdot.toFixed(1) : ND} | ${vdotOK ? (a.vdot > 31.5 ? '↑' : '↓') : '—'} |`);
       }
       lines.push(`| TSS | ${tss} | — |`);
       lines.push('');
@@ -7145,13 +7347,12 @@
       lines.push(`**FC Promedio:** ${t.avgHR} bpm`);
       lines.push(`**FC Máxima:** ${t.maxHR} bpm`);
       
-      // VDOT calculation — running only, meaningless for a bike ride
-      const vdot = a.vdot ? a.vdot.toFixed(1) : (a.vdotTerrainInvalid ? `N/D — terreno (${a.elevGainPerMi} m/mi de desnivel)` : 'N/D');
-      pred5K = a.predicted5KSec ? secToMMSS(a.predicted5KSec) : 'N/D';
+      const vdot = vdotOK ? a.vdot.toFixed(1) : (vdotWhy ? `N/D — ${vdotWhy}` : 'N/D');
+      pred5K = (vdotOK && a.predicted5KSec) ? secToMMSS(a.predicted5KSec) : 'N/D';
       // tss already computed above from estimateTSS() using real session data — reuse it
       
       if (!isBike) {
-        lines.push(`**VDOT (VO2max):** ${a.vdot ? vdot + ' ml/kg/min' : vdot}`)  ;
+        lines.push(`**VDOT (VO2max):** ${vdotOK ? vdot + ' ml/kg/min' : vdot}`)  ;
         lines.push(`**Predicción 5K:** ${pred5K}`)  ;
       }
       lines.push(`**TSS (Training Stress Score):** ${tss}`)  ;
@@ -7258,55 +7459,27 @@
       lines.push('---');
       lines.push('');
       
-      // Aerobic Decoupling Analysis — efficiency factor (HR:pace ratio) between first and second half.
-      // Distinct from "Deriva Cardíaca" above (which only tracks raw HR drift): this metric also
-      // accounts for pace changes between halves, so it stays meaningful even if the athlete
-      // slowed down or sped up in the second half.
-      const decSplits = (a.realSplitsMi || []).filter(sp => sp.avgHR != null && sp.paceSecPerUnit > 0);
-      if (decSplits.length >= 2) {
-        const mid = Math.floor(decSplits.length / 2);
-        const firstHalf = decSplits.slice(0, mid);
-        const secondHalf = decSplits.slice(mid);
-        
-        const firstHalfAvgHR = Math.round(firstHalf.reduce((s, sp) => s + sp.avgHR, 0) / firstHalf.length);
-        const firstHalfAvgPace = firstHalf.reduce((s, sp) => s + sp.paceSecPerUnit, 0) / firstHalf.length;
-        
-        const secondHalfAvgHR = Math.round(secondHalf.reduce((s, sp) => s + sp.avgHR, 0) / secondHalf.length);
-        const secondHalfAvgPace = secondHalf.reduce((s, sp) => s + sp.paceSecPerUnit, 0) / secondHalf.length;
-        
-        // Efficiency Factor = speed / HR. Pace is stored as sec/unit, so speed = 1/pace.
-        // Decoupling = how much EF DEGRADED from first half to second half.
-        //   positive  -> efficiency dropped (real aerobic decoupling / cardiac fatigue)
-        //   negative  -> efficiency improved (ran faster at the same or lower HR) — this is GOOD
-        // The previous formula was (HR2/pace2)/(HR1/pace1), which INVERTS the sign: speeding up
-        // in the second half made the number large and positive and got reported as "significant
-        // cardiac fatigue". Fixed to match the efficiency-factor math used in parseTCX().
-        const efFirst  = (1 / firstHalfAvgPace)  / firstHalfAvgHR;
-        const efSecond = (1 / secondHalfAvgPace) / secondHalfAvgHR;
-        const decoupling = ((efFirst - efSecond) / efFirst) * 100;
-
-        // Elevation validity guard: on an asymmetric course (climb out / descend back) the pace
-        // difference between halves is driven by gradient, not by fitness, so the comparison is
-        // physiologically meaningless. Threshold: 30 m of net elevation difference between halves.
-        const netElev = (arr) => arr.reduce((sum, sp) => sum + ((sp.elevGainM || 0) - (sp.elevLossM || 0)), 0);
-        const elevSkewM = Math.abs(netElev(secondHalf) - netElev(firstHalf));
-        const decouplingValid = elevSkewM <= 30;
-
+      // Aerobic Decoupling — read from the stored analysis rather than recomputed here.
+      // A second local implementation is exactly how the printed number and the number driving
+      // the session grade drifted apart; calcAerobicDecoupling() is now the only place this is
+      // calculated, and parseTCX() ran it on these same per-mile splits at import time.
+      const dec = a.decouplingInfo;
+      if (dec && dec.value != null) {
         lines.push('## Decoupling Aeróbico (HR/Pace Divergence)');
         lines.push('');
-        lines.push(`**Primera Mitad:** ${firstHalfAvgHR} bpm avg, ${fmtPace(firstHalfAvgPace)} pace`)  ;
-        lines.push(`**Segunda Mitad:** ${secondHalfAvgHR} bpm avg, ${fmtPace(secondHalfAvgPace)} pace`)  ;
+        lines.push(`**Primera Mitad:** ${dec.avgHRFirst} bpm avg, ${fmtPace(dec.avgPaceFirst)} pace`);
+        lines.push(`**Segunda Mitad:** ${dec.avgHRSecond} bpm avg, ${fmtPace(dec.avgPaceSecond)} pace`);
 
-        if (!decouplingValid) {
-          lines.push(`**Decoupling:** N/D — no válido`);
-          lines.push(`**Motivo:** Perfil de elevación asimétrico (${Math.round(elevSkewM)} m de diferencia neta entre mitades). El cambio de ritmo lo explica la pendiente, no la fatiga.`);
+        if (!dec.valid) {
+          lines.push(`**Decoupling:** ${ND} — no válido`);
+          lines.push(`**Motivo:** ${dec.reasonEs.charAt(0).toUpperCase() + dec.reasonEs.slice(1)}. El cambio de ritmo lo explica la pendiente, no la fatiga.`);
         } else {
-          lines.push(`**Decoupling:** ${decoupling.toFixed(1)}%`)  ;
-          if (decoupling < 0) {
-            lines.push(`**Interpretación:** Eficiencia mejoró ${Math.abs(decoupling).toFixed(1)}% — ritmo más rápido al mismo costo cardíaco.`);
-          } else if (decoupling < 5) {
+          lines.push(`**Decoupling:** ${dec.value.toFixed(1)}%`);
+          if (dec.value < 0) {
+            lines.push(`**Interpretación:** Eficiencia mejoró ${Math.abs(dec.value).toFixed(1)}% — ritmo más rápido al mismo costo cardíaco.`);
+          } else if (dec.value < 5) {
             lines.push('**Interpretación:** Excelente — motor aeróbico consistente y eficiente.');
-          } else if (decoupling < 10) {
+          } else if (dec.value < 10) {
             lines.push('**Interpretación:** Normal — fatiga acumulada leve.');
           } else {
             lines.push('**Interpretación:** Alto — fatiga cardíaca significativa. Considera más volumen Z2.');
