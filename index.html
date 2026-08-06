@@ -1311,21 +1311,76 @@
       return p > 0 ? v / p : 0;
     }
 
-    function vdotTo5K(vdot) {
-      if (vdot <= 0) return 0;
-      let T2 = 25 * 60;
+    // Solves Daniels' VDOT equation for the finishing time at ANY distance, by Newton iteration.
+    // vdotTo5K() is the 5,000 m case; keeping it as a named wrapper avoids touching the dozen
+    // call sites that legitimately mean "5K".
+    function vdotToTime(vdot, distanceMeters) {
+      if (vdot <= 0 || !distanceMeters || distanceMeters <= 0) return 0;
+      // Seed proportionally to distance so longer races converge (a 25-min seed for a 21 km
+      // race lands far outside the model's valid window and the solver bails immediately).
+      let T2 = (distanceMeters / 5000) * 25 * 60;
+      const timeFor = (T) => {
+        const Tm = T / 60;
+        return danielsVO2(distanceMeters / Tm) / danielsPct(Tm);
+      };
       for (let i = 0; i < 50; i++) {
-        const Tm = T2 / 60;
-        const v = 5000 / Tm;
-        const f = danielsVO2(v) / danielsPct(Tm) - vdot;
+        const f = timeFor(T2) - vdot;
         const h = 0.01;
-        const df = (danielsVO2(5000 / ((T2 + h) / 60)) / danielsPct((T2 + h) / 60) -
-          danielsVO2(v) / danielsPct(Tm)) / h;
+        const df = (timeFor(T2 + h) - timeFor(T2)) / h;
         if (Math.abs(df) < 1e-10) break;
         T2 -= f / df;
-        if (T2 < 300 || T2 > 7200) break;
+        if (T2 < 120 || T2 > 4 * 3600) break;
       }
       return Math.round(T2);
+    }
+
+    function vdotTo5K(vdot) {
+      return vdotToTime(vdot, 5000);
+    }
+
+    // The VDOT the athlete's goal time demands, at their actual race distance. Used to judge
+    // whether a session's VDOT is above or below what the goal requires. Binary search because
+    // vdotToTime is monotonically decreasing in VDOT and cheap to evaluate.
+    function vdotRequiredForGoal(profile) {
+      const p = profile || state.profile;
+      if (!p) return null;
+      const raceM = raceDistanceMeters(p);
+      const goal5K = p.goalFiveKSec || 1800;
+      const goalSec = Math.abs(raceM - 5000) < 1 ? goal5K : Math.round(goal5K * Math.pow(raceM / 5000, 1.06));
+      if (!goalSec) return null;
+      let lo = 20, hi = 85;
+      for (let i = 0; i < 40; i++) {
+        const mid = (lo + hi) / 2;
+        if (vdotToTime(mid, raceM) > goalSec) lo = mid; else hi = mid;
+      }
+      return +((lo + hi) / 2).toFixed(1);
+    }
+
+    // Common race distances the app can target.
+    const RACE_DISTANCES = [
+      { key: '5k',   meters: 5000,     label: { en: '5K', es: '5K' } },
+      { key: '10k',  meters: 10000,    label: { en: '10K', es: '10K' } },
+      { key: '15k',  meters: 15000,    label: { en: '15K', es: '15K' } },
+      { key: 'half', meters: 21097.5,  label: { en: 'Half Marathon', es: 'Media Maratón' } },
+      { key: 'full', meters: 42195,    label: { en: 'Marathon', es: 'Maratón' } }
+    ];
+    const raceDistanceMeters = (profile) =>
+      (RACE_DISTANCES.find(r => r.key === (profile?.raceDistanceKey || '5k'))?.meters) || 5000;
+    const raceDistanceLabel = (profile) => {
+      const row = RACE_DISTANCES.find(r => r.key === (profile?.raceDistanceKey || '5k'));
+      return row ? (row.label[getLang()] || row.label.en) : '5K';
+    };
+
+    // Typical Puerto Rico race-morning heat cost, as a fraction of finishing time. August and
+    // September mornings are brutal; December and January are close to neutral. Applying August's
+    // penalty to a December race would systematically under-predict the athlete.
+    // Index 0 = January.
+    const PR_HEAT_PENALTY_BY_MONTH = [0.005, 0.005, 0.010, 0.015, 0.025, 0.030,
+                                      0.032, 0.032, 0.030, 0.022, 0.012, 0.005];
+    function raceHeatPenaltyPct(raceDateISO) {
+      if (!raceDateISO) return 0.03;
+      const m = parseInt(String(raceDateISO).split('-')[1], 10) - 1;
+      return (m >= 0 && m < 12) ? PR_HEAT_PENALTY_BY_MONTH[m] : 0.03;
     }
 
     const fmtPaceNoUnit = (spm) => {
@@ -1540,6 +1595,111 @@
     // Returns valid:false when the course profile makes the comparison meaningless — on an
     // out-and-back that climbs then descends, the second half is faster because of gravity, not
     // fitness, and the resulting number says nothing about the athlete.
+    // What fraction of the session SHOULD sit above the aerobic ceiling, by session type.
+    //   aerobic  — easy/long/recovery: time above Z3 is a miss
+    //   threshold— tempo: the point is to live in Z4
+    //   maximal  — intervals/reps/race: Z4-Z5 is the whole workout
+    const ZONE_INTENT = {
+      easy:           'aerobic',
+      long:           'aerobic',
+      rest:           'aerobic',
+      recovery:       'aerobic',
+      cross_training: 'aerobic',
+      tempo:          'threshold',
+      hill:           'threshold',
+      intervals:      'maximal',
+      reps400:        'maximal',
+      race_sim:       'maximal',
+      race:           'maximal'
+    };
+
+    // Normalises the many shapes a session type arrives in — a plan-day type ('easy'), a manual
+    // tag ('Z2 / Easy'), a Spanish label ('Intervalos') — to one ZONE_INTENT key.
+    function normalizeSessionType(raw) {
+      if (!raw) return null;
+      const st = String(raw).toLowerCase();
+      if (ZONE_INTENT[st]) return st;
+      const patterns = [
+        [['race_sim', 'race sim', 'simulacro', 'carrera', 'race'], 'race_sim'],
+        [['interval', 'intervalo', '800', '400', 'reps'], 'intervals'],
+        [['tempo', 'umbral', 'threshold'], 'tempo'],
+        [['hill', 'cuesta', 'repecho'], 'hill'],
+        [['long', 'larga'], 'long'],
+        [['cross', 'cruzado', 'bici', 'bike'], 'cross_training'],
+        [['rest', 'descanso'], 'rest'],
+        [['recovery', 'recuperacion', 'recuperación'], 'recovery'],
+        [['easy', 'facil', 'fácil', 'z1', 'z2'], 'easy']
+      ];
+      for (const [needles, key] of patterns) {
+        if (needles.some(n => st.includes(n))) return key;
+      }
+      return null;
+    }
+
+    // Scores one session out of 100. Components with no data drop out and the remainder is
+    // renormalized, so a session missing HR is not silently penalised for it.
+    //   Aerobic efficiency 45 | Time in target zone 35 | Pacing consistency 20
+    function scoreSession({ sport, sessionType, decoupling, decouplingValid, cardiacDrift, timeInZones, pacingConsistency }) {
+      let score = 0, weightUsed = 0;
+      const add = (pts, weight) => { score += pts; weightUsed += weight; };
+
+      // ── Aerobic efficiency — 45 pts ──
+      // Decoupling and cardiac drift measure the same underlying thing, so they share one
+      // component rather than being double-counted. Decoupling is the better instrument when
+      // valid because it accounts for pace changes between halves; raw drift is the fallback.
+      if (decouplingValid && decoupling != null) {
+        add(decoupling < 5 ? 45 : decoupling < 7.5 ? 34 : decoupling < 12 ? 20 : 6, 45);
+      } else if (cardiacDrift && cardiacDrift.driftPct != null) {
+        const d = Math.abs(cardiacDrift.driftPct);
+        add(d < 5 ? 45 : d < 8 ? 36 : d < 10 ? 25 : d < 15 ? 13 : 5, 45);
+      }
+
+      // ── Time in target zone — 35 pts ──
+      // Skipped entirely when the session type is unknown: without a target there is nothing to
+      // measure adherence against, and assuming "aerobic" penalises every quality session at
+      // import time. The weight drops out and the remaining components renormalize.
+      const knownIntent = ZONE_INTENT[normalizeSessionType(sessionType)] || null;
+      if (knownIntent && timeInZones && timeInZones.pct && timeInZones.totalSec > 0) {
+        const pct = timeInZones.pct;
+        const hardPct = (pct.z4 || 0) + (pct.z5 || 0);
+        const intent = knownIntent;
+
+        if (intent === 'threshold') {
+          // Tempo: reward time at Z4, but a tempo that spills into Z5 has become an interval
+          // session, and one that never reaches Z4 was just a moderate run.
+          const onTarget = (pct.z4 || 0);
+          const overshoot = (pct.z5 || 0);
+          let pts = onTarget >= 60 ? 35 : onTarget >= 40 ? 28 : onTarget >= 20 ? 19 : 9;
+          if (overshoot > 15) pts = Math.max(9, pts - 12);
+          add(pts, 35);
+        } else if (intent === 'maximal') {
+          // Intervals / race: Z4-Z5 combined IS the workout.
+          add(hardPct >= 50 ? 35 : hardPct >= 30 ? 28 : hardPct >= 15 ? 19 : 9, 35);
+        } else {
+          // Aerobic: any meaningful time above threshold is a miss.
+          add(hardPct < 10 ? 35 : hardPct < 25 ? 28 : hardPct < 45 ? 19 : 9, 35);
+        }
+      }
+
+      // ── Pacing consistency — 20 pts ──
+      // Meaningless on a bike in hilly terrain, where speed is dictated by gradient. Also
+      // meaningless for interval sessions, where alternating hard and easy is the point.
+      if (sport === 'running' && knownIntent !== 'maximal' && pacingConsistency && pacingConsistency.cvPct != null) {
+        const cv = pacingConsistency.cvPct;
+        add(cv < 3 ? 20 : cv < 6 ? 16 : cv < 10 ? 11 : 5, 20);
+      }
+
+      const normalized = weightUsed > 0 ? Math.round((score / weightUsed) * 100) : 70;
+      const final = Math.min(100, Math.max(0, normalized));
+      return {
+        score: final,
+        grade: final >= 93 ? 'A+' : final >= 87 ? 'A' : final >= 80 ? 'B' : final >= 70 ? 'C' : final >= 60 ? 'D' : 'F',
+        // Provisional until the session is linked to a plan day or tagged with a training type —
+        // zone adherence could not be judged.
+        provisional: !knownIntent
+      };
+    }
+
     function calcAerobicDecoupling(splits) {
       const usable = (splits || []).filter(sp => sp.avgHR != null && sp.avgHR > 0 && sp.paceSecPerUnit > 0);
       if (usable.length < 2) {
@@ -2236,20 +2396,27 @@
       if (!profile) return null;
       const vd = getLatestVDOT();
       const es = getLang() === 'es';
-      const goalSec = profile.goalFiveKSec || 1800;
+      const raceM = raceDistanceMeters(profile);
+      const is5K = Math.abs(raceM - 5000) < 1;
 
-      // Base flat-course prediction from best recent VDOT; fall back to current 5K.
+      // The goal time is stored as a 5K target. For any other distance, scale it with Riegel's
+      // endurance exponent (1.06) rather than pretending a 10K goal equals the 5K goal.
+      const goal5KSec = profile.goalFiveKSec || 1800;
+      const goalSec = is5K ? goal5KSec : Math.round(goal5KSec * Math.pow(raceM / 5000, 1.06));
+
+      // Base flat-course prediction from best recent VDOT, at the ACTUAL race distance.
       let flatPredSec;
-      if (vd) flatPredSec = vdotTo5K(vd.bestVdot);
-      else flatPredSec = profile.currentFiveKSec || 1980;
+      if (vd) flatPredSec = vdotToTime(vd.bestVdot, raceM);
+      else if (is5K) flatPredSec = profile.currentFiveKSec || 1980;
+      else flatPredSec = Math.round((profile.currentFiveKSec || 1980) * Math.pow(raceM / 5000, 1.06));
       if (!flatPredSec || flatPredSec <= 0) return null;
 
-      // Real-world penalties for race conditions the flat VDOT doesn't capture:
-      //   • boots + OCP (memory: ~+1:45/mi ≈ real-world drag; conservative +4% on 5K)
-      //   • PR heat/humidity in August (typical race-morning heat index)
-      //   • fatigue if racing without proper taper (handled separately by TSB on the day)
+      // Real-world penalties the flat VDOT doesn't capture:
+      //   • boots + OCP (~+4% — only when the athlete is actually racing in uniform)
+      //   • PR heat/humidity, scaled to the race MONTH rather than assumed to be August
+      //   • fatigue from racing without a taper (handled separately by TSB on the day)
       const bootPenalty = profile.raceInBoots === false ? 0 : flatPredSec * 0.04;
-      const heatPenalty = flatPredSec * 0.03; // ~3% for warm/humid morning
+      const heatPenalty = flatPredSec * raceHeatPenaltyPct(profile.raceDateISO);
       const realisticSec = flatPredSec + bootPenalty + heatPenalty;
 
       // Honest range: ±3.5% band around the realistic estimate.
@@ -2269,6 +2436,8 @@
         lowSec: Math.round(lowSec),
         highSec: Math.round(highSec),
         goalSec, band, color, verdict, daysLeft,
+        raceMeters: raceM, raceLabel: raceDistanceLabel(profile),
+        heatPenaltyPct: raceHeatPenaltyPct(profile.raceDateISO),
         hasVdot: !!vd, vdotCount: vd?.count || 0
       };
     }
@@ -2747,44 +2916,19 @@
         }
 
         // ── Session score ─────────────────────────────────────────────────
-        // The original score was 70 ± decoupling and nothing else, so a clean aerobic session
-        // (0.7% drift, RPE 3/10, zero time above threshold) could still be graded C off one
-        // number that was itself wrong on hilly ground.
-        //
-        //   Aerobic efficiency  45 | Time in target zone 35 | Pacing consistency 20
-        //
-        // Decoupling and cardiac drift measure the same underlying thing, so they share one
-        // component rather than being counted twice. Decoupling is the better instrument when it
-        // is valid, because it accounts for pace changes between halves; raw drift is the
-        // fallback when terrain invalidates decoupling, since drift at least stays interpretable
-        // when the athlete held a steady pace. Components with no data drop out and the rest are
-        // renormalized, so a session missing HR isn't silently penalised.
-        let score = 0, weightUsed = 0;
-        const addComponent = (pts, weight) => { score += pts; weightUsed += weight; };
-
-        // Aerobic efficiency — 45 pts
-        if (decouplingValid && decoupling != null) {
-          addComponent(decoupling < 0 ? 45 : decoupling < 5 ? 45 : decoupling < 7.5 ? 34 : decoupling < 12 ? 20 : 6, 45);
-        } else if (cardiacDrift && cardiacDrift.driftPct != null) {
-          const d = Math.abs(cardiacDrift.driftPct);
-          addComponent(d < 5 ? 45 : d < 8 ? 36 : d < 10 ? 25 : d < 15 ? 13 : 5, 45);
+        // Computed with sessionType unknown — parseTCX runs before the activity is linked to a
+        // plan day or manually tagged. resolveSessionScore() re-runs this with the real type as
+        // soon as one is available, which is what keeps a tempo from being graded as a failed
+        // easy run.
+        const scored = scoreSession({
+          sport, sessionType: null,
+          decoupling, decouplingValid, cardiacDrift, timeInZones, pacingConsistency
+        });
+        const score = scored.score;
+        const grade = scored.grade;
+        if (scored.provisional) {
+          findings.push({ type: 'warn', text: 'Nota provisional — vincula la sesión a un día del plan o etiqueta el tipo para evaluar la adherencia de zonas.' });
         }
-        // Time in target zone — 35 pts. Rewards staying out of Z4/Z5 on aerobic days; without a
-        // linked plan type the aerobic expectation is the safe default.
-        if (timeInZones && timeInZones.pct && timeInZones.totalSec > 0) {
-          const hardPct = (timeInZones.pct.z4 || 0) + (timeInZones.pct.z5 || 0);
-          addComponent(hardPct < 10 ? 35 : hardPct < 25 ? 28 : hardPct < 45 ? 19 : 9, 35);
-        }
-        // Pacing consistency — 20 pts. Meaningless on a bike in hilly terrain, where speed is
-        // dictated by gradient, so it is skipped for rides.
-        if (sport === 'running' && pacingConsistency && pacingConsistency.cvPct != null) {
-          const cv = pacingConsistency.cvPct;
-          addComponent(cv < 3 ? 20 : cv < 6 ? 16 : cv < 10 ? 11 : 5, 20);
-        }
-        // Normalize to 100 across whatever components actually had data
-        score = weightUsed > 0 ? Math.round((score / weightUsed) * 100) : 70;
-        score = Math.min(100, Math.max(0, score));
-        const grade = score >= 93 ? 'A+' : score >= 87 ? 'A' : score >= 80 ? 'B' : score >= 70 ? 'C' : score >= 60 ? 'D' : 'F';
 
         if (vdotCheck.valid && pred5K > 0) {
           findings.push({ type: 'pos', text: `VDOT ${vdot.toFixed(1)} → 5K projection: ${secToMMSS(pred5K)}` });
@@ -4261,6 +4405,32 @@
     }
 
     // Parse AI-generated training plan (Claude/ChatGPT format)
+    // Pulls an explicit pace target out of a plan line. Accepts "11:15/mi", "pace 11:15",
+    // "ritmo 11:15-11:45/mi" and returns the MIDPOINT of a range, in sec/mi.
+    function parsePaceFromLine(line) {
+      if (!line) return 0;
+      const range = line.match(/(\d{1,2}):([0-5]\d)\s*[-–—]\s*(\d{1,2}):([0-5]\d)\s*\/?\s*(mi|mile|milla|km)?/i);
+      if (range) {
+        const a = parseInt(range[1]) * 60 + parseInt(range[2]);
+        const b = parseInt(range[3]) * 60 + parseInt(range[4]);
+        return Math.round((a + b) / 2);
+      }
+      const single = line.match(/(?:pace|ritmo)?\s*(\d{1,2}):([0-5]\d)\s*\/\s*(mi|mile|milla)/i);
+      if (single) return parseInt(single[1]) * 60 + parseInt(single[2]);
+      return 0;
+    }
+
+    // Target pace for a session type from the athlete's own settings: an explicit override if
+    // they set one, otherwise the midpoint of the pace-reference band for their current fitness.
+    function targetPaceForType(type) {
+      const override = state.paceOverrides?.[type];
+      if (override > 0) return Math.round(override);
+      const row = PACE_REF_ROWS.find(r => r.type === type);
+      if (!row || row.effortOnly) return 0;
+      const ppm = (state.profile?.currentFiveKSec || 1800) / 3.10686;
+      return Math.round((ppm * row.factorFast + ppm * row.factorSlow) / 2);
+    }
+
     function parseClaudePlan(text) {
       const dayMap = { 'mon': 0, 'lun': 0, 'tue': 1, 'mar': 1, 'wed': 2, 'mié': 2, 'thu': 3, 'jue': 3, 'fri': 4, 'vie': 4, 'sat': 5, 'sab': 5, 'sun': 6, 'dom': 6 };
       const typeMap = {
@@ -4341,8 +4511,23 @@
           d.setDate(monday.getDate() + session.dayOfWeek);
           const dateISO = d.toISOString().split('T')[0];
 
-          const distMi = session.distMi;
+          // ── Derive the targets "Planeado vs Real" compares against ──────
+          // A rest day has nothing to hit, so it stays blank on purpose.
+          const isRestDay = session.type === 'rest';
+          const pacePerMi = isRestDay ? 0
+            : (parsePaceFromLine(session.notes || session.raw || '') || targetPaceForType(session.type));
+
+          let distMi = session.distMi;
+          // Duration-only sessions ("tempo 20 min") still have an implied distance once a target
+          // pace is known — without it the comparison has nothing to measure.
+          if (!distMi && !isRestDay && session.durationMin > 0 && pacePerMi > 0) {
+            distMi = +((session.durationMin * 60) / pacePerMi).toFixed(2);
+          }
           const targetDistM = distMi ? Math.round(distMi * 1609.344) : 0;
+          const targetTimeSec = isRestDay ? 0
+            : (targetDistM > 0 && pacePerMi > 0
+                ? Math.round((targetDistM / 1609.344) * pacePerMi)
+                : Math.round((session.durationMin || 0) * 60));
 
           // Match by the actual calendar date, never by the ambiguous `day` counter —
           // that field means something different in the auto-generated 66-day plan (a
@@ -4356,18 +4541,20 @@
             existing.type = session.type;
             existing.dist = distMi ? `${distMi} mi` : '—';
             existing.targetDistM = targetDistM;
-            existing.pacePerMi = 0;
-            existing.paceGuide = '—';
-            existing.targetTimeSec = 0;
+            existing.pacePerMi = pacePerMi;
+            existing.paceGuide = pacePerMi > 0 ? fmtPace(pacePerMi) : '—';
+            existing.targetTimeSec = targetTimeSec;
+            existing.targetDurationMin = session.durationMin || 0;
             existing.substeps = buildSubsteps(session.type);
             existing.notes = session.notes;
           } else {
             maxDay += 1;
             state.plan.push({
               day: maxDay, dateISO, type: session.type,
-              pacePerMi: 0, paceGuide: '—',
+              pacePerMi, paceGuide: pacePerMi > 0 ? fmtPace(pacePerMi) : '—',
               dist: distMi ? `${distMi} mi` : '—', targetDistM,
-              targetTimeSec: 0,
+              targetTimeSec,
+              targetDurationMin: session.durationMin || 0,
               phase: 1,
               completed: false, rating: null,
               substeps: buildSubsteps(session.type),
@@ -6590,13 +6777,19 @@
               <label>${L('Fecha de carrera','Race date')}</label>
               <input type="date" id="prof-raceDateISO" value="${p.raceDateISO || '2026-08-16'}" onchange="saveProfileField('raceDateISO', this.value, 'text')" style="max-width:150px; text-align:right;" />
             </div>
+            <div class="manual-field-row">
+              <label>${L('Distancia de carrera','Race distance')}</label>
+              <select id="prof-raceDistanceKey" onchange="saveProfileField('raceDistanceKey', this.value, 'text')" style="max-width:150px; text-align:right;">
+                ${RACE_DISTANCES.map(r => `<option value="${r.key}" ${(p.raceDistanceKey || '5k') === r.key ? 'selected' : ''}>${r.label[getLang()] || r.label.en}</option>`).join('')}
+              </select>
+            </div>
             ${field('taperDays', L('Días de taper','Taper days'), p.taperDays ?? 10, {min:5, max:21, ph:'10'})}
             <label class="checkbox-item" style="margin-top:8px;">
               <input type="checkbox" id="prof-raceInBoots" ${p.raceInBoots !== false ? 'checked' : ''} onchange="saveProfileField('raceInBoots', this.checked, 'bool')" />
               <span style="font-size:13px;">${L('Corro la carrera en botas + OCP','Race in boots + OCP')}</span>
             </label>
             <p style="font-size:10px; color:var(--paper-dim); margin-top:8px; line-height:1.4;">
-              ${L('El taper de 10 días es óptimo para 5K (reduce volumen, mantén intensidad). Correr en botas añade ~4% al tiempo proyectado — la predicción lo considera.','A 10-day taper is optimal for 5K (cut volume, keep intensity). Racing in boots adds ~4% to projected time — the prediction accounts for it.')}
+              ${L(`El taper de 10 días es óptimo para 5K-10K (reduce volumen, mantén intensidad). Correr en botas añade ~4% al tiempo proyectado. La penalización por calor se calcula según el mes de la carrera (actualmente ${(raceHeatPenaltyPct(p.raceDateISO)*100).toFixed(1)}%) — agosto y septiembre son los peores meses en PR, diciembre y enero casi neutrales.`, `A 10-day taper is optimal for 5K-10K (cut volume, keep intensity). Racing in boots adds ~4% to projected time. The heat penalty is derived from the race month (currently ${(raceHeatPenaltyPct(p.raceDateISO)*100).toFixed(1)}%) — August and September are the worst in PR, December and January nearly neutral.`)}
             </p>
           </div>
 
@@ -6837,6 +7030,45 @@
       showToast(t('toast_date_updated'));
     }
 
+    // ═══ SESSION RE-SCORING ═══
+    // Resolves the session type from whatever is known — linked plan day first (explicit and
+    // structured), then the manual training-type tag — and rewrites the stored score/grade.
+    // Returns true when the grade actually moved, so callers can tell the user.
+    function resolveSessionType(activity) {
+      if (!activity) return null;
+      const linked = activity.linkedPlanDay
+        ? state.plan.find(p => p.day === activity.linkedPlanDay)
+        : null;
+      return (linked && linked.type) || activity.manualFields?.trainingType || null;
+    }
+
+    function rescoreSession(activity) {
+      const a = activity?.analysis;
+      if (!a) return false;
+      const before = a.sessionGrade;
+      const scored = scoreSession({
+        sport: activity.sport || 'running',
+        sessionType: resolveSessionType(activity),
+        decoupling: a.aerobicDecouplingPct,
+        decouplingValid: a.decouplingValid,
+        cardiacDrift: a.cardiacDrift,
+        timeInZones: a.timeInZones,
+        pacingConsistency: a.pacingConsistency
+      });
+      a.sessionScore = scored.score;
+      a.sessionGrade = scored.grade;
+      return before !== scored.grade;
+    }
+
+    // One-time migration: sessions imported before type-aware scoring existed carry a grade
+    // computed as if every workout were an easy run. Re-scoring them on load repairs the
+    // history rather than leaving a mix of old and new grades in the same list.
+    function rescoreAllSessions() {
+      let changed = 0;
+      (state.tcxSessions || []).forEach(act => { if (rescoreSession(act)) changed++; });
+      return changed;
+    }
+
     // ═══ ACTIVITY <-> PLAN LINKING ═══
     function linkActivityToSession(activityId, day) {
       day = parseInt(day);
@@ -6852,6 +7084,7 @@
       activity.linkedPlanDay = day;
       session.linkedActivityId = activityId;
       session.completed = true; // linking a real TCX to a planned session marks it complete — dashboard/CTL/ATL update immediately
+      rescoreSession(activity);   // the plan day tells us what this session was trying to be
       saveState();
       render();
       showToast(`${t('toast_linked')} ${day} ↔ ${activity.dateISO}`);
@@ -6865,6 +7098,7 @@
         if (session) { session.linkedActivityId = null; session.completed = false; }
       }
       activity.linkedPlanDay = null;
+      rescoreSession(activity);   // falls back to the manual tag, or to the neutral default
       saveState();
       render();
       showToast(t('toast_unlinked'));
@@ -6875,7 +7109,7 @@
       if (!session) return;
       if (session.linkedActivityId) {
         const activity = state.tcxSessions.find(t => t.id === session.linkedActivityId);
-        if (activity) activity.linkedPlanDay = null;
+        if (activity) { activity.linkedPlanDay = null; rescoreSession(activity); }
       }
       session.linkedActivityId = null;
       session.completed = false;
@@ -6899,6 +7133,9 @@
       if (!act) return;
       if (!act.manualFields) act.manualFields = { aerobicTE: '', anaerobicTE: '', trainingLoad: '', humidity: '', wind: '', feelsLike: '', surface: '', sleepHours: '', sleepQuality: '', energyLevel: '', stressLevel: '', painNotes: '', bodyWeight: '', hrv: '', restingHR: '', rpe: '', athleteNotes: '', sessionGoal: '', trainingType: '', locationName: '' };
       act.manualFields[field] = value;
+      // The training-type tag is the other input to the grade, so a change here has to
+      // propagate the same way a plan link does.
+      if (field === 'trainingType') rescoreSession(act);
       saveState();
       // Re-render so selection highlights (RPE, surface, training type) update immediately.
       // Scroll position is preserved by render(), so this no longer bounces to the top.
@@ -7267,7 +7504,9 @@
       const hrZoneLabel = t.avgHR > 0 ? 'Z' + hrZoneFromBpm(t.avgHR, state.profile?.lthr || 174) : ND;
       lines.push(`| FC Promedio / Máxima | ${t.avgHR} / ${t.maxHR} bpm | ${hrZoneLabel} |`);
       if (!isBike) {
-        lines.push(`| VDOT | ${vdotOK ? a.vdot.toFixed(1) : ND} | ${vdotOK ? (a.vdot > 31.5 ? '↑' : '↓') : '—'} |`);
+        // VDOT the athlete's own goal requires — not a constant.
+        const goalVdot = vdotRequiredForGoal();
+        lines.push(`| VDOT | ${vdotOK ? a.vdot.toFixed(1) : ND} | ${vdotOK && goalVdot ? (a.vdot >= goalVdot ? '↑' : '↓') : '—'} |`);
       }
       lines.push(`| TSS | ${tss} | — |`);
       lines.push('');
@@ -7617,42 +7856,110 @@
       lines.push('');
 
       // ── PLANEADO VS REAL ─────────────────────────────────────────────────
+      // A real comparison table: target, actual, delta, and a verdict per row. Rest days and
+      // rep-based sessions are handled explicitly rather than printing zeros that read as
+      // failures. Substep counts are shown only when the athlete has actually ticked something,
+      // since an untouched checklist says nothing about how the session went.
       if (linkedSession) {
         lines.push('---');
         lines.push('');
         lines.push('## Planeado vs Real');
         lines.push('');
-        // Plan days imported without pace/distance targets carry pacePerMi = 0 and
-        // targetDistM = 0. Printing those raw produced meaningless rows ("Distancia objetivo:
-        // 0.00 mi", "Sub-pasos: 0/4") that read as a failed session rather than a plan day with
-        // no targets set. Print only what actually exists, and say so when nothing does.
+
+        const planType = normalizeSessionType(linkedSession.type) || linkedSession.type;
+        const isRestPlan = planType === 'rest';
         const hasPaceTarget = linkedSession.pacePerMi > 0;
         const hasDistTarget = linkedSession.targetDistM > 0;
-        const subs = linkedSession.substeps || [];
-        const hasSubsteps = subs.length > 0 && subs.some(s => s.done !== undefined);
+        const hasTimeTarget = linkedSession.targetTimeSec > 0;
 
-        if (hasPaceTarget) {
-          lines.push(`**Pace objetivo:** ${fmtPace(linkedSession.pacePerMi)}`);
-          const paceDelta = Math.round(t.avgPaceSecPerMi - linkedSession.pacePerMi);
-          lines.push(`**Pace real:** ${fmtPace(t.avgPaceSecPerMi)} (${paceDelta >= 0 ? '+' : ''}${paceDelta}s/mi)`);
-        } else {
-          lines.push(`**Pace real:** ${fmtPace(t.avgPaceSecPerMi)}`);
-        }
-        if (hasDistTarget) {
-          const tgtMi = linkedSession.targetDistM / 1609.344;
-          lines.push(`**Distancia objetivo:** ${tgtMi.toFixed(2)} mi`);
-          lines.push(`**Distancia real:** ${t.totalDistMi.toFixed(2)} mi (${(t.totalDistMi - tgtMi >= 0 ? '+' : '')}${(t.totalDistMi - tgtMi).toFixed(2)} mi)`);
-        } else {
-          lines.push(`**Distancia real:** ${t.totalDistMi.toFixed(2)} mi`);
-        }
-        if (hasSubsteps) {
-          lines.push(`**Sub-pasos completados:** ${subs.filter(s=>s.done).length}/${subs.length}`);
-        }
-        if (!hasPaceTarget && !hasDistTarget) {
+        if (isRestPlan) {
+          lines.push(`> El día ${linkedSession.day} era **descanso**. Registraste ${t.totalDistMi.toFixed(2)} mi en ${secToHHMMSS(t.totalTimeSec)} — el plan pedía no entrenar.`);
           lines.push('');
-          lines.push(`> El día ${linkedSession.day} del plan no tiene pace ni distancia objetivo configurados, así que no hay comparación posible. Edita el día en la pestaña PLAN para fijar objetivos.`);
+        } else if (!hasPaceTarget && !hasDistTarget && !hasTimeTarget) {
+          lines.push(`> El día ${linkedSession.day} del plan no tiene objetivos configurados, así que no hay comparación posible. Edita el día en la pestaña PLAN o vuelve a importar el plan con pace/distancia.`);
+          lines.push('');
+        } else {
+          const rows = [];
+          const verdict = (deltaPct, tolPct) =>
+            Math.abs(deltaPct) <= tolPct ? 'En objetivo'
+            : deltaPct > 0 ? 'Por encima' : 'Por debajo';
+
+          if (hasDistTarget) {
+            const tgtMi = linkedSession.targetDistM / 1609.344;
+            const d = t.totalDistMi - tgtMi;
+            const pct = tgtMi > 0 ? (d / tgtMi) * 100 : 0;
+            rows.push([
+              'Distancia',
+              `${tgtMi.toFixed(2)} mi`,
+              `${t.totalDistMi.toFixed(2)} mi`,
+              `${d >= 0 ? '+' : ''}${d.toFixed(2)} mi (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`,
+              verdict(pct, 10)
+            ]);
+          }
+          if (hasTimeTarget) {
+            const d = t.totalTimeSec - linkedSession.targetTimeSec;
+            const pct = (d / linkedSession.targetTimeSec) * 100;
+            rows.push([
+              'Duración',
+              secToHHMMSS(linkedSession.targetTimeSec),
+              secToHHMMSS(t.totalTimeSec),
+              `${d >= 0 ? '+' : ''}${Math.round(d / 60)} min (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`,
+              verdict(pct, 15)
+            ]);
+          }
+          if (hasPaceTarget && t.avgPaceSecPerMi > 0) {
+            // Faster than target is a NEGATIVE delta in sec/mi, so the verdict flips: running
+            // 30s/mi quicker than prescribed is "por encima" of the intended effort.
+            const d = t.avgPaceSecPerMi - linkedSession.pacePerMi;
+            const pct = (d / linkedSession.pacePerMi) * 100;
+            rows.push([
+              'Pace',
+              `${fmtPace(linkedSession.pacePerMi)}`,
+              `${fmtPace(t.avgPaceSecPerMi)}`,
+              `${d >= 0 ? '+' : ''}${Math.round(d)} s/mi`,
+              Math.abs(pct) <= 4 ? 'En objetivo' : (d < 0 ? 'Más rápido' : 'Más lento')
+            ]);
+          }
+
+          // Zone adherence — did the session live where its type says it should?
+          const zp = a.timeInZones?.pct;
+          if (zp) {
+            const intent = ZONE_INTENT[planType] || 'aerobic';
+            const hardPct = (zp.z4 || 0) + (zp.z5 || 0);
+            if (intent === 'aerobic') {
+              rows.push(['Tiempo sobre umbral', '< 10%', `${hardPct}%`,
+                `${hardPct - 10 >= 0 ? '+' : ''}${hardPct - 10} pts`,
+                hardPct < 10 ? 'En objetivo' : 'Por encima']);
+            } else if (intent === 'threshold') {
+              rows.push(['Tiempo en Z4', '≥ 60%', `${zp.z4 || 0}%`,
+                `${(zp.z4 || 0) - 60 >= 0 ? '+' : ''}${(zp.z4 || 0) - 60} pts`,
+                (zp.z4 || 0) >= 60 ? 'En objetivo' : 'Por debajo']);
+            } else {
+              rows.push(['Tiempo en Z4-Z5', '≥ 50%', `${hardPct}%`,
+                `${hardPct - 50 >= 0 ? '+' : ''}${hardPct - 50} pts`,
+                hardPct >= 50 ? 'En objetivo' : 'Por debajo']);
+            }
+          }
+
+          if (rows.length) {
+            lines.push('| Métrica | Objetivo | Real | Diferencia | Evaluación |');
+            lines.push('|---------|----------|------|------------|------------|');
+            rows.forEach(r => lines.push(`| ${r.join(' | ')} |`));
+            lines.push('');
+            const offTarget = rows.filter(r => r[4] !== 'En objetivo').length;
+            lines.push(offTarget === 0
+              ? '**Adherencia:** sesión ejecutada según lo planificado.'
+              : `**Adherencia:** ${rows.length - offTarget}/${rows.length} métricas en objetivo.`);
+            lines.push('');
+          }
         }
-        lines.push('');
+
+        const subs = linkedSession.substeps || [];
+        const doneCount = subs.filter(x => x.done).length;
+        if (doneCount > 0) {
+          lines.push(`**Sub-pasos completados:** ${doneCount}/${subs.length}`);
+          lines.push('');
+        }
       }
 
       lines.push('---');
@@ -8466,6 +8773,29 @@
       if (!('serviceWorker' in navigator)) return;
       if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
       navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW registration skipped:', err));
+    })();
+
+    // ── Migration: repair grades computed before type-aware scoring ──────────
+    // Runs before the first render so the activity list never flashes stale grades. Guarded by a
+    // schema marker so it costs nothing on subsequent loads.
+    (function migrateSessionGrades() {
+      const MARKER = 'typeAwareScoring_v1';
+      if (state.migrations?.[MARKER]) return;
+      try {
+        const changed = rescoreAllSessions();
+        state.migrations = state.migrations || {};
+        state.migrations[MARKER] = new Date().toISOString();
+        saveState();
+        if (changed > 0) {
+          setTimeout(() => {
+            try {
+              showToast(getLang() === 'es'
+                ? `${changed} sesión(es) recalificadas según su tipo`
+                : `${changed} session(s) re-graded by session type`);
+            } catch (_) {}
+          }, 1200);
+        }
+      } catch (err) { console.warn('Grade migration skipped:', err); }
     })();
 
     render();
