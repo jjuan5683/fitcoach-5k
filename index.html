@@ -6851,6 +6851,20 @@
             </label>
             <button class="btn btn-secondary" style="width: 100%; margin-top: 14px;" onclick="resetApp();">${t('full_reset_btn')}</button>
           </div>
+          <div class="card">
+            <div class="card-title">${getLang() === 'es' ? 'VERSIÓN' : 'BUILD'}</div>
+            <p style="font-size:12px; color:var(--paper-dim); margin-bottom:10px;">
+              ${getLang() === 'es' ? 'Versión cargada' : 'Loaded build'}: <strong style="color:var(--paper);">${APP_BUILD}</strong>
+            </p>
+            <p style="font-size:10px; color:var(--paper-dim); margin-bottom:10px; line-height:1.4;">
+              ${getLang() === 'es'
+                ? 'Si acabas de subir una versión nueva y esta no coincide, la app se está sirviendo desde caché. Este botón borra el caché y el service worker, y recarga desde el servidor. No toca tus datos.'
+                : 'If you just deployed a new version and this does not match, the app is being served from cache. This button clears the cache and service worker, then reloads from the server. It does not touch your data.'}
+            </p>
+            <button class="btn btn-secondary" style="width:100%;" onclick="forceRefreshApp()">
+              ${getLang() === 'es' ? 'Forzar actualización' : 'Force refresh'}
+            </button>
+          </div>
         </div>`;
     }
 
@@ -8766,14 +8780,74 @@
       }
     }
 
+    // ── Build identity ────────────────────────────────────────────────────
+    // Without a visible version there is no way to tell a deploy that failed from one that
+    // succeeded but is being served from cache. Shown in More → Settings and printed to the
+    // console on every load.
+    const APP_BUILD = '2026.08.06-1';
+    console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
+
     // ── PWA: offline support via a real service worker file (sw.js) ──
     // Only works over http(s) (not file://). Caches the app shell so it opens offline.
     // Weather fetch still needs a connection; everything else works offline.
+    // A cache-first service worker will keep serving the OLD index.html after a deploy, for as
+    // long as its own bytes are unchanged — the app silently pins itself to a stale build. Three
+    // guards against that: ask for an update check on every load, tell a waiting worker to
+    // activate instead of idling, and reload once when it takes control.
     (function registerSW() {
       if (!('serviceWorker' in navigator)) return;
       if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
-      navigator.serviceWorker.register('sw.js').catch((err) => console.warn('SW registration skipped:', err));
+
+      let reloadingForUpdate = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (reloadingForUpdate) return;
+        reloadingForUpdate = true;
+        location.reload();
+      });
+
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        reg.update().catch(() => {});
+
+        const promote = (worker) => {
+          if (!worker) return;
+          worker.addEventListener('statechange', () => {
+            // 'installed' with an existing controller means a NEW version is ready and waiting.
+            if (worker.state === 'installed' && navigator.serviceWorker.controller) {
+              worker.postMessage({ type: 'SKIP_WAITING' });
+              try {
+                showToast(getLang() === 'es' ? 'Nueva versión — actualizando…' : 'New version — updating…');
+              } catch (_) {}
+            }
+          });
+        };
+
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        promote(reg.installing);
+        reg.addEventListener('updatefound', () => promote(reg.installing));
+
+        // Catch deploys that land while the app is already open.
+        setInterval(() => reg.update().catch(() => {}), 60 * 60 * 1000);
+      }).catch((err) => console.warn('SW registration skipped:', err));
     })();
+
+    // Manual escape hatch for when caching still wins: drops every cache and unregisters the
+    // service worker, then hard-reloads. Exposed in More → Settings.
+    async function forceRefreshApp() {
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r => r.unregister()));
+        }
+        if (window.caches) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map(k => caches.delete(k)));
+        }
+      } catch (err) {
+        console.warn('Cache clear failed:', err);
+      }
+      // Cache-busting query string defeats any remaining HTTP-layer cache.
+      location.replace(location.pathname + '?fresh=' + Date.now());
+    }
 
     // ── Migration: repair grades computed before type-aware scoring ──────────
     // Runs before the first render so the activity list never flashes stale grades. Guarded by a
