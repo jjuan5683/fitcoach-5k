@@ -1700,6 +1700,180 @@
       };
     }
 
+    // Fine-grained score->letter scale (finer than scoreSession's five-bucket scale,
+    // to match how a category breakdown is normally read: A-/B+ distinctions matter here).
+    function scoreToLetter(score) {
+      if (score == null) return null;
+      if (score >= 97) return 'A+'; if (score >= 93) return 'A';  if (score >= 90) return 'A-';
+      if (score >= 87) return 'B+'; if (score >= 83) return 'B';  if (score >= 80) return 'B-';
+      if (score >= 77) return 'C+'; if (score >= 73) return 'C';  if (score >= 70) return 'C-';
+      if (score >= 67) return 'D+'; if (score >= 63) return 'D';  if (score >= 60) return 'D-';
+      return 'F';
+    }
+
+    // ── HR data quality ─────────────────────────────────────────────────────
+    // Detects when the HR trace itself is untrustworthy — sweat/humidity causing an optical
+    // wrist sensor to lose contact, or a strap reading getting stuck — as distinct from the
+    // athlete's actual physiological response. Two signatures, checked per consecutive-point
+    // transition:
+    //   1. Implausibly fast change (a real cardiovascular HR change rarely exceeds ~1.2 bpm/sec
+    //      sustained; sharper jumps are almost always sensor contact loss/reacquisition, not a
+    //      heartbeat).
+    //   2. A flatline — identical HR held for a long stretch while the session continues — a
+    //      classic "sensor stuck" signature.
+    // Returns null (not gradable) below 10 valid HR points; otherwise a 0-100 score plus the
+    // raw diagnostics so the report can show WHY, not just assert a grade.
+    function calcHRDataQuality(points) {
+      const valid = (points || []).filter(p => p.hr != null && p.hr > 0 && p.time != null);
+      if (valid.length < 10) return null;
+
+      let glitchSec = 0, totalSec = 0, flatlineRun = 0, worstFlatline = 0;
+      for (let i = 1; i < valid.length; i++) {
+        const dt = (valid[i].time - valid[i - 1].time) / 1000;
+        if (dt <= 0 || dt > 30) continue;
+        totalSec += dt;
+        const dHR = Math.abs(valid[i].hr - valid[i - 1].hr);
+        if (dHR / dt > 1.2) glitchSec += dt;
+        if (dHR === 0) { flatlineRun += dt; worstFlatline = Math.max(worstFlatline, flatlineRun); }
+        else flatlineRun = 0;
+      }
+      if (totalSec === 0) return null;
+
+      const glitchPct = (glitchSec / totalSec) * 100;
+      const worstFlatlineMin = worstFlatline / 60;
+      let score = glitchPct <= 1 ? 97 : glitchPct <= 2.5 ? 90 : glitchPct <= 5 ? 80
+        : glitchPct <= 10 ? 65 : glitchPct <= 20 ? 48 : 30;
+      if (worstFlatlineMin >= 3) score -= 12;
+      else if (worstFlatlineMin >= 1.5) score -= 6;
+      score = Math.max(0, Math.min(100, score));
+
+      return { score, glitchPct: +glitchPct.toFixed(1), worstFlatlineMin: +worstFlatlineMin.toFixed(1) };
+    }
+
+    // ── Individual category graders — each returns a 0-100 score or null ────
+    // (null means "not enough evidence in this session," not zero — kept out of the report
+    // rather than rendered as a failing grade for data the session never produced.)
+
+    function gradePacing(cvPct) {
+      if (cvPct == null) return null;
+      return cvPct <= 2 ? 98 : cvPct <= 3 ? 93 : cvPct <= 4.5 ? 88 : cvPct <= 6 ? 82
+        : cvPct <= 8 ? 74 : cvPct <= 10 ? 66 : cvPct <= 15 ? 55 : cvPct <= 25 ? 42 : 30;
+    }
+
+    function gradeCadence(cadenceBySegment) {
+      const vals = (cadenceBySegment || []).map(c => c.avgCadence).filter(c => c > 0);
+      if (vals.length < 2) return null;
+      const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
+      const variance = vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length;
+      const cv = mean > 0 ? (Math.sqrt(variance) / mean) * 100 : 0;
+      let score = cv <= 1.5 ? 96 : cv <= 3 ? 90 : cv <= 5 ? 82 : cv <= 8 ? 70 : cv <= 12 ? 55 : 40;
+      // A low average alongside low variance usually means a lot of walking held steady, not
+      // running form — worth a small penalty since "stable" isn't the same as "good."
+      if (mean > 0 && mean < 150) score -= 10;
+      return Math.max(0, Math.min(100, score));
+    }
+
+    function gradeContinuity(runWalk) {
+      if (!runWalk || runWalk.runPct == null) return null;
+      const pct = runWalk.runPct;
+      let score = pct >= 99 ? 98 : pct >= 97 ? 92 : pct >= 94 ? 85 : pct >= 90 ? 76
+        : pct >= 80 ? 62 : pct >= 65 ? 45 : 30;
+      // Several short breaks read as less continuous than one long one at the same total —
+      // frequency, not just total walk time, is what "continuity" is actually asking about.
+      const count = (runWalk.walkSegments || []).length;
+      const totalMin = ((runWalk.runTimeSec || 0) + (runWalk.walkTimeSec || 0)) / 60;
+      if (count > 0 && totalMin > 0) {
+        const perHour = count / (totalMin / 60);
+        if (perHour > 6) score -= 8; else if (perHour > 3) score -= 4;
+      }
+      return Math.max(0, Math.min(100, score));
+    }
+
+    function gradeDurability(splits) {
+      const usable = (splits || []).filter(sp => sp.paceSecPerUnit > 0 && !sp.partial);
+      if (usable.length < 4) return null;
+      const tailCount = Math.max(1, Math.round(usable.length * 0.2));
+      const tail = usable.slice(-tailCount);
+      const rest = usable.slice(0, usable.length - tailCount);
+      if (!rest.length) return null;
+      const avgTail = tail.reduce((a, sp) => a + sp.paceSecPerUnit, 0) / tail.length;
+      const avgRest = rest.reduce((a, sp) => a + sp.paceSecPerUnit, 0) / rest.length;
+      const fadePct = ((avgTail - avgRest) / avgRest) * 100; // positive = slower at the end
+      return fadePct <= -2 ? 97 : fadePct <= 2 ? 92 : fadePct <= 5 ? 84 : fadePct <= 10 ? 72
+        : fadePct <= 18 ? 58 : fadePct <= 30 ? 42 : 28;
+    }
+
+    function gradeCVControl(decouplingValid, decouplingPct, driftPct) {
+      if (decouplingValid && decouplingPct != null) {
+        return decouplingPct < 0 ? 96 : decouplingPct < 5 ? 92 : decouplingPct < 7.5 ? 80
+          : decouplingPct < 12 ? 62 : decouplingPct < 18 ? 45 : 30;
+      }
+      if (driftPct != null) {
+        const d = Math.abs(driftPct);
+        return d < 5 ? 90 : d < 8 ? 78 : d < 10 ? 62 : d < 15 ? 45 : 28;
+      }
+      return null;
+    }
+
+    // sessionType is optional — unknown at parse time, known once linked/tagged. Without it, the
+    // score reflects raw time-in-hard-zone only; with it, uncontrolled drift on a session that
+    // was supposed to be easy discounts the "value," since that hard-zone time wasn't earned on
+    // purpose.
+    function grade5KValue(timeInZones, decouplingValid, decouplingPct, sessionType) {
+      if (!timeInZones || !timeInZones.pct) return null;
+      const hardPct = (timeInZones.pct.z4 || 0) + (timeInZones.pct.z5 || 0);
+      let score = hardPct >= 50 ? 90 : hardPct >= 30 ? 80 : hardPct >= 15 ? 65 : hardPct >= 5 ? 50 : 35;
+      const intent = ZONE_INTENT[normalizeSessionType(sessionType)] || null;
+      if (intent !== 'threshold' && intent !== 'maximal') {
+        if (decouplingValid && decouplingPct != null && decouplingPct > 7.5) score -= 15;
+      }
+      return Math.max(0, Math.min(100, score));
+    }
+
+    function gradeEnduranceValue(totalTimeSec) {
+      if (!totalTimeSec) return null;
+      const min = totalTimeSec / 60;
+      return min >= 75 ? 96 : min >= 60 ? 90 : min >= 45 ? 80 : min >= 30 ? 65
+        : min >= 20 ? 48 : min >= 10 ? 32 : 18;
+    }
+
+    // ── Orchestrator ─────────────────────────────────────────────────────────
+    // Computes all eight categories from whatever evidence the session has. Called once at
+    // parse time (sessionType unknown) and again from rescoreSession() once the session is
+    // linked to a plan day or tagged, alongside the overall score — same two-pass pattern
+    // scoreSession() already uses, for the same reason: some inputs only exist after linking.
+    function calcCategoryGrades({ sport, sessionType, pacingConsistency, cadenceBySegment, runWalk,
+      splits, decouplingValid, decouplingPct, cardiacDrift, timeInZones, hrDataQuality, totalTimeSec }) {
+
+      const cats = {
+        pacing:       gradePacing(pacingConsistency?.cvPct),
+        cadence:      sport === 'running' ? gradeCadence(cadenceBySegment) : null,
+        continuity:   gradeContinuity(runWalk),
+        durability:   gradeDurability(splits),
+        cvControl:    gradeCVControl(decouplingValid, decouplingPct, cardiacDrift?.driftPct),
+        hrDataQuality: hrDataQuality?.score ?? null,
+        value5K:      sport === 'running' ? grade5KValue(timeInZones, decouplingValid, decouplingPct, sessionType) : null,
+        valueEndurance: gradeEnduranceValue(totalTimeSec)
+      };
+
+      // Categories that depend on the HR trace get flagged when that trace itself scored poorly
+      // — the letter grade stands, but the report marks it as uncertain rather than presenting a
+      // number computed from data that may not reflect what actually happened.
+      const hrDependent = new Set(['cvControl']);
+      const hrSuspect = hrDataQuality != null && hrDataQuality.score < 65;
+
+      const out = {};
+      for (const key of Object.keys(cats)) {
+        const score = cats[key];
+        out[key] = score == null ? null : {
+          score, letter: scoreToLetter(score),
+          flagged: hrSuspect && hrDependent.has(key)
+        };
+      }
+      out.hrQualityDiagnostics = hrDataQuality || null;
+      return out;
+    }
+
     function calcAerobicDecoupling(splits) {
       const usable = (splits || []).filter(sp => sp.avgHR != null && sp.avgHR > 0 && sp.paceSecPerUnit > 0);
       if (usable.length < 2) {
@@ -2883,6 +3057,7 @@
         const timeInZones = calcTimeInZones(points, lthr);
         const pacingConsistency = calcPacingConsistency(realSplitsMi);
         const hrvProxy = calcHRVProxy(points);
+        const hrDataQuality = calcHRDataQuality(points);
         const elevGainFt = Math.round(realElevation.gainM * 3.28084);
         const elevLossFt = Math.round(realElevation.lossM * 3.28084);
 
@@ -2915,6 +3090,10 @@
           findings.push({ type: 'warn', text: `VDOT suprimido — ${vdotCheck.reasonEs}. No es un esfuerzo de carrera.` });
         }
 
+        if (hrDataQuality && hrDataQuality.score < 65) {
+          findings.push({ type: 'warn', text: `Calidad de señal FC baja (${hrDataQuality.glitchPct}% de la sesión con saltos implausibles) — usa el chest strap la próxima vez, especialmente con humedad alta.` });
+        }
+
         // ── Session score ─────────────────────────────────────────────────
         // Computed with sessionType unknown — parseTCX runs before the activity is linked to a
         // plan day or manually tagged. resolveSessionScore() re-runs this with the real type as
@@ -2933,6 +3112,13 @@
         if (vdotCheck.valid && pred5K > 0) {
           findings.push({ type: 'pos', text: `VDOT ${vdot.toFixed(1)} → 5K projection: ${secToMMSS(pred5K)}` });
         }
+
+        // ── Per-category grades ─────────────────────────────────────────────
+        const categoryGrades = calcCategoryGrades({
+          sport, sessionType: null, pacingConsistency, cadenceBySegment: cadenceSegments, runWalk,
+          splits: realSplitsMi, decouplingValid, decouplingPct: decoupling, cardiacDrift,
+          timeInZones, hrDataQuality, totalTimeSec: totalTime
+        });
 
         // ── NEW: altitude min/max from smoothed series ──
         const altValues = [...sharedAltMap.values()];
@@ -3040,7 +3226,8 @@
             decouplingValid, decouplingInfo,
             sessionScore: score, sessionGrade: grade, keyFindings: findings,
             realSplitsMi, realSplitsKm, cardiacDrift, cadenceSegments,
-            powerStats, runWalk, timeInZones, pacingConsistency, hrvProxy
+            powerStats, runWalk, timeInZones, pacingConsistency, hrvProxy,
+            hrDataQuality, categoryGrades
           }
         };
       } catch (e) {
@@ -7071,6 +7258,27 @@
       });
       a.sessionScore = scored.score;
       a.sessionGrade = scored.grade;
+
+      // Only the 5K-value category depends on session type; the other seven were already final
+      // at parse time. Recompute the whole set rather than one field so calcCategoryGrades stays
+      // the single place that assembles it — cheap, and avoids two code paths drifting apart.
+      if (a.categoryGrades) {
+        a.categoryGrades = calcCategoryGrades({
+          sport: activity.sport || 'running',
+          sessionType: resolveSessionType(activity),
+          pacingConsistency: a.pacingConsistency,
+          cadenceBySegment: a.cadenceSegments,
+          runWalk: a.runWalk,
+          splits: a.realSplitsMi,
+          decouplingValid: a.decouplingValid,
+          decouplingPct: a.aerobicDecouplingPct,
+          cardiacDrift: a.cardiacDrift,
+          timeInZones: a.timeInZones,
+          hrDataQuality: a.hrDataQuality,
+          totalTimeSec: activity.totalTimeSec
+        });
+      }
+
       return before !== scored.grade;
     }
 
@@ -7857,6 +8065,50 @@
       lines.push('');
       lines.push(mf.athleteNotes || ND);
       lines.push('');
+
+      // ── EVALUACIÓN POR CARACTERÍSTICA ───────────────────────────────────────
+      // Eight independent axes, each graded on its own evidence — see calcCategoryGrades().
+      // The point is diagnostic: "how good, overall" is one number (below, in Evaluación
+      // Automática and the metadata header); "good/bad at WHAT specifically" needs several.
+      // Only categories the session actually produced evidence for are shown.
+      {
+        const cg = a.categoryGrades;
+        if (cg) {
+          const CAT_LABELS = {
+            pacing: 'Pacing', cadence: 'Cadencia', continuity: 'Continuidad',
+            durability: 'Durabilidad', cvControl: 'Control cardiovascular',
+            hrDataQuality: 'Calidad de datos FC',
+            value5K: 'Valor para preparación 5K', valueEndurance: 'Valor para evaluar resistencia'
+          };
+          const order = ['pacing', 'cadence', 'continuity', 'durability', 'cvControl',
+            'hrDataQuality', 'value5K', 'valueEndurance'];
+          const rows = order.filter(k => cg[k] != null);
+          if (rows.length) {
+            lines.push('---');
+            lines.push('');
+            lines.push('## Evaluación por Característica');
+            lines.push('');
+            let anyFlagged = false;
+            rows.forEach(k => {
+              const c = cg[k];
+              const mark = c.flagged ? '*' : '';
+              if (c.flagged) anyFlagged = true;
+              lines.push(`**${CAT_LABELS[k]}:** ${c.letter}${mark}`);
+            });
+            lines.push('');
+            lines.push(`**Evaluación General:** ${a.sessionGrade} (${a.sessionScore}/100)`);
+            if (anyFlagged) {
+              lines.push('');
+              lines.push('*Confiabilidad reducida por calidad de señal de FC.');
+            }
+            if (cg.hrQualityDiagnostics) {
+              lines.push('');
+              lines.push(`> Calidad de datos FC: ${cg.hrQualityDiagnostics.glitchPct}% de la sesión con saltos de FC implausibles${cg.hrQualityDiagnostics.worstFlatlineMin >= 1 ? `, racha más larga de lectura fija: ${cg.hrQualityDiagnostics.worstFlatlineMin} min` : ''}.`);
+            }
+            lines.push('');
+          }
+        }
+      }
 
       // ── EVALUACIÓN AUTOMÁTICA ─────────────────────────────────────────────
       lines.push('---');
@@ -8784,7 +9036,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.08.06-1';
+    const APP_BUILD = '2026.08.25-1';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──

@@ -1,5 +1,5 @@
 // FitCoach 5K — service worker
-// Build: 2026.08.06-1
+// Build: 2026.08.25-1
 //
 // WHY THIS FILE LOOKS LIKE THIS
 // A cache-first service worker is the standard PWA recipe and it is the wrong recipe for a
@@ -17,7 +17,7 @@
 // After editing this file, bump CACHE_VERSION. That byte change is what tells the browser a new
 // worker exists.
 
-const CACHE_VERSION = 'fitcoach-v2026.08.06-1';
+const CACHE_VERSION = 'fitcoach-v2026.08.25-1';
 const SHELL = ['./', './index.html'];
 
 self.addEventListener('install', (event) => {
