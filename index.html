@@ -2919,6 +2919,10 @@
           let sumHR = 0, hrCt = 0;
           let hrZoneSecs = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
           let lastTime = null;
+          // Per-rep HR trend (recovery start→end) and power let us diagnose *why* a rep changed —
+          // e.g. stable watts + climbing HR points to cardiovascular/heat fatigue, not muscular.
+          let firstHR = null, lastHR = null;
+          let sumWatts = 0, wattsCt = 0, maxWatts = 0;
 
           for (let k = 0; k < tps.length; k++) {
             const tp = tps[k];
@@ -2933,6 +2937,13 @@
             if (hrVal > 0) {
               sumHR += hrVal; hrCt++;
               if (hrVal < minHR) minHR = hrVal;
+              if (firstHR === null) firstHR = hrVal;
+              lastHR = hrVal;
+            }
+
+            if (tp.watts != null && tp.watts > 0) {
+              sumWatts += tp.watts; wattsCt++;
+              if (tp.watts > maxWatts) maxWatts = tp.watts;
             }
 
             if (tp.time != null && hrVal > 0) {
@@ -2958,7 +2969,10 @@
           return {
             lapIndex: i, totalTimeSec, distanceMeters: distM, avgPaceSecPerMi,
             avgHR: hrCt > 0 ? sumHR / hrCt : avgHR, maxHR, minHR: minHR === 999 ? 0 : minHR,
-            avgCadSPM: (cadCt > 0 ? sumCad / cadCt : 0) * 2, elevGainM: elevGain, calories: cals, hrZoneSecs
+            firstHR, lastHR,
+            avgWatts: wattsCt > 0 ? Math.round(sumWatts / wattsCt) : null, maxWatts: wattsCt > 0 ? Math.round(maxWatts) : null,
+            avgCadSPM: (cadCt > 0 ? sumCad / cadCt : 0) * 2, elevGainM: elevGain, calories: cals, hrZoneSecs,
+            repType: null // tagged 'work' / 'recovery' below once the fastest-lap threshold is known
           };
         });
 
@@ -3019,6 +3033,10 @@
           const recoveryLapsArr = lapCandidates.filter(l => l.avgPaceSecPerMi > fastestPace * 1.3);
           workLapsCount = workLapsArr.length;
           recoveryLapsCount = recoveryLapsArr.length;
+          // Tag each lap object in place so the report can render a real per-rep table (splits,
+          // HR, cadence, power, elevation) instead of only the two blended averages above.
+          workLapsArr.forEach(l => { l.repType = 'work'; });
+          recoveryLapsArr.forEach(l => { l.repType = 'recovery'; });
           if (workLapsArr.length >= 2 && recoveryLapsArr.length >= 1) {
             const workDist = workLapsArr.reduce((a, l) => a + l.distanceMeters, 0);
             const workTime = workLapsArr.reduce((a, l) => a + l.totalTimeSec, 0);
@@ -7820,6 +7838,16 @@
       lines.push('');
       lines.push(`**Cadencia Promedio:** ${t.avgCadSPM || ND} ${t.avgCadSPM ? (isBike ? 'rpm' : 'spm') : ''}`.trim());
       lines.push(`**Cadencia Máxima:** ${t.maxCadSPM || ND} ${isBike ? 'rpm' : 'spm'}`);
+      if (!isBike && Array.isArray(t.laps) && t.workLapsCount >= 1) {
+        // The line above blends effort strides with near-zero-cadence walk recoveries, which
+        // silently drags a real ~168 spm effort cadence down to a misleading ~136 spm average.
+        // This isolates cadence to work laps only — see "Splits por Repetición" for the per-rep detail.
+        const workCads = t.laps.filter(l => l.repType === 'work' && l.avgCadSPM > 0).map(l => l.avgCadSPM);
+        if (workCads.length) {
+          const avgWorkCad = Math.round(workCads.reduce((a, b) => a + b, 0) / workCads.length);
+          lines.push(`**Cadencia Promedio (solo esfuerzo):** ${avgWorkCad} spm — excluye caminatas de recuperación`);
+        }
+      }
       lines.push('');
       lines.push(`**Potencia Promedio:** ${a.powerStats ? a.powerStats.avgWatts + ' W' : ND}`);
       lines.push(`**Potencia Máxima:** ${a.powerStats ? a.powerStats.maxWatts + ' W' : ND}`);
@@ -7915,6 +7943,63 @@
         lines.push(ND);
       }
       lines.push('');
+
+      // ── SPLITS POR REPETICIÓN (INTERVALOS) ────────────────────────────────
+      // "Splits Reales" above is per-mile — meaningless for a 0.5mi interval session, where a
+      // single mile blends a fast rep with its walk-back recovery. t.laps carries Garmin's own
+      // lap boundaries (manual/auto-lap), tagged 'work'/'recovery' by the same threshold that
+      // already drives workPaceSecPerMi — this just exposes each individual rep instead of only
+      // the blended average, which is what actually shows fatigue progression (or its absence)
+      // across a set.
+      if (!isBike && Array.isArray(t.laps) && t.workLapsCount >= 2) {
+        const workReps = t.laps.filter(l => l.repType === 'work').sort((x, y) => x.lapIndex - y.lapIndex);
+        const recoveryReps = t.laps.filter(l => l.repType === 'recovery').sort((x, y) => x.lapIndex - y.lapIndex);
+
+        lines.push('---');
+        lines.push('');
+        lines.push('## Splits por Repetición (Intervalos)');
+        lines.push('');
+        lines.push('| Rep | Pace | FC Prom/Máx | Cadencia | Potencia | Elev+ |');
+        lines.push('|---|------|------|----------|----------|-------|');
+        workReps.forEach((l, idx) => {
+          const cad = l.avgCadSPM ? Math.round(l.avgCadSPM) : ND;
+          const watts = l.avgWatts ? `${l.avgWatts} W` : ND;
+          const elev = `+${Math.round(l.elevGainM)}m`;
+          lines.push(`| ${idx + 1} | ${fmtPace(l.avgPaceSecPerMi)} | ${Math.round(l.avgHR)}/${Math.round(l.maxHR)} | ${cad} spm | ${watts} | ${elev} |`);
+        });
+        lines.push('');
+
+        if (recoveryReps.length) {
+          lines.push('### Recuperaciones entre Repeticiones');
+          lines.push('');
+          lines.push('| # | Duración | FC Inicio→Fin |');
+          lines.push('|---|----------|----------------|');
+          recoveryReps.forEach((l, idx) => {
+            const dur = `${Math.floor(l.totalTimeSec / 60)}:${Math.round(l.totalTimeSec % 60).toString().padStart(2, '0')}`;
+            const hrTrend = (l.firstHR && l.lastHR) ? `${Math.round(l.firstHR)}→${Math.round(l.lastHR)}` : ND;
+            lines.push(`| ${idx + 1} | ${dur} | ${hrTrend} |`);
+          });
+          lines.push('');
+        }
+
+        // Rep-to-rep HR drift at matched effort — a cleaner fatigue signal than whole-session
+        // cardiac drift, which the elevation-asymmetry guard above frequently invalidates for
+        // exactly this session type (short reps + long, uneven recoveries).
+        if (workReps.length >= 2) {
+          const first = workReps[0], last = workReps[workReps.length - 1];
+          const hrDelta = Math.round(last.avgHR - first.avgHR);
+          const paceDeltaSec = Math.round(last.avgPaceSecPerMi - first.avgPaceSecPerMi);
+          const paceStable = Math.abs(paceDeltaSec) <= 15; // within ~15 sec/mi counts as held pace
+          lines.push(`**Deriva HR entre reps:** ${hrDelta >= 0 ? '+' : ''}${hrDelta} bpm de la rep 1 a la rep ${workReps.length} (${fmtPace(first.avgPaceSecPerMi)} → ${fmtPace(last.avgPaceSecPerMi)})`);
+          lines.push('');
+          if (paceStable && hrDelta > 10) {
+            lines.push(`**Interpretación:** Pace estable con FC subiendo ${hrDelta} bpm — costo cardiovascular/térmico creciente, no pérdida de potencia muscular. Revisa potencia por rep arriba para confirmar.`);
+          } else if (!paceStable && paceDeltaSec > 0) {
+            lines.push(`**Interpretación:** El pace se degradó ${paceDeltaSec}s/mi de la primera a la última rep junto con el cambio de FC — posible fatiga muscular sumándose a la cardiovascular.`);
+          }
+          lines.push('');
+        }
+      }
 
       // ── RUN / WALK ───────────────────────────────────────────────────────
       lines.push('---');
