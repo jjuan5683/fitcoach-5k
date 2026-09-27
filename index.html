@@ -1104,6 +1104,14 @@
       margin-top: 4px;
       display: inline-block;
     }
+
+    /* ── Accessibility ─────────────────────────────────────────────── */
+    :focus-visible { outline: 2px solid var(--coyote, #c9a45c) !important; outline-offset: 2px; }
+    input:focus-visible, select:focus-visible, textarea:focus-visible { border-color: var(--coyote, #c9a45c); }
+    [role="button"] { cursor: pointer; }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+    }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
@@ -1151,6 +1159,7 @@
     let onboardingData = {};
     let detailOverlay = null; // { type: 'session'|'activity', id: ... }
     let mdModalContent = null;
+    let mdModalKind = 'report'; // 'report' | 'app' — which Markdown flavour the modal shows
     let activitySplitUnit = 'mi';
     let manualSessionFormOpen = false;
     // Persisted in state.settings so it survives reload; fall back to 'in' default for older saves.
@@ -1227,7 +1236,16 @@
       return `${m}:${s}`;
     };
 
-    const todayISO = () => new Date().toISOString().split('T')[0];
+    // HTML-escape for any user-typed text interpolated into innerHTML templates.
+    const esc = (v) => String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    // LOCAL calendar date. toISOString() is UTC, which in Puerto Rico (UTC-4) flips to "tomorrow"
+    // every evening after 8 PM — that made "today's session" and the backup date wrong at night.
+    const todayISO = () => {
+      const d = new Date();
+      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
 
     // `new Date('YYYY-MM-DD')` parses as UTC midnight per spec, so calling local-timezone
     // getters (getDay/getDate/setDate) on it rolls back to the PREVIOUS calendar day for any
@@ -1345,8 +1363,7 @@
       const p = profile || state.profile;
       if (!p) return null;
       const raceM = raceDistanceMeters(p);
-      const goal5K = p.goalFiveKSec || 1800;
-      const goalSec = Math.abs(raceM - 5000) < 1 ? goal5K : Math.round(goal5K * Math.pow(raceM / 5000, 1.06));
+      const goalSec = activeGoalSec(p, raceM);
       if (!goalSec) return null;
       let lo = 20, hi = 85;
       for (let i = 0; i < 40; i++) {
@@ -1364,6 +1381,205 @@
       { key: 'half', meters: 21097.5,  label: { en: 'Half Marathon', es: 'Media Maratón' } },
       { key: 'full', meters: 42195,    label: { en: 'Marathon', es: 'Maratón' } }
     ];
+    // ── MULTI-RACE ─────────────────────────────────────────────────────────────
+    // profile.races = [{ id, name, dateISO, distanceKey, goalSec, inBoots, note, resultSec }]
+    // The NEXT upcoming race is the "active" one. Its values are mirrored into the legacy
+    // profile fields (raceDateISO, raceDistanceKey, raceInBoots, goalRaceSec, goalFiveKSec) so
+    // every existing calculation (prediction, taper, ACWR, PDF) keeps working unchanged.
+    // When a race date passes, the next race becomes active automatically (5K → 10K).
+    function parseTimeToSec(str) {
+      const parts = String(str || '').trim().split(':').map(x => parseInt(x, 10));
+      if (!parts.length || parts.some(isNaN)) return null;
+      let sec;
+      if (parts.length === 2) sec = parts[0] * 60 + parts[1];
+      else if (parts.length === 3) sec = parts[0] * 3600 + parts[1] * 60 + parts[2];
+      else return null;
+      return sec > 0 ? sec : null;
+    }
+    function fmtRaceTime(sec) {
+      if (!sec) return '';
+      const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s2 = Math.round(sec % 60);
+      return h > 0 ? h + ':' + String(m).padStart(2, '0') + ':' + String(s2).padStart(2, '0')
+                   : m + ':' + String(s2).padStart(2, '0');
+    }
+    function raceMetersByKey(key) {
+      return (RACE_DISTANCES.find(r => r.key === key)?.meters) || 5000;
+    }
+    function raceLabelByKey(key) {
+      const row = RACE_DISTANCES.find(r => r.key === key) || RACE_DISTANCES[0];
+      return row.label.en;
+    }
+    // Goal time at the ACTUAL race distance. Prefers the exact goal typed for the active race;
+    // falls back to Riegel-scaling the legacy 5K goal.
+    function activeGoalSec(profile, raceM) {
+      if (profile?.goalRaceSec > 0) return Math.round(profile.goalRaceSec);
+      const goal5K = profile?.goalFiveKSec || 1800;
+      return Math.abs(raceM - 5000) < 1 ? goal5K : Math.round(goal5K * Math.pow(raceM / 5000, 1.06));
+    }
+    function ensureRaces(p) {
+      if (!p) return;
+      if (!Array.isArray(p.races) || !p.races.length) {
+        const key = p.raceDistanceKey || '5k';
+        const m = raceMetersByKey(key);
+        p.races = [{
+          id: 'race_' + Date.now().toString(36),
+          name: '',
+          dateISO: p.raceDateISO || '',
+          distanceKey: key,
+          goalSec: activeGoalSec(p, m),
+          inBoots: p.raceInBoots !== false,
+          note: '',
+          resultSec: null
+        }];
+      }
+    }
+    function pickActiveRace(p) {
+      const today = todayISO();
+      const dated = p.races.filter(r => r.dateISO);
+      const upcoming = dated.filter(r => r.dateISO >= today).sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+      if (upcoming.length) return upcoming[0];
+      const past = dated.sort((a, b) => b.dateISO.localeCompare(a.dateISO));
+      return past[0] || p.races[0];
+    }
+    function syncActiveRace() {
+      const p = state.profile;
+      if (!p) return;
+      ensureRaces(p);
+      const r = pickActiveRace(p);
+      if (!r) return;
+      p.activeRaceId = r.id;
+      if (r.dateISO) p.raceDateISO = r.dateISO;
+      p.raceDistanceKey = r.distanceKey || '5k';
+      p.raceInBoots = r.inBoots !== false;
+      const m = raceMetersByKey(p.raceDistanceKey);
+      if (r.goalSec > 0) {
+        p.goalRaceSec = r.goalSec;
+        p.goalFiveKSec = Math.abs(m - 5000) < 1 ? r.goalSec : Math.round(r.goalSec / Math.pow(m / 5000, 1.06));
+      }
+    }
+    function activeRace() {
+      const p = state.profile;
+      if (!p || !Array.isArray(p.races)) return null;
+      return p.races.find(r => r.id === p.activeRaceId) || null;
+    }
+    function fmtRaceDateShort(iso) {
+      if (!iso) return '—';
+      const M = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+      const [y, m, d] = iso.split('-');
+      return String(parseInt(d, 10)).padStart(2, '0') + M[parseInt(m, 10) - 1] + y.slice(2);
+    }
+    function activeRaceGoalPaceStr() {
+      const p = state.profile;
+      if (!p) return '—';
+      const m = raceMetersByKey(p.raceDistanceKey || '5k');
+      const goal = activeGoalSec(p, m);
+      return fmtPaceNoUnit(goal / (m / 1609.344));
+    }
+    function updateRace(id, key, value) {
+      const p = state.profile;
+      if (!p) return;
+      const r = p.races.find(x => x.id === id);
+      if (!r) return;
+      if (key === 'goalSec' || key === 'resultSec') {
+        const sec = parseTimeToSec(value);
+        if (value && !sec) { showToast(getLang() === 'es' ? 'Formato MM:SS o H:MM:SS' : 'Use MM:SS or H:MM:SS'); render(); return; }
+        r[key] = sec;
+      } else if (key === 'inBoots') {
+        r.inBoots = !!value;
+      } else {
+        r[key] = value;
+      }
+      syncActiveRace();
+      saveState();
+      render();
+      showToast(t('toast_saved'));
+    }
+    function addRace() {
+      const p = state.profile;
+      if (!p) return;
+      ensureRaces(p);
+      p.races.push({ id: 'race_' + Date.now().toString(36), name: '', dateISO: '', distanceKey: '10k', goalSec: 3600, inBoots: false, note: '', resultSec: null });
+      saveState();
+      render();
+    }
+    function deleteRace(id) {
+      const p = state.profile;
+      if (!p || !Array.isArray(p.races) || p.races.length <= 1) {
+        showToast(getLang() === 'es' ? 'Debe quedar al menos una carrera' : 'Keep at least one race');
+        return;
+      }
+      if (!confirm(getLang() === 'es' ? '¿Eliminar esta carrera?' : 'Delete this race?')) return;
+      p.races = p.races.filter(r => r.id !== id);
+      syncActiveRace();
+      saveState();
+      render();
+    }
+    function renderRacesStrip() {
+      const p = state.profile;
+      if (!p || !Array.isArray(p.races) || p.races.length < 2) return '';
+      const es = getLang() === 'es';
+      const today = todayISO();
+      const rows = [...p.races].filter(r => r.dateISO).sort((a, b) => a.dateISO.localeCompare(b.dateISO)).map(r => {
+        const past = r.dateISO < today;
+        const isActive = r.id === p.activeRaceId && !past;
+        const days = Math.max(0, Math.round((new Date(r.dateISO + 'T12:00:00').getTime() - Date.now()) / 86400000));
+        const label = esc(r.name) || raceLabelByKey(r.distanceKey);
+        const right = past
+          ? (r.resultSec ? (es ? 'Resultado ' : 'Result ') + fmtRaceTime(r.resultSec) : (es ? 'Completada' : 'Done'))
+          : days + (es ? ' días' : ' days');
+        return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--field-line); ${past ? 'opacity:.55;' : ''}">
+          <div><span style="font-family:var(--font-display); font-size:13px; color:${isActive ? 'var(--olive-bright)' : 'var(--paper)'};">${isActive ? '▶ ' : ''}${label}</span>
+          <span style="font-size:10px; color:var(--paper-dim); margin-left:6px;">${raceLabelByKey(r.distanceKey)} · ${r.dateISO} · ${es ? 'meta' : 'goal'} ${fmtRaceTime(r.goalSec)}</span></div>
+          <span style="font-family:var(--font-mono); font-size:11px; color:var(--paper-dim);">${right}</span></div>`;
+      }).join('');
+      return `<div class="card"><div class="card-title">${es ? 'CARRERAS' : 'RACES'}</div>${rows}</div>`;
+    }
+    function renderRaceConfigCard(L, field) {
+      const p = state.profile;
+      ensureRaces(p);
+      const es = getLang() === 'es';
+      const today = todayISO();
+      const sorted = [...p.races].sort((a, b) => (a.dateISO || '9999').localeCompare(b.dateISO || '9999'));
+      const blocks = sorted.map(r => {
+        const past = r.dateISO && r.dateISO < today;
+        const isActive = r.id === p.activeRaceId && !past;
+        const id = esc(r.id);
+        return `<div style="border:1px solid ${isActive ? 'var(--olive-bright)' : 'var(--field-line)'}; border-radius:6px; padding:10px; margin-bottom:10px; ${past ? 'opacity:.7;' : ''}">
+          <div style="font-size:10px; letter-spacing:.08em; color:${isActive ? 'var(--olive-bright)' : 'var(--paper-dim)'}; margin-bottom:6px;">
+            ${isActive ? (es ? '▶ CARRERA ACTIVA (próxima)' : '▶ ACTIVE RACE (next)') : (past ? (es ? 'COMPLETADA' : 'COMPLETED') : (es ? 'PROGRAMADA' : 'SCHEDULED'))}</div>
+          <div class="manual-field-row"><label for="rn-${id}">${es ? 'Nombre' : 'Name'}</label>
+            <input type="text" id="rn-${id}" value="${esc(r.name)}" placeholder="Orocovis 5K" onchange="updateRace('${id}','name',this.value)" style="max-width:170px; text-align:right;" /></div>
+          <div class="manual-field-row"><label for="rd-${id}">${es ? 'Fecha' : 'Date'}</label>
+            <input type="date" id="rd-${id}" value="${esc(r.dateISO)}" onchange="updateRace('${id}','dateISO',this.value)" style="max-width:150px; text-align:right;" /></div>
+          <div class="manual-field-row"><label for="rk-${id}">${es ? 'Distancia' : 'Distance'}</label>
+            <select id="rk-${id}" onchange="updateRace('${id}','distanceKey',this.value)" style="max-width:150px; text-align:right;">
+              ${RACE_DISTANCES.map(d => `<option value="${d.key}" ${r.distanceKey === d.key ? 'selected' : ''}>${d.label[getLang()] || d.label.en}</option>`).join('')}
+            </select></div>
+          <div class="manual-field-row"><label for="rg-${id}">${es ? 'Meta (MM:SS o H:MM:SS)' : 'Goal (MM:SS or H:MM:SS)'}</label>
+            <input type="text" id="rg-${id}" value="${fmtRaceTime(r.goalSec)}" placeholder="30:00" onchange="updateRace('${id}','goalSec',this.value)" style="max-width:100px; text-align:right;" /></div>
+          ${past ? `<div class="manual-field-row"><label for="rr-${id}">${es ? 'Resultado' : 'Result'}</label>
+            <input type="text" id="rr-${id}" value="${fmtRaceTime(r.resultSec)}" placeholder="—" onchange="updateRace('${id}','resultSec',this.value)" style="max-width:100px; text-align:right;" /></div>` : ''}
+          <label class="checkbox-item" style="margin-top:6px;"><input type="checkbox" ${r.inBoots ? 'checked' : ''} onchange="updateRace('${id}','inBoots',this.checked)" />
+            <span style="font-size:13px;">${es ? 'Corro en botas + OCP' : 'Race in boots + OCP'}</span></label>
+          <div class="manual-field-row"><label for="rt-${id}">${es ? 'Nota (terreno, etc.)' : 'Note (terrain, etc.)'}</label>
+            <input type="text" id="rt-${id}" value="${esc(r.note)}" placeholder="${es ? '~70% bajada' : '~70% downhill'}" onchange="updateRace('${id}','note',this.value)" style="max-width:170px; text-align:right;" /></div>
+          <button class="btn btn-secondary" style="width:100%; margin-top:8px;" onclick="deleteRace('${id}')">${es ? 'Eliminar carrera' : 'Delete race'}</button>
+        </div>`;
+      }).join('');
+      return `
+          <div class="card">
+            <div class="card-title">${L('CARRERAS','RACES')}</div>
+            ${blocks}
+            <button class="btn btn-primary" style="width:100%;" onclick="addRace()">${es ? '+ Agregar carrera' : '+ Add race'}</button>
+            <div style="margin-top:12px;">
+              ${field('taperDays', L('Días de taper','Taper days'), p.taperDays ?? 10, {min:5, max:21, ph:'10'})}
+            </div>
+            <p style="font-size:10px; color:var(--paper-dim); margin-top:8px; line-height:1.4;">
+              ${L(`La próxima carrera se activa sola: al pasar su fecha, la app cambia a la siguiente (por ejemplo del 5K al 10K). Correr en botas añade ~4% al tiempo proyectado. La penalización por calor sigue el mes de la carrera (actualmente ${(raceHeatPenaltyPct(p.raceDateISO)*100).toFixed(1)}%). La app no modela terreno en bajada; usa la nota como recordatorio.`, `The next race activates itself: once its date passes the app switches to the following one (e.g. 5K → 10K). Racing in boots adds ~4% to projected time. Heat penalty follows the race month (currently ${(raceHeatPenaltyPct(p.raceDateISO)*100).toFixed(1)}%). The app does not model downhill terrain; use the note as a reminder.`)}
+            </p>
+          </div>`;
+    }
+
     const raceDistanceMeters = (profile) =>
       (RACE_DISTANCES.find(r => r.key === (profile?.raceDistanceKey || '5k'))?.meters) || 5000;
     const raceDistanceLabel = (profile) => {
@@ -2575,8 +2791,7 @@
 
       // The goal time is stored as a 5K target. For any other distance, scale it with Riegel's
       // endurance exponent (1.06) rather than pretending a 10K goal equals the 5K goal.
-      const goal5KSec = profile.goalFiveKSec || 1800;
-      const goalSec = is5K ? goal5KSec : Math.round(goal5KSec * Math.pow(raceM / 5000, 1.06));
+      const goalSec = activeGoalSec(profile, raceM);
 
       // Base flat-course prediction from best recent VDOT, at the ACTUAL race distance.
       let flatPredSec;
@@ -3964,7 +4179,7 @@
         currentFiveKSec: best5KSec,
         goalFiveKSec: goalSec || 1800,
         lthr: parseInt(formData.lthr) || 174,
-        raceDateISO: '2026-08-16',
+        raceDateISO: '2026-10-11',
         raceInBoots: true, // race is run in boots + OCP — affects prediction
         taperDays: 10, // 5K-optimal taper length; editable in Profile
         startDateISO: todayISO(),
@@ -4236,15 +4451,15 @@
         <div class="view-container">
           <div class="mission-clock">
             <div class="clock-top">
-              <span class="clock-label">${t('clock_label')}</span>
-              <span class="clock-coords">16AUG26 · 09:39/MI</span>
+              <span class="clock-label">${t('clock_label').replace('5K', raceLabelByKey(profile.raceDistanceKey || '5k'))}</span>
+              <span class="clock-coords">${fmtRaceDateShort(profile.raceDateISO)} · ${activeRaceGoalPaceStr()}/MI</span>
             </div>
             <div class="clock-main">
               <div class="clock-countdown">
                 <span class="clock-number">${daysLeft}</span>
                 <span class="clock-unit">${t('clock_unit')}</span>
               </div>
-              <div class="clock-meta">${t('clock_sub')}</div>
+              <div class="clock-meta">${esc((activeRace()?.name) || raceLabelByKey(profile.raceDistanceKey || '5k'))} · ${fmtRaceTime(activeGoalSec(profile, raceMetersByKey(profile.raceDistanceKey || '5k')))}</div>
             </div>
             <div class="clock-divider"></div>
             <div class="clock-stats">
@@ -4263,6 +4478,7 @@
             </div>
           </div>
 
+          ${renderRacesStrip()}
           ${renderRecalcBanner()}
           ${renderTaperCard()}
           ${renderTodayHero()}
@@ -5003,7 +5219,10 @@
           <div class="detail-header">
             <button class="detail-back" onclick="closeDetail()">←</button>
             <div class="detail-header-title">${getLang() === 'es' ? 'ACTIVIDAD' : 'ACTIVITY'} · ${act.dateISO}</div>
-            <button class="btn-small" onclick="exportActivityMarkdown('${act.id}')">${t('export_md')}</button>
+            <div style="display:flex; gap:6px;">
+              <button class="btn-small" onclick="exportAppMarkdown('${esc(act.id)}')">MD APP</button>
+              <button class="btn-small" onclick="exportActivityMarkdown('${esc(act.id)}')">${t('export_md')}</button>
+            </div>
           </div>
           <div class="detail-body">
 
@@ -6501,7 +6720,7 @@
                       <div>
                         <p style="font-size:12px; font-weight:600; color:var(--paper); text-transform:capitalize;">${inj.bodyPart.replace(/_/g,' ')}</p>
                         <p style="font-size:10px; color:${sevColors[inj.severity]}; margin-top:2px;">${inj.severity} · ${inj.dateISO}</p>
-                        ${inj.description ? `<p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">${inj.description}</p>` : ''}
+                        ${inj.description ? `<p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">${esc(inj.description)}</p>` : ''}
                       </div>
                       <div style="display:flex; gap:6px;">
                         <button onclick="resolveInjury('${inj.id}')" style="padding:4px 8px; font-size:10px; border:none; border-radius:4px; background:rgba(61,90,31,0.2); color:var(--olive); cursor:pointer;">✓</button>
@@ -6636,7 +6855,7 @@
     // ── CONTEXT SECTION ────────────────────────────────────────────────────
     function renderStatsContext() {
       const today = todayISO();
-      const daysLeft = Math.max(0, Math.round((new Date(state.profile?.raceDateISO || '2026-08-16').getTime() - new Date().getTime()) / 86400000));
+      const daysLeft = Math.max(0, Math.round((new Date(state.profile?.raceDateISO || todayISO()).getTime() - new Date().getTime()) / 86400000));
       const completed = state.plan.filter(s => s.completed).length;
       const total = state.plan.filter(s => !s.isRest).length;
       
@@ -6804,16 +7023,16 @@
 
     function generateContextBlock() {
       const today = todayISO();
-      const daysLeft = Math.max(0, Math.round((new Date(state.profile?.raceDateISO || '2026-08-16').getTime() - new Date().getTime()) / 86400000));
+      const daysLeft = Math.max(0, Math.round((new Date(state.profile?.raceDateISO || todayISO()).getTime() - new Date().getTime()) / 86400000));
       const completed = state.plan.filter(s => s.completed).length;
       const total = state.plan.filter(s => !s.isRest).length;
       
       const recentTCX = [...state.tcxSessions].sort((a,b) => b.dateISO.localeCompare(a.dateISO)).slice(0,5);
       
       let block = '# FitCoach Context Block\n';
-      block += 'Generated: ' + today + ' | Race: ' + (state.profile?.raceDateISO || '2026-08-16') + ' | Days Left: ' + daysLeft + '\n\n';
+      block += 'Generated: ' + today + ' | Race: ' + (state.profile?.raceDateISO || todayISO()) + ' | Days Left: ' + daysLeft + '\n\n';
       block += '## Profile\n';
-      block += (state.profile?.name || 'Athlete') + ' | ' + (state.profile?.age || '?') + 'y | ' + (state.profile?.weightLb || '?') + 'lb | Goal: sub-30min 5K | LTHR: ' + (state.profile?.lthr || 174) + 'bpm\n\n';
+      block += (state.profile?.name || 'Athlete') + ' | ' + (state.profile?.age || '?') + 'y | ' + (state.profile?.weightLb || '?') + 'lb | Goal: ' + raceLabelByKey(state.profile?.raceDistanceKey || '5k') + ' in ' + fmtRaceTime(activeGoalSec(state.profile, raceMetersByKey(state.profile?.raceDistanceKey || '5k'))) + ' | LTHR: ' + (state.profile?.lthr || 174) + 'bpm\n\n';
       block += '## Progress\n';
       block += completed + '/' + total + ' sessions (' + (total > 0 ? Math.round(completed/total*100) : 0) + '%) | Days Left: ' + daysLeft + '\n\n';
       
@@ -6862,15 +7081,15 @@
 
       const field = (key, label, value, opts={}) => `
         <div class="manual-field-row">
-          <label>${label}</label>
-          <input type="${opts.type||'number'}" id="prof-${key}" value="${value ?? ''}"
+          <label for="prof-${key}">${label}</label>
+          <input type="${opts.type||'number'}" id="prof-${key}" value="${esc(value ?? '')}"
             ${opts.step?`step="${opts.step}"`:''} ${opts.min!=null?`min="${opts.min}"`:''} ${opts.max!=null?`max="${opts.max}"`:''}
             placeholder="${opts.ph||''}" onblur="saveProfileField('${key}', this.value, '${opts.type||'number'}')" style="max-width:150px;" />
         </div>`;
 
       const selectField = (key, label, value, options) => `
         <div class="manual-field-row">
-          <label>${label}</label>
+          <label for="prof-${key}">${label}</label>
           <select id="prof-${key}" onchange="saveProfileField('${key}', this.value, 'text')" style="text-align:right; max-width:170px;">
             ${options.map(o => `<option value="${o.val}" ${value===o.val?'selected':''}>${o.label}</option>`).join('')}
           </select>
@@ -6950,7 +7169,7 @@
             </div>
             <div class="form-group" style="margin-top:8px;">
               <label class="form-label" style="margin-bottom:4px;">${L('Por qué importa esta carrera','Why this race matters')}</label>
-              <textarea id="prof-whyImportant" rows="2" style="width:100%; background:var(--field-surface); border:1px solid var(--field-line); color:var(--paper); padding:8px; font-family:var(--font-body); font-size:13px;" onblur="saveProfileField('whyImportant', this.value, 'text')">${p.whyImportant || ''}</textarea>
+              <textarea id="prof-whyImportant" rows="2" style="width:100%; background:var(--field-surface); border:1px solid var(--field-line); color:var(--paper); padding:8px; font-family:var(--font-body); font-size:13px;" onblur="saveProfileField('whyImportant', this.value, 'text')">${esc(p.whyImportant || '')}</textarea>
             </div>
           </div>
 
@@ -6976,27 +7195,7 @@
             </p>
           </div>
 
-          <div class="card">
-            <div class="card-title">${L('CONFIGURACIÓN DE CARRERA','RACE CONFIGURATION')}</div>
-            <div class="manual-field-row">
-              <label>${L('Fecha de carrera','Race date')}</label>
-              <input type="date" id="prof-raceDateISO" value="${p.raceDateISO || '2026-08-16'}" onchange="saveProfileField('raceDateISO', this.value, 'text')" style="max-width:150px; text-align:right;" />
-            </div>
-            <div class="manual-field-row">
-              <label>${L('Distancia de carrera','Race distance')}</label>
-              <select id="prof-raceDistanceKey" onchange="saveProfileField('raceDistanceKey', this.value, 'text')" style="max-width:150px; text-align:right;">
-                ${RACE_DISTANCES.map(r => `<option value="${r.key}" ${(p.raceDistanceKey || '5k') === r.key ? 'selected' : ''}>${r.label[getLang()] || r.label.en}</option>`).join('')}
-              </select>
-            </div>
-            ${field('taperDays', L('Días de taper','Taper days'), p.taperDays ?? 10, {min:5, max:21, ph:'10'})}
-            <label class="checkbox-item" style="margin-top:8px;">
-              <input type="checkbox" id="prof-raceInBoots" ${p.raceInBoots !== false ? 'checked' : ''} onchange="saveProfileField('raceInBoots', this.checked, 'bool')" />
-              <span style="font-size:13px;">${L('Corro la carrera en botas + OCP','Race in boots + OCP')}</span>
-            </label>
-            <p style="font-size:10px; color:var(--paper-dim); margin-top:8px; line-height:1.4;">
-              ${L(`El taper de 10 días es óptimo para 5K-10K (reduce volumen, mantén intensidad). Correr en botas añade ~4% al tiempo proyectado. La penalización por calor se calcula según el mes de la carrera (actualmente ${(raceHeatPenaltyPct(p.raceDateISO)*100).toFixed(1)}%) — agosto y septiembre son los peores meses en PR, diciembre y enero casi neutrales.`, `A 10-day taper is optimal for 5K-10K (cut volume, keep intensity). Racing in boots adds ~4% to projected time. The heat penalty is derived from the race month (currently ${(raceHeatPenaltyPct(p.raceDateISO)*100).toFixed(1)}%) — August and September are the worst in PR, December and January nearly neutral.`)}
-            </p>
-          </div>
+          ${renderRaceConfigCard(L, field)}
 
           <button class="btn btn-secondary" style="width:100%;" onclick="switchView('home')">${L('← Volver','← Back')}</button>
         </div>`;
@@ -7022,7 +7221,19 @@
       const sec = parseInt(parts[0]) * 60 + parseInt(parts[1]);
       if (isNaN(sec) || sec <= 0) { showToast(getLang()==='es'?'Valor inválido':'Invalid value'); return; }
       if (which === 'current') state.profile.currentFiveKSec = sec;
-      else state.profile.goalFiveKSec = sec;
+      else {
+        // The active race owns its goal. Only a 5K race can be edited from this 5K field;
+        // for any other distance the goal is edited per race under "Carreras" so an exact
+        // goal (e.g. 10K in 1:00:00) is never overwritten by a Riegel-scaled 5K value.
+        const ar = activeRace();
+        if (ar && Math.abs(raceMetersByKey(ar.distanceKey || '5k') - 5000) >= 1) {
+          showToast(getLang()==='es' ? 'La meta de la carrera activa se edita en "Carreras"' : 'Edit the active race goal under "Races"');
+          render();
+          return;
+        }
+        state.profile.goalFiveKSec = sec;
+        if (ar) { ar.goalSec = sec; syncActiveRace(); }
+      }
       saveState();
       render(); // pace reference table depends on current 5K — refresh
       showToast(t('toast_saved'));
@@ -7035,7 +7246,7 @@
           <div class="card">
             <div class="card-title">${t('race_strategy_label')}</div>
             <p style="font-size: 12px; color: var(--paper-dim); margin-bottom: 12px;">
-              ${state.profile ? `${t('race_target_text')} ${secToMMSS(state.profile.goalFiveKSec)} ${getLang() === 'es' ? 'el' : 'on'} 16 AUG 2026` : '—'}
+              ${state.profile ? `${esc(activeRace()?.name || raceLabelByKey(state.profile.raceDistanceKey || '5k'))} · ${t('race_target_text')} ${fmtRaceTime(activeGoalSec(state.profile, raceMetersByKey(state.profile.raceDistanceKey || '5k')))} ${getLang() === 'es' ? 'el' : 'on'} ${state.profile.raceDateISO}` : '—'}
             </p>
             <button class="btn btn-primary" style="width: 100%;" onclick="generateRaceStrategyPDF()">${t('view_strategy_card')}</button>
           </div>
@@ -7085,7 +7296,7 @@
           <div class="header-left">
             <div class="header-mark"></div>
             <div class="header-info">
-              <p class="callsign">${state.profile ? state.profile.name : t('standby')}</p>
+              <p class="callsign">${state.profile ? esc(state.profile.name) : t('standby')}</p>
               <p class="name">FITCOACH 5K</p>
             </div>
           </div>
@@ -7105,7 +7316,7 @@
           <div class="view ${currentView === 'profile' ? 'active' : ''}">${currentView === 'profile' ? renderProfileView() : ''}</div>
           <div class="view ${currentView === 'strength' ? 'active' : ''}">${currentView === 'strength' ? renderStrengthView() : ''}</div>
         </main>
-        <nav>
+        <nav aria-label="${getLang()==='es'?'Navegación principal':'Main navigation'}">
           <button class="${currentView === 'home' ? 'active' : ''}" onclick="switchView('home')">
             <span class="nav-icon">⌂</span><span>${t('nav_base')}</span>
           </button>
@@ -7130,19 +7341,20 @@
     }
 
     function renderMarkdownModal() {
-      const escaped = mdModalContent.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const escaped = esc(mdModalContent);
       return `
         <div class="md-modal">
           <div class="md-modal-card">
             <div class="md-modal-header">
               <div class="md-modal-title">${t('md_export_title')}</div>
-              <button id="mdModalToggle" onclick="toggleReportMode()" style="padding: 8px 14px; margin-right: 8px; background: var(--field-surface); border: 1px solid var(--field-line); color: var(--coyote); cursor: pointer; font-size: 12px; font-family: var(--font-mono); letter-spacing: 0.5px;">
+              <button onclick="toggleMdKind()" aria-label="Cambiar formato de exportación" style="padding: 8px 14px; margin-right: 8px; background: var(--field-surface); border: 1px solid var(--field-line); color: var(--olive-bright); cursor: pointer; font-family: var(--font-mono); font-size: 11px;">${mdModalKind === 'app' ? 'FORMATO APP ◀' : '▶ FORMATO APP'}</button>
+              ${mdModalKind === 'app' ? '' : `<button id="mdModalToggle" onclick="toggleReportMode()" style="padding: 8px 14px; margin-right: 8px; background: var(--field-surface); border: 1px solid var(--field-line); color: var(--coyote); cursor: pointer; font-size: 12px; font-family: var(--font-mono); letter-spacing: 0.5px;">
                 ${reportMode === 'full' ? 'FULL MODE ◀' : '▶ QUICK MODE'}
-              </button>
+              </button>`}
               <button class="md-modal-close" onclick="closeMarkdownModal()">✕</button>
             </div>
             <div class="md-modal-body">
-              <textarea class="md-textarea" id="mdTextarea" readonly>${mdModalContent}</textarea>
+              <textarea class="md-textarea" id="mdTextarea" readonly>${escaped}</textarea>
             </div>
             <div class="md-modal-footer">
               <button class="btn btn-secondary" onclick="copyMarkdown()" style="flex:1;">${t('md_copy')}</button>
@@ -7176,6 +7388,7 @@
         const plan = generatePlan(profile);
         state.profile = profile;
         state.plan = plan;
+        syncActiveRace();
         saveState();
         currentView = 'home';
         currentStep = 0;
@@ -8342,9 +8555,217 @@
     }
 
 
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STRUCTURED .MD EXPORT — fixed schema for the companion coaching app
+    // (Actividad / Estado_previo / Datos_principales / Zonas / Deriva_cardiaca / Ritmo /
+    //  Esfuerzo_percibido / Evaluacion_entrenador). Units follow the schema: miles, min/mi,
+    // °C, km/h, lb. A field with no data is left EMPTY (never guessed), so the receiving app
+    // can tell "unknown" from "zero". Enumerated fields are derived from the rules below.
+    // ═══════════════════════════════════════════════════════════════════════
+    function buildAppMarkdown(act) {
+      const a = act.analysis || {};
+      const mf = act.manualFields || {};
+      const lthr = state.profile?.lthr || 174;
+      const isBike = act.sport === 'biking';
+      const linked = act.linkedPlanDay ? state.plan.find(x => x.day === act.linkedPlanDay) : null;
+
+      const num = (v, d) => (v == null || v === '' || isNaN(parseFloat(v))) ? '' : (d == null ? String(parseFloat(v)) : parseFloat(v).toFixed(d));
+      const fToC = (f) => (f == null || f === '' || isNaN(parseFloat(f))) ? '' : ((parseFloat(f) - 32) * 5 / 9).toFixed(1);
+      const mphToKmh = (m) => (m == null || m === '' || isNaN(parseFloat(m))) ? '' : (parseFloat(m) * 1.609344).toFixed(1);
+      const oneLine = (x) => String(x == null ? '' : x).replace(/\s*\n\s*/g, ' ').trim();
+
+      // ── tipo / objetivo_zona ──
+      const TIPO = { easy: 'facil', tempo: 'tempo', intervals: 'intervalos', long: 'tirada', race_sim: 'carrera' };
+      const ZONA = { easy: 'Z2', long: 'Z2', tempo: 'Z4', intervals: 'Z5', race_sim: 'Z4' };
+      let rawType = (linked && linked.type) || '';
+      let tipo = TIPO[rawType] || '';
+      if (!tipo && mf.trainingType) {
+        const tt = String(mf.trainingType).toLowerCase();
+        if (/f[aá]cil|easy|z2|recuper/.test(tt)) tipo = 'facil';
+        else if (/tempo|umbral|threshold/.test(tt)) tipo = 'tempo';
+        else if (/interval|series|rep/.test(tt)) tipo = 'intervalos';
+        else if (/larg|long|tirada/.test(tt)) tipo = 'tirada';
+        else if (/fuerza|strength/.test(tt)) tipo = 'fuerza';
+        else if (/test|prueba/.test(tt)) tipo = 'test';
+        else if (/carrera|race/.test(tt)) tipo = 'carrera';
+      }
+      const zonaObj = tipo === 'fuerza' ? 'fuerza'
+        : ({ facil: 'Z2', tirada: 'Z2', tempo: 'Z4', intervalos: 'Z5', carrera: 'Z4', test: 'Z4' }[tipo] || '');
+
+      // ── terreno: manual surface text wins; otherwise inferred from elevation gain per mile ──
+      let terreno = '';
+      const surf = String(mf.surface || '').toLowerCase();
+      if (surf) {
+        if (/pista|track/.test(surf)) terreno = 'pista';
+        else if (/llan|flat|plano/.test(surf)) terreno = 'llano';
+        else if (/cuest|hill|subid|mont/.test(surf)) terreno = 'cuestas';
+        else if (/ondul|roll/.test(surf)) terreno = 'ondulado';
+        else terreno = 'mixto';
+      } else if (a.elevGainPerMi != null) {
+        terreno = a.elevGainPerMi < 20 ? 'llano' : (a.elevGainPerMi < 60 ? 'ondulado' : 'cuestas');
+      }
+
+      // ── clima (°F/mph in the app → °C/km/h in the schema) ──
+      const tempF = act.hasTempData ? act.avgTempF : mf.temperature;
+
+      // ── dolor enum ──
+      const painRaw = oneLine(mf.painNotes);
+      let dolor = '';
+      if (painRaw) {
+        const pl = painRaw.toLowerCase();
+        if (/^(ninguno|ninguna|no|none|nada|n\/a|sin dolor)\b/.test(pl)) dolor = 'ninguno';
+        else if (/alto|fuerte|severo|agudo|intenso|no puedo/.test(pl)) dolor = 'alto';
+        else if (/moderad/.test(pl)) dolor = 'moderado';
+        else dolor = 'leve';
+      }
+
+      // ── zonas ──
+      const f = zoneFloors(lthr);
+      const zs = a.timeInZones?.seconds || null;
+      const zmin = (z) => zs ? (Math.round(((zs[z] || 0) / 60) * 10) / 10).toFixed(1) : '';
+      const zTotal = zs ? Object.values(zs).reduce((x, y) => x + y, 0) : 0;
+      const zShare = (list) => zTotal ? list.reduce((x, z) => x + (zs[z] || 0), 0) / zTotal : null;
+
+      // ── deriva enum: <=3% excelente | <=5% normal | >5% → calor (>=85°F) o exceso_intensidad ──
+      const cd = a.cardiacDrift || null;
+      let derivaInterp = '';
+      if (cd && cd.driftPct != null) {
+        if (cd.driftPct <= 3) derivaInterp = 'excelente';
+        else if (cd.driftPct <= 5) derivaInterp = 'normal';
+        else derivaInterp = (parseFloat(tempF) >= 85) ? 'fatiga_calor' : 'exceso_intensidad';
+      }
+
+      // ── ritmo consistencia enum ──
+      const cv = a.pacingConsistency?.cvPct;
+      let ritmoEval = '';
+      if (cv != null) ritmoEval = cv < 3 ? 'excelente' : (cv < 6 ? 'buena' : (cv < 10 ? 'variable' : 'inconsistente'));
+
+      // ── evaluación del entrenador (rules stated in the header comment of this function) ──
+      const score = a.sessionScore;
+      const calidad = score == null ? '' : (score >= 75 ? 'alta' : (score >= 60 ? 'media' : 'baja'));
+      let zonaCumplida = '';
+      if (zTotal && zonaObj && zonaObj !== 'fuerza') {
+        const share = { Z2: () => zShare([1, 2]), Z4: () => zShare([4]), Z5: () => zShare([4, 5]) }[zonaObj];
+        const tgt = tipo === 'tempo' ? zShare([3, 4]) : (share ? share() : null);
+        if (tgt != null) zonaCumplida = tgt >= 0.6 ? 'si' : (tgt >= 0.35 ? 'parcial' : 'no');
+      }
+      let fatigueSignal = null;
+      try {
+        const h = buildFatigueHistory(act);
+        fatigueSignal = calcFatigueIndex({ avgHR: act.avgHR, avgPaceSecPerMi: act.avgPaceSecPerMi }, h.history)?.signal || null;
+      } catch (_) {}
+      const rpe = parseFloat(mf.rpe);
+      let ajuste = 'mantener';
+      if (dolor === 'alto') ajuste = 'descansar';
+      else if (rpe >= 9 || (cd && cd.driftPct > 8) || fatigueSignal === 'high_fatigue' || dolor === 'moderado') ajuste = 'bajar_leve';
+      else if (zonaCumplida === 'no' && ['tempo', 'intervalos'].includes(tipo)) ajuste = 'repetir';
+      else if (calidad === 'alta' && rpe <= 6 && (!cd || cd.driftPct <= 3) && !dolor.match(/leve|moderado|alto/)) ajuste = 'subir_leve';
+      const hasEvalData = calidad || zonaCumplida || cd || !isNaN(rpe);
+      const notas = [
+        a.sessionGrade ? 'Grado ' + a.sessionGrade + (score != null ? ' (' + Math.round(score) + ')' : '') : '',
+        cd ? 'deriva ' + cd.driftPct + '%' : '',
+        zonaCumplida ? 'zona objetivo ' + zonaCumplida : ''
+      ].filter(Boolean).join('; ');
+
+      // ── datos principales ──
+      const timeMin = act.totalTimeSec ? (act.totalTimeSec / 60).toFixed(2) : '';
+      const paceStr = (!isBike && act.avgPaceSecPerMi > 0) ? fmtPaceNoUnit(act.avgPaceSecPerMi) : '';
+      const vOk = !!a.vdot && vdotValidity({
+        sport: isBike ? 'biking' : 'running', avgHR: act.avgHR, lthr,
+        elevGainPerMi: a.elevGainPerMi || 0, totalTimeSec: act.totalTimeSec,
+        sessionType: rawType || mf.trainingType || null
+      }).valid;
+      const tss = (act.totalDistMi != null && act.totalTimeSec && act.avgHR) ? estimateTSS(act.totalDistMi, act.totalTimeSec, act.avgHR, lthr).toFixed(1) : '';
+      const sensaciones = [oneLine(mf.athleteNotes), (painRaw && dolor && dolor !== 'ninguno') ? 'Dolor: ' + painRaw : ''].filter(Boolean).join(' | ');
+
+      const L = [];
+      L.push('## Actividad', '');
+      L.push('- fecha: ' + act.dateISO);
+      L.push('- deporte: ' + (isBike ? 'biking' : 'running'));
+      L.push('- tipo: ' + tipo);
+      L.push('- objetivo_zona: ' + zonaObj);
+      L.push('- terreno: ' + terreno);
+      L.push('- clima:');
+      L.push('  - temperatura_c: ' + fToC(tempF));
+      L.push('  - humedad_pct: ' + num(mf.humidity));
+      L.push('  - viento_kmh: ' + mphToKmh(mf.wind));
+      L.push('  - sensacion_termica_c: ' + fToC(mf.feelsLike));
+      L.push('', '## Estado_previo', '');
+      L.push('- horas_sueno: ' + num(mf.sleepHours));
+      L.push('- calidad_sueno_1_10: ' + num(mf.sleepQuality));
+      L.push('- energia_1_10: ' + num(mf.energyLevel));
+      L.push('- estres_1_10: ' + num(mf.stressLevel));
+      L.push('- dolor_molestias: ' + dolor);
+      L.push('- peso_lb: ' + num(mf.bodyWeight));
+      L.push('- hr_v_ms: ' + num(mf.hrv));
+      L.push('- rhr_bpm: ' + num(mf.restingHR));
+      L.push('', '## Datos_principales', '');
+      L.push('- distancia_mi: ' + num(act.totalDistMi, 2));
+      L.push('- tiempo_min: ' + timeMin);
+      L.push('- pace_medio_min_milla: ' + paceStr);
+      L.push('- fc_media_bpm: ' + (act.avgHR ? Math.round(act.avgHR) : ''));
+      L.push('- fc_max_bpm: ' + (act.maxHR ? Math.round(act.maxHR) : ''));
+      L.push('- lthr_bpm: ' + lthr);
+      L.push('- vdot: ' + (vOk ? a.vdot.toFixed(1) : ''));
+      L.push('- tss: ' + tss);
+      L.push('- cadencia_media_spm: ' + (act.avgCadSPM ? Math.round(act.avgCadSPM) : ''));
+      L.push('- potencia_media_w: ' + (a.powerStats ? Math.round(a.powerStats.avgWatts) : ''));
+      L.push('', '## Zonas', '');
+      L.push('- configuracion_zonas:');
+      L.push('  - metodo: LTHR');
+      L.push('  - lthr_bpm: ' + lthr);
+      L.push('  - fc_max_bpm: ' + num(state.profile?.maxHR || state.profile?.fcMax));
+      L.push('  - rangos:');
+      L.push('    - Z1: <' + f.z2);
+      L.push('    - Z2: ' + f.z2 + '-' + (f.z3 - 1));
+      L.push('    - Z3: ' + f.z3 + '-' + (f.z4 - 1));
+      L.push('    - Z4: ' + f.z4 + '-' + lthr);
+      L.push('    - Z5: >' + lthr);
+      L.push('- tiempo_en_zonas:');
+      [1, 2, 3, 4, 5].forEach(z => L.push('  - Z' + z + '_min: ' + zmin(z)));
+      L.push('', '## Deriva_cardiaca', '');
+      L.push('- fc_primera_mitad_bpm: ' + (cd ? cd.avgHRFirstHalf : ''));
+      L.push('- fc_segunda_mitad_bpm: ' + (cd ? cd.avgHRSecondHalf : ''));
+      L.push('- deriva_pct: ' + (cd ? cd.driftPct : ''));
+      L.push('- interpretacion: ' + derivaInterp);
+      L.push('', '## Ritmo', '');
+      L.push('- consistencia_cv_pct: ' + (cv != null ? cv : ''));
+      L.push('- evaluacion_consistencia: ' + ritmoEval);
+      L.push('', '## Esfuerzo_percibido', '');
+      L.push('- rpe_1_10: ' + num(mf.rpe));
+      L.push('- sensaciones_atleta: ' + sensaciones);
+      L.push('', '## Evaluacion_entrenador', '');
+      L.push('- calidad_sesion: ' + calidad);
+      L.push('- zona_cumplida: ' + zonaCumplida);
+      L.push('- carga_ajuste_proxima: ' + (hasEvalData ? ajuste : ''));
+      L.push('- notas: ' + notas);
+      return L.join('\n').replace(/[ \t]+$/gm, '') + '\n';
+    }
+
+    // Which flavour the Markdown modal shows: the full human-readable report or the app schema.
+    function buildModalMarkdown(act) {
+      return mdModalKind === 'app' ? buildAppMarkdown(act) : buildActivityMarkdown(act);
+    }
+    function exportAppMarkdown(activityId) {
+      const act = state.tcxSessions.find(x => x.id === activityId);
+      if (!act) return;
+      mdModalKind = 'app';
+      mdModalActivityId = activityId;
+      mdModalContent = buildModalMarkdown(act);
+      render();
+    }
+    function toggleMdKind() {
+      mdModalKind = mdModalKind === 'app' ? 'report' : 'app';
+      const act = state.tcxSessions.find(x => x.id === mdModalActivityId);
+      if (act) mdModalContent = buildModalMarkdown(act);
+      render();
+    }
+
         function exportActivityMarkdown(activityId) {
       const t = state.tcxSessions.find(a => a.id === activityId);
       if (!t) return;
+      mdModalKind = 'report';
       mdModalActivityId = activityId;
       mdModalContent = buildActivityMarkdown(t);
       render();
@@ -8380,14 +8801,26 @@
 
     // Build negative-split mile targets: start slightly conservative, finish strong.
     // Standard approach: first mile +3%, middle mile(s) at goal pace, last segment -3%.
-    function buildNegativeSplitPlan(goalSec) {
-      const goalPaceSec = goalSec / 3.10686; // sec/mi
-      const miles = [
-        { label: 'Mi 1', factor: 1.03, note: { en: 'Controlled start — resist the urge to go out fast', es: 'Salida controlada — resiste el impulso de salir rápido' } },
-        { label: 'Mi 2', factor: 1.00, note: { en: 'Settle into goal pace', es: 'Asiéntate en el pace objetivo' } },
-        { label: 'Mi 3', factor: 0.99, note: { en: 'Hold form, stay relaxed', es: 'Mantén la forma, relajado' } },
-        { label: 'Final 0.1', factor: 0.95, note: { en: 'Empty the tank', es: 'Vacía el tanque' } }
-      ];
+    function buildNegativeSplitPlan(goalSec, raceMeters) {
+      // Works for any distance: full miles + a final partial. For a 5K this reproduces the
+      // original plan (Mi 1 / Mi 2 / Mi 3 / Final 0.1).
+      const meters = raceMeters || 5000;
+      const totalMi = meters / 1609.344;
+      const goalPaceSec = goalSec / totalMi; // sec/mi
+      const n = Math.max(1, Math.floor(totalMi));
+      const notes = {
+        first: { en: 'Controlled start — resist the urge to go out fast', es: 'Salida controlada — resiste el impulso de salir rápido' },
+        mid:   { en: 'Settle into goal pace', es: 'Asiéntate en el pace objetivo' },
+        late:  { en: 'Hold form, stay relaxed', es: 'Mantén la forma, relajado' },
+        end:   { en: 'Empty the tank', es: 'Vacía el tanque' }
+      };
+      const miles = [];
+      for (let i = 1; i <= n; i++) {
+        const isFirst = i === 1, isLast = i === n && n > 1;
+        miles.push({ label: 'Mi ' + i, factor: isFirst ? 1.03 : (isLast ? 0.99 : 1.00), note: isFirst ? notes.first : (isLast ? notes.late : notes.mid) });
+      }
+      const rem = totalMi - n;
+      if (rem > 0.03) miles.push({ label: 'Final ' + rem.toFixed(1), factor: 0.95, note: notes.end });
       return miles.map(m => ({ ...m, paceSec: Math.round(goalPaceSec * m.factor) }));
     }
 
@@ -8410,17 +8843,20 @@
       if (!profile) return null;
       const lang = getLang();
       const isEs = lang === 'es';
-      const goalPaceSecPerMi = profile.goalFiveKSec / 3.10686;
-      const estimatedMinutes = Math.ceil(profile.goalFiveKSec / 60) + 5; // buffer for warmup-adjacent pacing
-      const splits = buildNegativeSplitPlan(profile.goalFiveKSec);
-      const hydration = buildHydrationPlan(profile.weightLb, profile.goalFiveKSec / 60, 88);
+      const raceM = raceMetersByKey(profile.raceDistanceKey || '5k');
+      const goalSec = activeGoalSec(profile, raceM);
+      const goalPaceSecPerMi = goalSec / (raceM / 1609.344);
+      const estimatedMinutes = Math.ceil(goalSec / 60) + 5; // buffer for warmup-adjacent pacing
+      const splits = buildNegativeSplitPlan(goalSec, raceM);
+      const hydration = buildHydrationPlan(profile.weightLb, goalSec / 60, 88);
       const daysOut = daysUntil(profile.raceDateISO);
 
       return {
         athleteName: profile.name,
         raceDateISO: profile.raceDateISO,
         daysOut,
-        goalTimeStr: secToMMSS(profile.goalFiveKSec),
+        goalTimeStr: fmtRaceTime(goalSec),
+        raceLabel: (activeRace()?.name) || raceLabelByKey(profile.raceDistanceKey || '5k'),
         goalPaceStr: fmtPace(goalPaceSecPerMi),
         lthr: profile.lthr,
         splits,
@@ -8470,7 +8906,7 @@
         page.drawText(isEs ? 'TARJETA DE ESTRATEGIA DE CARRERA' : 'RACE STRATEGY CARD', {
           x: marginX, y: height - 40, size: 18, font: fontBold, color: colPaper
         });
-        page.drawText(`5K · ${data.athleteName} · ${data.raceDateISO}`, {
+        page.drawText(`${data.raceLabel} · ${data.athleteName} · ${data.raceDateISO}`, {
           x: marginX, y: height - 62, size: 10, font, color: colCoyote
         });
         page.drawText(isEs ? `${data.daysOut} días restantes` : `${data.daysOut} days remaining`, {
@@ -8657,6 +9093,7 @@
     function closeMarkdownModal() {
       mdModalContent = null;
       mdModalActivityId = null;
+      mdModalKind = 'report';
       render();
     }
 
@@ -8683,7 +9120,9 @@
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `activity-report-${todayISO()}.md`;
+      const srcAct = state.tcxSessions.find(x => x.id === mdModalActivityId);
+      const fileDate = srcAct?.dateISO || todayISO();
+      a.download = mdModalKind === 'app' ? `actividad-${fileDate}.md` : `activity-report-${fileDate}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -8935,7 +9374,7 @@
 
         // Days to race
         const daysLeft = daysUntil(state.profile?.raceDateISO);
-        page.drawText(es?`Días para la carrera (16 AGO 2026): ${daysLeft}`:`Days to race (16 AUG 2026): ${daysLeft}`, { x:marginX, y, size:9, font:fontBold, color:colPaper });
+        page.drawText(es?`Días para la carrera (${state.profile?.raceDateISO}): ${daysLeft}`:`Days to race (${state.profile?.raceDateISO}): ${daysLeft}`, { x:marginX, y, size:9, font:fontBold, color:colPaper });
         y -= 30;
 
         // Footer
@@ -9063,6 +9502,8 @@
     function showToast(msg) {
       const toast = document.createElement('div');
       toast.className = 'toast';
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
       toast.textContent = msg;
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
@@ -9086,6 +9527,55 @@
       event.target.blur();
     }
 
+    // Post-render accessibility pass. The UI is built from innerHTML templates, so semantics
+    // are added here once instead of being repeated in ~90 template strings:
+    //  • non-button elements with onclick become keyboard-operable role="button"
+    //  • icon-only buttons (✕ ← ↑) get an aria-label
+    //  • the active bottom-nav tab gets aria-current; modal/overlay get dialog semantics
+    //  • form rows whose <label> is not bound to its control get an aria-label
+    function enhanceA11y() {
+      const es = getLang() === 'es';
+      try {
+        document.documentElement.lang = es ? 'es' : 'en';
+        document.querySelectorAll('[onclick]').forEach(el => {
+          if (/^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(el.tagName)) return;
+          if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
+          if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
+        });
+        const ICON = { '✕': es ? 'Cerrar' : 'Close', '×': es ? 'Cerrar' : 'Close', '←': es ? 'Volver' : 'Back' };
+        document.querySelectorAll('button').forEach(b => {
+          if (b.hasAttribute('aria-label')) return;
+          const txt = b.textContent.trim();
+          if (ICON[txt]) b.setAttribute('aria-label', ICON[txt]);
+        });
+        document.querySelectorAll('nav button.active').forEach(b => b.setAttribute('aria-current', 'page'));
+        const md = document.querySelector('.md-modal');
+        if (md) { md.setAttribute('role', 'dialog'); md.setAttribute('aria-modal', 'true'); md.setAttribute('aria-label', es ? 'Exportación Markdown' : 'Markdown export'); }
+        const ov = document.querySelector('.detail-overlay');
+        if (ov) { ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); }
+        document.querySelectorAll('.manual-field-row').forEach(row => {
+          const label = row.querySelector('label');
+          const ctl = row.querySelector('input:not([type=checkbox]), select, textarea');
+          if (label && ctl && !label.getAttribute('for') && !ctl.getAttribute('aria-label') && !label.contains(ctl)) {
+            ctl.setAttribute('aria-label', label.textContent.trim());
+          }
+        });
+      } catch (e) { console.warn('a11y pass skipped:', e); }
+    }
+    // Keyboard: Enter/Space activates role="button" elements; Escape closes the top-most dialog.
+    document.addEventListener('keydown', (e) => {
+      const el = e.target;
+      if (el && el.getAttribute && el.getAttribute('role') === 'button' && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        el.click();
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (mdModalContent) { closeMarkdownModal(); }
+        else if (detailOverlay && typeof closeDetail === 'function') { closeDetail(); }
+      }
+    });
+
     function render() {
       const mainEl = document.querySelector('main');
       const detailEl = document.querySelector('.detail-body');
@@ -9099,6 +9589,7 @@
       // and buttons inside a workout/activity don't bounce the user to the top.
       if (newDetail) newDetail.scrollTop = _scrollToTopNextRender ? 0 : savedDetail;
       _scrollToTopNextRender = false;
+      enhanceA11y();
       // Charts live in <canvas> elements — must be initialized as real JS calls after
       // the DOM update, since innerHTML does not execute embedded <script> tags.
       if (currentView === 'stats' && statsTab === 'charts') {
@@ -9208,6 +9699,16 @@
         }
       } catch (err) { console.warn('Grade migration skipped:', err); }
     })();
+
+    // Pick the active race (next upcoming) and mirror it into the legacy profile fields.
+    try { syncActiveRace(); saveState(); } catch (err) { console.warn('syncActiveRace skipped:', err); }
+    // Re-evaluate when the app returns to the foreground (a race date may have passed).
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      const before = state.profile?.activeRaceId;
+      try { syncActiveRace(); } catch (_) {}
+      if (state.profile?.activeRaceId !== before) { saveState(); render(); }
+    });
 
     render();
 
