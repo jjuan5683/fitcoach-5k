@@ -1,0 +1,282 @@
+--- work/index.orig.html	2026-10-12 12:55:16.177071414 -0400
++++ work/index.html	2026-10-12 17:54:23.548051956 -0400
+@@ -2383,7 +2383,13 @@
+       let runTime = 0, walkTime = 0;
+       const walkSegments = [];
+       let currentWalkStart = null;
+-      for (let i = 1; i < valid.length; i++) {
++      // Standstill at the start line (before the first moving sample) is not a walk break — it
++      // used to flag every race as "has pauses" and mislabel it as an interval session.
++      let firstMove = 0;
++      while (firstMove < valid.length && valid[firstMove].speed < 0.5) firstMove++;
++      let lastMove = valid.length - 1;
++      while (lastMove > firstMove && valid[lastMove].speed < 0.5) lastMove--;
++      for (let i = firstMove + 1; i <= lastMove; i++) {
+         const dt = (valid[i].time - valid[i - 1].time) / 1000;
+         if (dt <= 0 || dt > 30) continue;
+         const isWalking = valid[i].speed < walkSpeedThreshold;
+@@ -2399,7 +2405,7 @@
+         }
+       }
+       if (currentWalkStart !== null) {
+-        walkSegments.push({ startOffsetSec: (currentWalkStart - valid[0].time) / 1000, durationSec: (valid[valid.length - 1].time - currentWalkStart) / 1000 });
++        walkSegments.push({ startOffsetSec: (currentWalkStart - valid[0].time) / 1000, durationSec: (valid[lastMove].time - currentWalkStart) / 1000 });
+       }
+       const total = runTime + walkTime;
+       return {
+@@ -2409,6 +2415,138 @@
+       };
+     }
+ 
++    // ── Cadence-aware slow/walk detection ─────────────────────────────────
++    // Speed alone (<1.4 m/s) misses uphill power-walking at 1.5–2.3 m/s. Walking cadence is
++    // ~100–135 spm vs 150+ when running, so slow speed + low cadence = walking-like effort.
++    function detectSlowSegments(points, maxSpeed = 2.3, maxCad = 140, minSec = 10) {
++      const valid = points.filter(p => p.speed != null && p.time != null);
++      if (valid.length < 2) return { totalSec: 0, segments: [] };
++      let first = 0; while (first < valid.length && valid[first].speed < 0.5) first++;
++      let last = valid.length - 1; while (last > first && valid[last].speed < 0.5) last--;
++      const t0 = valid[0].time;
++      const segs = []; let cur = null;
++      const close = () => {
++        if (cur && cur.durationSec >= minSec) {
++          cur.avgSpeed = cur.speedSum / cur.n; cur.avgHR = cur.hrN ? Math.round(cur.hrSum / cur.hrN) : null;
++          cur.avgCad = cur.cadN ? Math.round(cur.cadSum / cur.cadN) : null;
++          segs.push({ startOffsetSec: cur.startOffsetSec, durationSec: Math.round(cur.durationSec), startDistM: cur.startDistM,
++            avgSpeed: cur.avgSpeed, avgPaceSecPerMi: cur.avgSpeed > 0 ? 1609.344 / cur.avgSpeed : null, avgHR: cur.avgHR, avgCad: cur.avgCad });
++        }
++        cur = null;
++      };
++      for (let i = first + 1; i <= last; i++) {
++        const p = valid[i], dt = (p.time - valid[i - 1].time) / 1000;
++        if (dt <= 0 || dt > 30) { close(); continue; }
++        const slow = p.speed < maxSpeed && (p.cadence != null ? p.cadence < maxCad : p.speed < 1.4);
++        if (slow) {
++          if (!cur) cur = { startOffsetSec: (valid[i - 1].time - t0) / 1000, startDistM: valid[i - 1].dist, durationSec: 0, speedSum: 0, n: 0, hrSum: 0, hrN: 0, cadSum: 0, cadN: 0 };
++          cur.durationSec += dt; cur.speedSum += p.speed; cur.n++;
++          if (p.hr) { cur.hrSum += p.hr; cur.hrN++; }
++          if (p.cadence) { cur.cadSum += p.cadence; cur.cadN++; }
++        } else close();
++      }
++      close();
++      return { totalSec: segs.reduce((a, x) => a + x.durationSec, 0), segments: segs };
++    }
++
++    // ── Advanced per-segment analytics (quarter-mile resolution) ─────────
++    function calcAdvancedAnalytics(points, lthr, maxHRProfile) {
++      const pts = points.filter(p => p.time != null && p.dist != null);
++      if (pts.length < 20) return null;
++      const t0 = pts[0].time, d0 = pts[0].dist;
++      const altMap = smoothAltitudeSeries(pts);
++      const altAt = i => altMap.has(i) ? altMap.get(i) : null;
++      const SEG = 402.336; // 0.25 mi
++      const totalDist = pts[pts.length - 1].dist - d0;
++      const totalSec = (pts[pts.length - 1].time - t0) / 1000;
++      const interpAt = target => { // index of first point with dist >= target
++        let lo = 0, hi = pts.length - 1;
++        while (lo < hi) { const m = (lo + hi) >> 1; if (pts[m].dist - d0 >= target) hi = m; else lo = m + 1; }
++        return lo;
++      };
++      const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
++      const segments = [];
++      const nSeg = Math.ceil(totalDist / SEG - 0.05);
++      for (let k = 0; k < nSeg; k++) {
++        const a = interpAt(k * SEG), b = k === nSeg - 1 ? pts.length - 1 : interpAt((k + 1) * SEG);
++        if (b <= a) continue;
++        const dM = pts[b].dist - pts[a].dist, dS = (pts[b].time - pts[a].time) / 1000;
++        if (dM < 50 || dS <= 0) continue;
++        const sl = pts.slice(a, b + 1);
++        const hrs = sl.map(p => p.hr).filter(v => v > 0), cads = sl.map(p => p.cadence).filter(v => v > 0);
++        const aA = altAt(a), aB = altAt(b);
++        const gradePct = (aA != null && aB != null) ? ((aB - aA) / dM) * 100 : null;
++        const speed = dM / dS, cad = avg(cads), hr = avg(hrs);
++        segments.push({
++          idx: k + 1, startMi: (pts[a].dist - d0) / 1609.344, endMi: (pts[b].dist - d0) / 1609.344,
++          distM: dM, durSec: dS, paceSecPerMi: 1609.344 / speed,
++          avgHR: hr != null ? Math.round(hr) : null, maxHR: hrs.length ? Math.max(...hrs) : null,
++          avgCad: cad != null ? Math.round(cad) : null,
++          gradePct: gradePct != null ? Math.round(gradePct * 10) / 10 : null,
++          strideM: cad ? Math.round((speed / (cad / 60)) * 100) / 100 : null, // metres per step
++          effIdx: hr ? Math.round(((speed * 60) / hr) * 100) / 100 : null     // m/min per bpm (higher = better)
++        });
++      }
++      // Grade bands
++      const bandDefs = [['Bajada fuerte (< -6%)', -Infinity, -6], ['Bajada (-6% a -2%)', -6, -2], ['Plano (-2% a +2%)', -2, 2], ['Subida (+2% a +6%)', 2, 6], ['Subida fuerte (> +6%)', 6, Infinity]];
++      const bands = bandDefs.map(([label, lo, hi]) => {
++        const ss = segments.filter(x => x.gradePct != null && x.gradePct >= lo && x.gradePct < hi);
++        const dist = ss.reduce((a, x) => a + x.distM, 0), dur = ss.reduce((a, x) => a + x.durSec, 0);
++        const hrSS = ss.filter(x => x.avgHR != null);
++        return { label, segs: ss.length, distMi: dist / 1609.344, durSec: dur, paceSecPerMi: dist > 0 ? 1609.344 / (dist / dur) : null,
++          avgHR: hrSS.length ? Math.round(hrSS.reduce((a, x) => a + x.avgHR * x.durSec, 0) / hrSS.reduce((a, x) => a + x.durSec, 0)) : null };
++      }).filter(b => b.segs > 0);
++      // HR milestones
++      const hrMax = maxHRProfile && maxHRProfile > 0 ? maxHRProfile : null;
++      const obsMax = Math.max(...pts.map(p => p.hr || 0));
++      const firstAt = thr => { const p = pts.find(q => q.hr >= thr); return p ? { tSec: (p.time - t0) / 1000, distMi: (p.dist - d0) / 1609.344, hr: p.hr } : null; };
++      const milestones = [];
++      [[0.85, 'LTHR'], [0.95, 'LTHR'], [1.0, 'LTHR'], [1.05, 'LTHR']].forEach(([f]) => {
++        const m = firstAt(lthr * f); if (m) milestones.push({ label: Math.round(f * 100) + '% LTHR (' + Math.round(lthr * f) + ' bpm)', ...m });
++      });
++      let timeAboveLthrSec = 0;
++      for (let i = 1; i < pts.length; i++) { const dt = (pts[i].time - pts[i - 1].time) / 1000; if (dt > 0 && dt <= 30 && pts[i].hr >= lthr) timeAboveLthrSec += dt; }
++      // Halves / positive split
++      const half = interpAt(totalDist / 2);
++      const h1 = { distM: pts[half].dist - d0, sec: (pts[half].time - t0) / 1000 };
++      const h2 = { distM: pts[pts.length - 1].dist - pts[half].dist, sec: (pts[pts.length - 1].time - pts[half].time) / 1000 };
++      const hp1 = 1609.344 / (h1.distM / h1.sec), hp2 = 1609.344 / (h2.distM / h2.sec);
++      const hrHalf = (a, b) => avg(pts.slice(a, b).map(p => p.hr).filter(v => v > 0));
++      const halves = { firstPace: hp1, secondPace: hp2, deltaSec: hp2 - hp1, firstHR: Math.round(hrHalf(0, half) || 0) || null, secondHR: Math.round(hrHalf(half, pts.length) || 0) || null };
++      // Finish kick: last 400 m vs the mile before it
++      let finish = null;
++      if (totalDist > 2200) {
++        const a = interpAt(totalDist - 400), b = pts.length - 1, c = interpAt(totalDist - 400 - 1609.344);
++        const fp = 1609.344 / ((pts[b].dist - pts[a].dist) / ((pts[b].time - pts[a].time) / 1000));
++        const pp = 1609.344 / ((pts[a].dist - pts[c].dist) / ((pts[a].time - pts[c].time) / 1000));
++        finish = { lastPace: fp, prevMilePace: pp, deltaSec: fp - pp, lastHR: Math.round(avg(pts.slice(a).map(p => p.hr).filter(v => v > 0)) || 0) || null };
++      }
++      // Best / worst quarter + stride/cadence collapse
++      const full = segments.filter(x => x.distM > 300);
++      const best = full.length ? full.reduce((m, x) => x.paceSecPerMi < m.paceSecPerMi ? x : m) : null;
++      const worst = full.length ? full.reduce((m, x) => x.paceSecPerMi > m.paceSecPerMi ? x : m) : null;
++      const strideSegs = full.filter(x => x.strideM);
++      const stride = strideSegs.length >= 4 ? {
++        firstQuarterAvgM: Math.round(avg(strideSegs.slice(0, Math.floor(strideSegs.length / 4) || 1).map(x => x.strideM)) * 100) / 100,
++        lastQuarterAvgM: Math.round(avg(strideSegs.slice(-Math.floor(strideSegs.length / 4) || -1).map(x => x.strideM)) * 100) / 100
++      } : null;
++      // Downsampled time series (every ~15 s) for CSV/export
++      const series = []; let nextT = 0;
++      pts.forEach((p, i) => {
++        const tt = (p.time - t0) / 1000;
++        if (tt >= nextT) {
++          nextT = tt + 15;
++          const alt = altAt(i);
++          series.push({ tSec: Math.round(tt), distMi: Math.round(((p.dist - d0) / 1609.344) * 1000) / 1000,
++            paceSecPerMi: p.speed > 0.3 ? Math.round(1609.344 / p.speed) : null, hr: p.hr || null, cad: p.cadence || null,
++            altFt: alt != null ? Math.round(alt * 3.28084) : null });
++        }
++      });
++      return { segments, bands, milestones, timeAboveLthrSec: Math.round(timeAboveLthrSec), obsMaxHR: obsMax, hrMaxProfile: hrMax,
++        pctLthrAtMax: lthr ? Math.round((obsMax / lthr) * 100) : null, pctHrMaxAtMax: hrMax ? Math.round((obsMax / hrMax) * 100) : null,
++        halves, finish, best, worst, stride, series, totalDistMi: totalDist / 1609.344, totalSec };
++    }
++
+     function calcTimeInZones(points, lthr = 174) {
+       const valid = points.filter(p => p.hr != null && p.hr > 0 && p.time != null);
+       const zoneSecs = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+@@ -3194,11 +3332,15 @@
+         const totalDist = laps.reduce((a, l) => a + l.distanceMeters, 0);
+         const totalTime = laps.reduce((a, l) => a + l.totalTimeSec, 0);
+         const totalCals = laps.reduce((a, l) => a + l.calories, 0);
+-        const allHRs = laps.filter(l => l.avgHR > 0).map(l => l.avgHR);
+-        const avgHR = allHRs.length ? allHRs.reduce((a, b) => a + b) / allHRs.length : 0;
++        // Time-weighted (a 70 s tail lap must not weigh as much as a 13-minute mile)
++        const hrLaps = laps.filter(l => l.avgHR > 0 && l.totalTimeSec > 0);
++        const hrWt = hrLaps.reduce((a, l) => a + l.totalTimeSec, 0);
++        const avgHR = hrWt ? hrLaps.reduce((a, l) => a + l.avgHR * l.totalTimeSec, 0) / hrWt : 0;
+         const maxHR = Math.max(...laps.map(l => l.maxHR), 0);
+         const avgPace = totalTime > 0 ? 1609.344 / (totalDist / totalTime) : 0;
+-        const avgCad = laps.filter(l => l.avgCadSPM > 0).reduce((a, l, _, arr) => a + l.avgCadSPM / arr.length, 0);
++        const cadLaps = laps.filter(l => l.avgCadSPM > 0 && l.totalTimeSec > 0);
++        const cadWt = cadLaps.reduce((a, l) => a + l.totalTimeSec, 0);
++        const avgCad = cadWt ? cadLaps.reduce((a, l) => a + l.avgCadSPM * l.totalTimeSec, 0) / cadWt : 0;
+         const distMi = metersToMiles(totalDist);
+         // VDOT / predicted-5K use running-specific physiology (Jack Daniels formulas) — meaningless
+         // for a bike ride, where the same HR effort covers ground far faster for reasons that have
+@@ -3238,7 +3380,8 @@
+         // "work" and the rest as "recovery" produces a fabricated, misleading "reps pace" for an
+         // effort that had zero actual pauses. Gate on real walk-break evidence first.
+         const preCheckRunWalk = sport === 'running' ? detectRunWalk(parseTrackpoints(doc)) : { walkSegments: [] };
+-        const hasRealPauses = preCheckRunWalk.walkSegments.length > 0;
++        // A real recovery/walk break lasts >= 15 s; shorter blips are GPS/start-line noise.
++        const hasRealPauses = preCheckRunWalk.walkSegments.some(w => w.durationSec >= 15);
+ 
+         const lapCandidates = laps.filter(l => l.distanceMeters > 50 && l.totalTimeSec > 10 && l.avgPaceSecPerMi > 0);
+         let workPaceSecPerMi = null, workLapsCount = 0, recoveryLapsCount = 0, recoveryPaceSecPerMi = null;
+@@ -3287,6 +3430,9 @@
+         const realElevation = calcRealElevation(points, 3, sharedAltMap);
+         const powerStats = calcPowerStats(points);
+         const runWalk = sport === 'running' ? detectRunWalk(points) : { runTimeSec: totalTime, walkTimeSec: 0, runPct: 100, walkSegments: [] };
++        const slowSegments = sport === 'running' ? detectSlowSegments(points) : { totalSec: 0, segments: [] };
++        let advanced = null;
++        try { advanced = calcAdvancedAnalytics(points, lthr, (state.profile && Number(state.profile.maxHR)) || null); } catch (e) { console.warn('advanced analytics failed', e); }
+         const timeInZones = calcTimeInZones(points, lthr);
+         const pacingConsistency = calcPacingConsistency(realSplitsMi);
+         const hrvProxy = calcHRVProxy(points);
+@@ -3459,7 +3605,7 @@
+             decouplingValid, decouplingInfo,
+             sessionScore: score, sessionGrade: grade, keyFindings: findings,
+             realSplitsMi, realSplitsKm, cardiacDrift, cadenceSegments,
+-            powerStats, runWalk, timeInZones, pacingConsistency, hrvProxy,
++            powerStats, runWalk, slowSegments, advanced, timeInZones, pacingConsistency, hrvProxy,
+             hrDataQuality, categoryGrades
+           }
+         };
+@@ -8268,6 +8414,68 @@
+         lines.push('');
+       }
+ 
++      // ── ANÁLISIS AVANZADO DEL TCX ────────────────────────────────────────
++      if (!isBike && a.advanced) {
++        const A = a.advanced, mm = secToMMSSOffset;
++        lines.push('---');
++        lines.push('');
++        lines.push('## Análisis Avanzado del TCX');
++        lines.push('');
++        if (a.slowSegments && a.slowSegments.segments.length) {
++          lines.push(`**Tramos lentos/caminata (velocidad < 2.3 m/s y cadencia < 140 spm):** ${a.slowSegments.segments.length} tramo(s), ${mm(a.slowSegments.totalSec)} en total`);
++          lines.push('');
++          lines.push('| # | Inicio | Dist. | Duración | Pace | FC | Cadencia |');
++          lines.push('|---|--------|-------|----------|------|----|----------|');
++          a.slowSegments.segments.forEach((x, i) => {
++            lines.push(`| ${i + 1} | @${mm(x.startOffsetSec)} | ${x.startDistM != null ? (x.startDistM / 1609.344).toFixed(2) + ' mi' : ND} | ${x.durationSec}s | ${fmtPace(x.avgPaceSecPerMi)} | ${x.avgHR || ND} | ${x.avgCad || ND} |`);
++          });
++          lines.push('');
++        }
++        lines.push('### Cuartos de milla (0.25 mi)');
++        lines.push('');
++        lines.push('| Mi | Pace | FC Prom | FC Máx | Cad | Pendiente | Zancada (m) | Eficiencia |');
++        lines.push('|----|------|---------|--------|-----|-----------|-------------|------------|');
++        A.segments.forEach(x => {
++          lines.push(`| ${x.startMi.toFixed(2)}–${x.endMi.toFixed(2)} | ${fmtPace(x.paceSecPerMi)} | ${x.avgHR || ND} | ${x.maxHR || ND} | ${x.avgCad || ND} | ${x.gradePct != null ? (x.gradePct > 0 ? '+' : '') + x.gradePct + '%' : ND} | ${x.strideM || ND} | ${x.effIdx || ND} |`);
++        });
++        lines.push('');
++        lines.push('_Zancada = metros por paso (velocidad ÷ pasos/seg). Eficiencia = m/min por latido (más alto = mejor)._');
++        lines.push('');
++        if (A.bands.length) {
++          lines.push('### Rendimiento por pendiente');
++          lines.push('');
++          lines.push('| Terreno | Dist. | Tiempo | Pace | FC Prom |');
++          lines.push('|---------|-------|--------|------|---------|');
++          A.bands.forEach(b => lines.push(`| ${b.label} | ${b.distMi.toFixed(2)} mi | ${mm(b.durSec)} | ${fmtPace(b.paceSecPerMi)} | ${b.avgHR || ND} |`));
++          lines.push('');
++        }
++        lines.push('### Carga cardíaca');
++        lines.push('');
++        lines.push(`- **FC máxima observada:** ${A.obsMaxHR} bpm (${A.pctLthrAtMax}% de LTHR${A.pctHrMaxAtMax ? ', ' + A.pctHrMaxAtMax + '% de FC máx de perfil' : ''})`);
++        lines.push(`- **Tiempo con FC ≥ LTHR:** ${mm(A.timeAboveLthrSec)}`);
++        A.milestones.forEach(m => lines.push(`- **Primera vez en ${m.label}:** @${mm(m.tSec)} (mi ${m.distMi.toFixed(2)})`));
++        lines.push('');
++        lines.push('### Mitades y cierre');
++        lines.push('');
++        lines.push(`- **1ª mitad:** ${fmtPace(A.halves.firstPace)} · FC ${A.halves.firstHR || ND}`);
++        lines.push(`- **2ª mitad:** ${fmtPace(A.halves.secondPace)} · FC ${A.halves.secondHR || ND}`);
++        lines.push(`- **Diferencia:** ${A.halves.deltaSec > 0 ? '+' : ''}${Math.round(A.halves.deltaSec)} s/mi (${A.halves.deltaSec > 0 ? 'positive split' : 'negative split'}; ojo: el perfil de elevación afecta esta lectura)`);
++        if (A.finish) lines.push(`- **Últimos 400 m:** ${fmtPace(A.finish.lastPace)} vs ${fmtPace(A.finish.prevMilePace)} la milla previa (${A.finish.deltaSec > 0 ? '+' : ''}${Math.round(A.finish.deltaSec)} s/mi) · FC ${A.finish.lastHR || ND}`);
++        if (A.best) lines.push(`- **Mejor cuarto:** mi ${A.best.startMi.toFixed(2)}–${A.best.endMi.toFixed(2)} a ${fmtPace(A.best.paceSecPerMi)} (${A.best.gradePct != null ? A.best.gradePct + '%' : ND})`);
++        if (A.worst) lines.push(`- **Peor cuarto:** mi ${A.worst.startMi.toFixed(2)}–${A.worst.endMi.toFixed(2)} a ${fmtPace(A.worst.paceSecPerMi)} (${A.worst.gradePct != null ? A.worst.gradePct + '%' : ND})`);
++        if (A.stride) lines.push(`- **Zancada 1er cuarto → último cuarto de la carrera:** ${A.stride.firstQuarterAvgM} m → ${A.stride.lastQuarterAvgM} m`);
++        lines.push('');
++        if (A.series && A.series.length) {
++          lines.push('### Serie temporal (cada ~15 s, CSV)');
++          lines.push('');
++          lines.push('```csv');
++          lines.push('t_sec,dist_mi,pace_sec_mi,hr,cad_spm,alt_ft');
++          A.series.forEach(r => lines.push([r.tSec, r.distMi, r.paceSecPerMi ?? '', r.hr ?? '', r.cad ?? '', r.altFt ?? ''].join(',')));
++          lines.push('```');
++          lines.push('');
++        }
++      }
++
+       // ── CADENCIA POR SEGMENTO ────────────────────────────────────────────
+       lines.push('---');
+       lines.push('');
