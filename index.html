@@ -1112,6 +1112,11 @@
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
     }
+    /* ── Tables / disclosure widgets added in 2026.10.13 ───────────── */
+    details.fc-details > summary { list-style: none; cursor: pointer; }
+    details.fc-details > summary::-webkit-details-marker { display: none; }
+    .steps-table td { vertical-align: top; }
+    @media (max-width: 420px) { nav button { font-size: 8px; letter-spacing: 0.3px; } }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
@@ -1620,12 +1625,12 @@
     // Reference pace/effort table by session type, derived from current 5K pace (updates
     // automatically whenever profile.currentFiveKSec or VDOT improves — no manual re-entry).
     const PACE_REF_ROWS = [
-      { type: 'easy', label: { en: 'Easy Run', es: 'Carrera Fácil' }, durationMin: 30, factorFast: 1.20, factorSlow: 1.35, zone: 'Z1-Z2' },
-      { type: 'long', label: { en: 'Long Run', es: 'Carrera Larga' }, durationMin: 45, factorFast: 1.25, factorSlow: 1.35, zone: 'Z2' },
-      { type: 'tempo', label: { en: 'Tempo', es: 'Tempo' }, durationMin: 20, factorFast: 1.02, factorSlow: 1.10, zone: 'Z3-Z4' },
-      { type: 'intervals', label: { en: 'Intervals', es: 'Intervalos' }, reps: '4-6×800m', factorFast: 0.90, factorSlow: 0.98, zone: 'Z4-Z5' },
+      { type: 'easy', label: { en: 'Easy Run', es: 'Carrera Fácil' }, durationMin: 30, factorFast: 1.20, factorSlow: 1.35, pctFast: 0.74, pctSlow: 0.59, zone: 'Z1-Z2' },
+      { type: 'long', label: { en: 'Long Run', es: 'Carrera Larga' }, durationMin: 45, factorFast: 1.25, factorSlow: 1.35, pctFast: 0.74, pctSlow: 0.59, zone: 'Z2' },
+      { type: 'tempo', label: { en: 'Tempo', es: 'Tempo' }, durationMin: 20, factorFast: 1.02, factorSlow: 1.10, pctFast: 0.88, pctSlow: 0.83, zone: 'Z3-Z4' },
+      { type: 'intervals', label: { en: 'Intervals', es: 'Intervalos' }, reps: '4-6×800m', factorFast: 0.90, factorSlow: 0.98, pctFast: 1.00, pctSlow: 0.95, zone: 'Z4-Z5' },
       { type: 'hill', label: { en: 'Hill Repeats', es: 'Repeticiones en Cuesta' }, reps: '6-8×1min', factorFast: 0.95, factorSlow: 1.05, zone: 'Z3-Z4', effortOnly: true },
-      { type: 'reps400', label: { en: 'Repeats 400m', es: 'Repeticiones 400m' }, reps: '4-8×400m', factorFast: 0.82, factorSlow: 0.90, zone: 'Z5' }
+      { type: 'reps400', label: { en: 'Repeats 400m', es: 'Repeticiones 400m' }, reps: '4-8×400m', factorFast: 0.82, factorSlow: 0.90, pctFast: 1.10, pctSlow: 1.05, zone: 'Z5' }
     ];
 
     // Options for the "Training type" dropdown when reviewing a TCX activity — feeds the
@@ -1699,11 +1704,31 @@
       return { recommendation, reasons, riskLevel, pctChange };
     }
 
+    // Daniels: running velocity (m/min) that demands a given VO2 — inverse of danielsVO2.
+    const danielsVelFromVO2 = (vo2) => {
+      const a = 0.000104, b = 0.182258, c = -(vo2 + 4.60);
+      return (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+    };
+
+    // Pace band (sec/mi) for a PACE_REF_ROWS row. Uses Daniels %VDOT (E 59-74, T 83-88, I 95-100,
+    // R 105-110 — R is approximate) when the row defines it and VDOT is computable from the
+    // current 5K; otherwise falls back to the legacy 5K-pace multipliers.
+    function paceBandSec(row, profile) {
+      const fiveK = profile?.currentFiveKSec || 1800;
+      const vdot = calcVDOT(5000, fiveK);
+      if (row.pctFast && row.pctSlow && vdot > 0) {
+        const toPace = (pct) => (1609.344 / danielsVelFromVO2(vdot * pct)) * 60;
+        return { fast: toPace(row.pctFast), slow: toPace(row.pctSlow), daniels: true };
+      }
+      const ppm = fiveK / 3.10686;
+      return { fast: ppm * row.factorFast, slow: ppm * row.factorSlow, daniels: false };
+    }
+
     function buildPaceReferenceTable(profile) {
-      const ppm = (profile?.currentFiveKSec || 1800) / 3.10686; // current 5K pace, sec/mi
       return PACE_REF_ROWS.map(r => {
-        const fastSec = ppm * r.factorFast;
-        const slowSec = ppm * r.factorSlow;
+        const band = paceBandSec(r, profile);
+        const fastSec = band.fast;
+        const slowSec = band.slow;
         const midSec = (fastSec + slowSec) / 2;
         const paceStr = r.effortOnly
           ? null
@@ -4581,6 +4606,377 @@
         </div>`;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // GRIT 100 — 100 standard miles, Nov 1–30 (run + ruck). Home dashboard card.
+    // Counts: TCX activities (any sport except biking) + manual "Ruck" and "Run" sessions.
+    // ═══════════════════════════════════════════════════════════════════════
+    const GRIT = {
+      target: 100,
+      start: '2026-11-01',
+      end: '2026-11-30',
+      weeklyPreMi: 20, // weekly volume to hold BEFORE Nov 1 (rolling 7 days)
+      // Date blocks that add up to 100 mi: 20 + 22 + 25 + 28 + 5
+      ramp: [
+        { from: '2026-11-01', to: '2026-11-07', mi: 20 },
+        { from: '2026-11-08', to: '2026-11-14', mi: 22 },
+        { from: '2026-11-15', to: '2026-11-21', mi: 25 },
+        { from: '2026-11-22', to: '2026-11-28', mi: 28 },
+        { from: '2026-11-29', to: '2026-11-30', mi: 5 }
+      ]
+    };
+
+    // Local-date helpers (never toISOString: it is UTC and flips the day after 8 PM in Puerto Rico).
+    const isoFromDate = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    const addDaysISO = (iso, n) => { const d = parseISODateLocal(iso); d.setDate(d.getDate() + n); return isoFromDate(d); };
+    const daysBetweenISO = (a, b) => Math.round((parseISODateLocal(b) - parseISODateLocal(a)) / 86400000);
+
+    function gritMilesBetween(fromISO, toISO) {
+      let run = 0, ruck = 0;
+      (state.tcxSessions || []).forEach(s => {
+        if (s.dateISO >= fromISO && s.dateISO <= toISO && s.sport !== 'biking') run += Number(s.totalDistMi) || 0;
+      });
+      (state.manualSessions || []).forEach(m => {
+        if (m.dateISO < fromISO || m.dateISO > toISO) return;
+        if (m.type === 'ruck') ruck += Number(m.distMi) || 0;
+        else if (m.type === 'run') run += Number(m.distMi) || 0;
+      });
+      return { run, ruck, total: run + ruck };
+    }
+
+    // Miles the ramp expects you to have logged through `throughISO` (prorated inside a block).
+    function gritRampExpected(throughISO) {
+      let sum = 0;
+      GRIT.ramp.forEach(b => {
+        const len = daysBetweenISO(b.from, b.to) + 1;
+        if (throughISO >= b.to) sum += b.mi;
+        else if (throughISO >= b.from) sum += b.mi * (daysBetweenISO(b.from, throughISO) + 1) / len;
+      });
+      return sum;
+    }
+
+    function gritStats() {
+      const today = todayISO();
+      const started = today >= GRIT.start;
+      const finished = today > GRIT.end;
+      const all = gritMilesBetween(GRIT.start, GRIT.end);
+      const remaining = Math.max(0, GRIT.target - all.total);
+      const daysLeft = finished ? 0 : (started ? daysBetweenISO(today, GRIT.end) + 1 : 30); // includes today
+      const perDay = daysLeft > 0 ? remaining / daysLeft : 0;
+      const expected = started ? gritRampExpected(finished ? GRIT.end : addDaysISO(today, -1)) : 0;
+      const todayMi = started && !finished ? gritMilesBetween(today, today).total : 0;
+      const block = GRIT.ramp.find(b => today >= b.from && today <= b.to) || null;
+      const blockDone = block ? gritMilesBetween(block.from, block.to).total : 0;
+      const rolling7 = gritMilesBetween(addDaysISO(today, -6), today);
+      return { today, started, finished, all, remaining, daysLeft, perDay, expected, todayMi, block, blockDone, rolling7,
+               daysToStart: started ? 0 : daysBetweenISO(today, GRIT.start) };
+    }
+
+    function renderGritCard() {
+      if (!state.profile) return '';
+      const es = getLang() === 'es';
+      const g = gritStats();
+      const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+      const fmtMD = (iso) => parseISODateLocal(iso).toLocaleDateString(es ? 'es-PR' : 'en-US', { month: 'short', day: 'numeric' });
+      const box = (v, l) => `<div class="stat-box"><div class="value">${v}</div><div class="label">${l}</div></div>`;
+      let boxes, pct, color, line1, line2 = '', status;
+
+      if (!g.started) {
+        const r = g.rolling7;
+        const met = r.total >= GRIT.weeklyPreMi;
+        boxes = box(f1(r.total), es ? 'mi · 7 días' : 'mi · 7 days') + box(GRIT.weeklyPreMi, es ? 'meta semanal' : 'weekly goal') + box(g.daysToStart, es ? 'días al 1 nov' : 'days to Nov 1');
+        pct = Math.min(100, r.total / GRIT.weeklyPreMi * 100);
+        color = met ? 'var(--olive-bright)' : 'var(--coyote)';
+        line1 = es ? `Últimos 7 días — Correr: ${f1(r.run)} mi · Ruck: ${f1(r.ruck)} mi` : `Last 7 days — Run: ${f1(r.run)} mi · Ruck: ${f1(r.ruck)} mi`;
+        status = met ? (es ? '✓ Meta semanal cumplida. Mantén el volumen hasta el 1 de noviembre.' : '✓ Weekly goal met. Hold the volume until Nov 1.')
+                     : (es ? `Te faltan ${f1(GRIT.weeklyPreMi - r.total)} mi para tus ${GRIT.weeklyPreMi} de los últimos 7 días.` : `${f1(GRIT.weeklyPreMi - r.total)} mi to reach ${GRIT.weeklyPreMi} over the last 7 days.`);
+      } else if (g.finished) {
+        const ok = g.all.total >= GRIT.target;
+        boxes = box(f1(g.all.total), es ? 'mi total' : 'total mi') + box(f1(g.remaining), es ? 'faltaron' : 'short') + box(GRIT.target, es ? 'meta' : 'goal');
+        pct = Math.min(100, g.all.total / GRIT.target * 100);
+        color = ok ? 'var(--olive-bright)' : 'var(--signal-amber)';
+        line1 = es ? `Correr: ${f1(g.all.run)} mi · Ruck: ${f1(g.all.ruck)} mi` : `Run: ${f1(g.all.run)} mi · Ruck: ${f1(g.all.ruck)} mi`;
+        status = ok ? (es ? '✓ Reto completado.' : '✓ Challenge complete.') : (es ? 'Reto cerrado sin completar.' : 'Challenge closed incomplete.');
+      } else {
+        const behind = g.all.total < g.expected - 0.05;
+        boxes = box(f1(g.all.total), es ? 'mi total' : 'total mi') + box(f1(g.remaining), es ? 'faltan' : 'remaining') + box(f1(g.perDay), es ? 'mi/día necesarias' : 'mi/day needed');
+        pct = Math.min(100, g.all.total / GRIT.target * 100);
+        color = behind ? 'var(--signal-amber)' : 'var(--olive-bright)';
+        line1 = es ? `Correr: ${f1(g.all.run)} mi · Ruck: ${f1(g.all.ruck)} mi · ${g.daysLeft} días restantes (con hoy)`
+                   : `Run: ${f1(g.all.run)} mi · Ruck: ${f1(g.all.ruck)} mi · ${g.daysLeft} days left (incl. today)`;
+        if (g.block) line2 = (es ? 'Bloque ' : 'Block ') + `${fmtMD(g.block.from)}–${fmtMD(g.block.to)}: ${f1(g.blockDone)} / ${g.block.mi} mi` + (g.todayMi > 0 ? (es ? ` · hoy ${f1(g.todayMi)} mi` : ` · today ${f1(g.todayMi)} mi`) : '');
+        status = behind ? (es ? `Atrasado ${f1(g.expected - g.all.total)} mi contra el plan.` : `Behind plan by ${f1(g.expected - g.all.total)} mi.`)
+                        : (es ? 'Al día con el plan.' : 'On plan.');
+      }
+
+      const rows = GRIT.ramp.map(b => {
+        const done = gritMilesBetween(b.from, b.to).total;
+        const mark = done >= b.mi ? '✓' : (g.today > b.to ? '✕' : (g.today >= b.from ? '…' : '—'));
+        return `<tr><td>${fmtMD(b.from)}–${fmtMD(b.to)}</td><td class="num-cell">${b.mi}</td><td class="num-cell">${f1(done)}</td><td>${mark}</td></tr>`;
+      }).join('');
+
+      return `
+        <div class="card" style="border-left:3px solid var(--coyote);">
+          <div class="card-title">GRIT 100 · ${es ? 'NOVIEMBRE' : 'NOVEMBER'}</div>
+          <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">${boxes}</div>
+          <div style="height:10px; background:var(--field-surface); border-radius:5px; overflow:hidden; margin:2px 0 8px;" role="img" aria-label="GRIT 100 ${Math.round(pct)}%">
+            <div style="height:100%; width:${pct.toFixed(0)}%; background:${color};"></div>
+          </div>
+          <p style="font-size:11px; color:var(--paper-dim);">${line1}</p>
+          ${line2 ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:2px;">${line2}</p>` : ''}
+          <p style="font-size:11px; color:${color}; margin-top:4px; font-weight:600;">${status}</p>
+          <details class="fc-details" style="margin-top:8px;">
+            <summary style="font-size:10px; color:var(--coyote); font-family:var(--font-mono);">${es ? 'PLAN SEMANAL' : 'WEEKLY PLAN'} ▾</summary>
+            <table class="splits-table" style="margin-top:6px;">
+              <thead><tr><th>${es ? 'Bloque' : 'Block'}</th><th>${es ? 'Meta' : 'Goal'}</th><th>${es ? 'Hecho' : 'Done'}</th><th></th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+            <p style="font-size:9px; color:var(--paper-dim); margin-top:6px; line-height:1.4;">${es
+              ? 'Cuentan: TCX (corrida u otros, no bici) + Ruck y Corrida manuales. Si subes el TCX no lo registres también a mano.'
+              : 'Counts: TCX (run or other, not biking) + manual Ruck and Run. If you upload the TCX, do not also log it by hand.'}</p>
+          </details>
+        </div>`;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // CALC TAB — VDOT calculator (Daniels) + goal gap + pace zones + HR zones
+    // ═══════════════════════════════════════════════════════════════════════
+    function calcInputs() {
+      const p = state.profile || {};
+      const saved = (state.settings && state.settings.calc) || {};
+      const ar = activeRace();
+      const goalDistM = saved.goalDistM || (ar ? raceMetersByKey(ar.distanceKey || '5k') : 5000);
+      const goalSec = saved.goalSec || activeGoalSec(p, goalDistM);
+      return {
+        distM: saved.distM || 5000,
+        timeSec: saved.timeSec || p.currentFiveKSec || 1800,
+        goalDistM, goalSec
+      };
+    }
+
+    function calcEnter(e) { if (e && e.key === 'Enter') { e.preventDefault(); calcSubmit(); } }
+
+    function calcSubmit() {
+      const es = getLang() === 'es';
+      const distM = parseFloat(document.getElementById('calcDist')?.value);
+      const timeSec = parseTimeToSec(document.getElementById('calcTime')?.value);
+      const goalDistM = parseFloat(document.getElementById('calcGoalDist')?.value);
+      const goalSec = parseTimeToSec(document.getElementById('calcGoalTime')?.value);
+      if (!(distM >= 1000 && distM <= 50000)) { showToast(es ? '⚠ Distancia de prueba: 1000–50000 m' : '⚠ Test distance: 1000–50000 m'); return; }
+      if (!timeSec) { showToast(es ? '⚠ Tiempo de prueba: MM:SS o H:MM:SS' : '⚠ Test time: MM:SS or H:MM:SS'); return; }
+      if (!goalDistM) { showToast(es ? '⚠ Elige la distancia de la meta' : '⚠ Pick the goal distance'); return; }
+      if (!goalSec) { showToast(es ? '⚠ Tiempo de meta: MM:SS o H:MM:SS' : '⚠ Goal time: MM:SS or H:MM:SS'); return; }
+      const vdot = calcVDOT(distM, timeSec);
+      if (!(vdot >= 20 && vdot <= 85)) { showToast(es ? '⚠ Esa prueba da un VDOT fuera de rango (20–85). Revisa distancia y tiempo.' : '⚠ That test gives a VDOT outside 20–85. Check distance and time.'); return; }
+      if (!state.settings) state.settings = {};
+      state.settings.calc = { distM, timeSec, goalDistM, goalSec };
+      saveState();
+      render();
+    }
+
+    function calcApplyToProfile() {
+      const es = getLang() === 'es';
+      if (!state.profile) return;
+      const inp = calcInputs();
+      const vdot = calcVDOT(inp.distM, inp.timeSec);
+      if (!(vdot >= 20 && vdot <= 85)) return;
+      const sec = vdotTo5K(vdot);
+      if (!sec) return;
+      const msg = es
+        ? `¿Cambiar tu 5K actual a ${secToMMSS(sec)}? Esto recalcula los paces objetivo (Daniels) en toda la app.`
+        : `Set your current 5K to ${secToMMSS(sec)}? This recalculates target paces (Daniels) across the app.`;
+      if (!confirm(msg)) return;
+      state.profile.currentFiveKSec = sec;
+      saveState();
+      render();
+      showToast(t('toast_saved'));
+    }
+
+    function renderCalcView() {
+      const es = getLang() === 'es';
+      if (!state.profile) return `<div class="view-container"><p style="font-size:12px; color:var(--paper-dim);">${es ? 'Completa tu perfil primero.' : 'Complete your profile first.'}</p></div>`;
+      const inp = calcInputs();
+      const vdot = calcVDOT(inp.distM, inp.timeSec);
+      const valid = vdot >= 20 && vdot <= 85;
+      const km = (m) => (m / 1000).toFixed(2);
+      const miOf = (m) => (m / 1609.344).toFixed(2);
+
+      let results = '';
+      if (valid) {
+        const predGoal = vdotToTime(vdot, inp.goalDistM);
+        let lo = 20, hi = 85;
+        for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (vdotToTime(mid, inp.goalDistM) > inp.goalSec) lo = mid; else hi = mid; }
+        const need = (lo + hi) / 2;
+        const gap = need - vdot;
+        const pct = Math.max(0, Math.min(100, vdot / need * 100));
+        const goalPace = inp.goalSec / (inp.goalDistM / 1609.344);
+        const thrPace = (1609.344 / danielsVelFromVO2(vdot * 0.88)) * 60;
+        const fiveK = vdotTo5K(vdot);
+        const box = (v, l) => `<div class="stat-box"><div class="value">${v}</div><div class="label">${l}</div></div>`;
+        const goalLabel = (RACE_DISTANCES.find(r => Math.abs(r.meters - inp.goalDistM) < 1) || { label: { en: km(inp.goalDistM) + ' km', es: km(inp.goalDistM) + ' km' } }).label[es ? 'es' : 'en'];
+        results = `
+          <div class="card">
+            <div class="card-title">${es ? 'RESUMEN' : 'SUMMARY'}</div>
+            <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
+              ${box(vdot.toFixed(1), 'VDOT')}
+              ${box(fmtRaceTime(predGoal), (es ? 'predicho ' : 'predicted ') + goalLabel)}
+              ${box(fmtPaceNoUnit(thrPace) + '/mi', es ? 'umbral (T)' : 'threshold (T)')}
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">${es ? 'META' : 'GOAL'}: ${goalLabel} · ${fmtRaceTime(inp.goalSec)}</div>
+            <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
+              ${box(need.toFixed(1), es ? 'VDOT requerido' : 'VDOT required')}
+              ${box(fmtPaceNoUnit(goalPace) + '/mi', es ? 'ritmo meta' : 'goal pace')}
+              ${box((gap >= 0 ? '+' : '') + gap.toFixed(1), es ? 'brecha VDOT' : 'VDOT gap')}
+            </div>
+            <div style="height:10px; background:var(--field-surface); border-radius:5px; overflow:hidden; margin:2px 0 8px;" role="img" aria-label="${es ? 'Avance hacia la meta' : 'Progress to goal'} ${Math.round(pct)}%">
+              <div style="height:100%; width:${pct.toFixed(0)}%; background:${gap <= 0 ? 'var(--olive-bright)' : 'var(--coyote)'};"></div>
+            </div>
+            <p style="font-size:11px; color:var(--paper-dim); line-height:1.5;">${gap <= 0
+              ? (es ? 'Tu VDOT ya alcanza la meta.' : 'Your VDOT already reaches the goal.')
+              : (es ? `Tu VDOT cubre el ${pct.toFixed(0)}% de lo que pide la meta; faltan +${gap.toFixed(1)} puntos. Úsala como techo y chequea el avance a mitad del bloque.`
+                    : `Your VDOT covers ${pct.toFixed(0)}% of what the goal needs; +${gap.toFixed(1)} points to go. Treat it as a ceiling and check progress mid-block.`)}</p>
+          </div>
+
+          <div class="card">
+            <div class="card-title">${es ? 'PREDICCIONES (DANIELS)' : 'PREDICTIONS (DANIELS)'}</div>
+            <table class="splits-table">
+              <thead><tr><th>${es ? 'Distancia' : 'Distance'}</th><th>${es ? 'Tiempo' : 'Time'}</th><th>${es ? 'Ritmo /mi' : 'Pace /mi'}</th></tr></thead>
+              <tbody>
+                ${RACE_DISTANCES.map(r => {
+                  const sec = vdotToTime(vdot, r.meters);
+                  return `<tr><td>${r.label[es ? 'es' : 'en']}</td><td class="num-cell">${fmtRaceTime(sec)}</td><td class="num-cell">${fmtPaceNoUnit(sec / (r.meters / 1609.344))}</td></tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+            <button class="btn btn-secondary" style="width:100%; margin-top:12px;" onclick="calcApplyToProfile()">${es ? 'USAR COMO MI 5K ACTUAL' : 'USE AS MY CURRENT 5K'} (${secToMMSS(fiveK)})</button>
+            <p style="font-size:10px; color:var(--paper-dim); margin-top:6px; line-height:1.4;">${es
+              ? 'Actualiza el 5K del perfil y, con él, los paces de la tabla de abajo. Te pide confirmación.'
+              : 'Updates the profile 5K and, with it, the pace table below. Asks for confirmation.'}</p>
+          </div>`;
+      } else {
+        results = `<div class="card"><p style="font-size:12px; color:var(--signal-amber);">${es ? 'Esa prueba da un VDOT fuera de rango (20–85). Revisa distancia y tiempo.' : 'That test gives a VDOT outside 20–85. Check distance and time.'}</p></div>`;
+      }
+
+      return `
+        <div class="view-container">
+          <div class="sitrep-label">${es ? 'CALCULADORA DE ZONAS Y META' : 'ZONES & GOAL CALCULATOR'}</div>
+
+          <div class="card">
+            <div class="card-title">${es ? 'PRUEBA DE REFERENCIA' : 'REFERENCE TEST'}</div>
+            <div class="manual-field-row">
+              <label for="calcDist">${es ? 'Distancia (m)' : 'Distance (m)'}</label>
+              <input type="number" id="calcDist" value="${Math.round(inp.distM)}" min="1000" step="1" inputmode="decimal" onkeydown="calcEnter(event)" />
+            </div>
+            <div class="manual-field-row">
+              <label for="calcTime">${es ? 'Tiempo (MM:SS)' : 'Time (MM:SS)'}</label>
+              <input type="text" id="calcTime" value="${fmtRaceTime(inp.timeSec)}" inputmode="numeric" autocomplete="off" onkeydown="calcEnter(event)" />
+            </div>
+            <p style="font-size:10px; color:var(--paper-dim); line-height:1.4; margin-bottom:12px;">${es
+              ? `Mejor esfuerzo reciente con distancia real del GPS (ahora: ${miOf(inp.distM)} mi). No uses una carrera con botas o a medio esfuerzo.`
+              : `Best recent effort with the real GPS distance (now: ${miOf(inp.distM)} mi). Do not use a boots race or a half-effort.`}</p>
+            <div class="card-title">${es ? 'META' : 'GOAL'}</div>
+            <div class="manual-field-row" style="grid-template-columns:1fr 130px;">
+              <label for="calcGoalDist">${es ? 'Distancia' : 'Distance'}</label>
+              <select id="calcGoalDist" style="text-align:right;">
+                ${RACE_DISTANCES.map(r => `<option value="${r.meters}" ${Math.abs(r.meters - inp.goalDistM) < 1 ? 'selected' : ''}>${r.label[es ? 'es' : 'en']}</option>`).join('')}
+              </select>
+            </div>
+            <div class="manual-field-row">
+              <label for="calcGoalTime">${es ? 'Tiempo meta' : 'Goal time'}</label>
+              <input type="text" id="calcGoalTime" value="${fmtRaceTime(inp.goalSec)}" inputmode="numeric" autocomplete="off" onkeydown="calcEnter(event)" />
+            </div>
+            <button class="btn btn-primary" style="width:100%; margin-top:6px;" onclick="calcSubmit()">${es ? 'CALCULAR' : 'CALCULATE'}</button>
+          </div>
+
+          ${results}
+
+          ${renderPaceReferenceCard()}
+          ${renderHRZoneReferenceCard()}
+
+          <details class="card fc-details">
+            <summary style="font-size:11px; color:var(--coyote); font-family:var(--font-mono);">${es ? 'CÓMO SE CALCULA' : 'HOW IT IS CALCULATED'} ▾</summary>
+            <p style="font-size:10px; color:var(--paper-dim); margin-top:8px; line-height:1.5;">${es
+              ? 'VDOT: fórmula de Daniels (VO2 de la velocidad media entre el % de VO2max sostenible para esa duración). Las predicciones y el VDOT requerido salen de la misma ecuación, igual que la tarjeta de predicción de carrera. Los paces objetivo son % de VDOT (E 59–74, T 83–88, I 95–100, R ≈105–110) y dependen del 5K del perfil. Todo es estimación: confirma con pruebas reales y con la FC.'
+              : 'VDOT: Daniels formula (VO2 at average speed divided by the % of VO2max sustainable for that duration). Predictions and required VDOT come from the same equation as the race prediction card. Target paces are % of VDOT (E 59–74, T 83–88, I 95–100, R ≈105–110) and depend on the profile 5K. All of it is an estimate: confirm with real tests and heart rate.'}</p>
+          </details>
+        </div>`;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SESSION DETAIL — structured steps as a table (segment | duration | HR · pace)
+    // ═══════════════════════════════════════════════════════════════════════
+    const STEP_NOTE_ES = {
+      'Warm-up walk': 'Caminata de calentamiento', 'Warm-up jog': 'Trote de calentamiento',
+      'Warm-up + strides': 'Calentamiento + strides', 'Cool-down walk': 'Caminata de enfriamiento',
+      'Cool-down jog': 'Trote de enfriamiento', 'Easy pace': 'Ritmo fácil', 'Long run pace': 'Ritmo de larga',
+      'Tempo effort': 'Esfuerzo de tempo', 'Recovery jog': 'Trote de recuperación',
+      'Race pace simulation': 'Simulacro a ritmo de carrera'
+    };
+
+    function stepLabel(note) {
+      if (getLang() !== 'es') return note;
+      const m = /^Interval (\d+)\/(\d+)$/.exec(note);
+      if (m) return 'Intervalo ' + m[1] + '/' + m[2];
+      return STEP_NOTE_ES[note] || note;
+    }
+
+    function stepCue(session, step) {
+      const es = getLang() === 'es';
+      if (step.intensity === 'warmup') return es ? 'Sube la FC poco a poco; termina en Z1–Z2.' : 'Raise HR gradually; finish in Z1–Z2.';
+      if (step.intensity === 'cooldown') return es ? 'Baja la FC; camina si hace falta.' : 'Bring HR down; walk if needed.';
+      if (step.intensity === 'rest') return es ? 'Recupera la respiración antes de la próxima.' : 'Recover your breathing before the next one.';
+      if (session.type === 'easy' || session.type === 'long') return es ? 'Guíate por la FC: si sube de la zona, baja el paso.' : 'Run by HR: if it rises above the zone, slow down.';
+      if (session.type === 'tempo') return es ? 'Esfuerzo sostenido y controlado, sin arrancar fuerte.' : 'Sustained, controlled effort; do not start hard.';
+      if (session.type === 'intervals') return es ? 'Fuerte pero repetible: la última igual que la primera.' : 'Hard but repeatable: last one as good as the first.';
+      if (session.type === 'race_sim') return es ? 'Ritmo de carrera; no salgas más rápido que la meta.' : 'Race pace; do not start faster than goal.';
+      return '';
+    }
+
+    function stepPaceText(session, step) {
+      if (step.intensity !== 'active') return '';
+      if (session.type === 'race_sim') return activeRaceGoalPaceStr() + '/mi';
+      const row = PACE_REF_ROWS.find(r => r.type === session.type && !r.effortOnly);
+      if (!row) return '';
+      const band = paceBandSec(row, state.profile);
+      return fmtPaceNoUnit(band.fast) + '–' + fmtPaceNoUnit(band.slow) + '/mi';
+    }
+
+    function renderStepsTable(session, steps) {
+      const es = getLang() === 'es';
+      const lthr = state.profile?.lthr || 174;
+      const COLORS = { warmup: 'var(--paper-dim)', cooldown: 'var(--paper-dim)', rest: 'var(--signal-blue)', active: 'var(--coyote)' };
+      const rows = steps.map((st, i) => {
+        let dur;
+        if (st.durationType === 'time') dur = secToMMSS(st.durationValue);
+        else if (st.durationType === 'distance') dur = (st.durationValue / 1609.344).toFixed(2) + ' mi<br><span style="color:var(--paper-dim); font-size:9px;">' + Math.round(st.durationValue) + ' m</span>';
+        else dur = es ? 'Libre' : 'Open';
+        let hr = '';
+        if (st.targetType === 'heart_rate') {
+          const z = hrZoneFromBpm(Math.round((st.targetLow + st.targetHigh) / 2), lthr);
+          hr = st.targetLow + '–' + st.targetHigh + ' <span style="color:' + ZONE_COLORS[z] + ';">Z' + z + '</span>';
+        }
+        const pace = stepPaceText(session, st);
+        const cue = stepCue(session, st);
+        return `
+          <tr>
+            <td class="num-cell">${i + 1}</td>
+            <td style="border-left:3px solid ${COLORS[st.intensity] || 'var(--field-line)'}; padding-left:6px;">
+              <div style="font-size:12px; font-weight:600;">${stepLabel(st.note)}</div>
+              ${cue ? `<div style="font-size:9px; color:var(--paper-dim); margin-top:2px; line-height:1.4;">${cue}</div>` : ''}
+            </td>
+            <td class="num-cell" style="white-space:nowrap;">${dur}</td>
+            <td style="font-size:10px; white-space:nowrap;">${hr || '—'}${pace ? `<br><span style="color:var(--coyote);">${pace.replace('/mi', '')}</span>` : ''}</td>
+          </tr>`;
+      }).join('');
+      return `
+        <table class="splits-table steps-table">
+          <thead><tr><th>#</th><th>${es ? 'Segmento' : 'Segment'}</th><th>${es ? 'Duración' : 'Duration'}</th><th>${es ? 'FC · Ritmo' : 'HR · Pace'}</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    }
+
     function renderDashboard() {
       if (!state.profile) return renderOnboarding();
 
@@ -4629,6 +5025,7 @@
           ${renderTaperCard()}
           ${renderTodayHero()}
           ${(() => { const ts = state.plan.find(s => s.dateISO === todayISO()); return ts ? renderStrengthRecCard(ts.type) : ''; })()}
+          ${renderGritCard()}
           ${renderRacePredictionCard()}
           ${renderACWRCard()}
 
@@ -4926,7 +5323,8 @@
       return `
         <div class="card">
           <div class="card-title">${t('pace_ref_title')}</div>
-          <p style="font-size:11px; color:var(--paper-dim); margin-bottom:10px;">${t('pace_ref_sub')} (${secToMMSS(state.profile.currentFiveKSec)})</p>
+          <p style="font-size:11px; color:var(--paper-dim); margin-bottom:6px;">${t('pace_ref_sub')} (${secToMMSS(state.profile.currentFiveKSec)})</p>
+          <p style="font-size:10px; color:var(--coyote-dim); margin-bottom:10px;">Daniels · VDOT ${calcVDOT(5000, state.profile.currentFiveKSec || 1800).toFixed(1)} · E 59–74% · T 83–88% · I 95–100% · R ≈105–110%</p>
           <table class="splits-table">
             <thead>
               <tr>
@@ -4994,8 +5392,8 @@
       if (override > 0) return Math.round(override);
       const row = PACE_REF_ROWS.find(r => r.type === type);
       if (!row || row.effortOnly) return 0;
-      const ppm = (state.profile?.currentFiveKSec || 1800) / 3.10686;
-      return Math.round((ppm * row.factorFast + ppm * row.factorSlow) / 2);
+      const band = paceBandSec(row, state.profile);
+      return Math.round((band.fast + band.slow) / 2);
     }
 
     function parseClaudePlan(text) {
@@ -5834,7 +6232,7 @@
               </div>
             </div>
 
-            ${renderStrengthRecCard(s.type)}
+            ${renderStrengthRecCard(s.type, true)}
 
             ${s.notes ? `
             <div class="sitrep-label">${getLang() === 'es' ? 'INSTRUCCIÓN DEL PLAN' : 'PLAN INSTRUCTION'}</div>
@@ -5878,18 +6276,7 @@
 
             <div class="sitrep-label">${t('structured_steps_label')}</div>
             <div class="card">
-              ${structuredSteps.map((step, i) => `
-                <div style="display:flex; justify-content:space-between; align-items:center; padding: 8px 0; border-bottom: 1px solid var(--field-line);">
-                  <div>
-                    <div style="font-size:13px; color: var(--paper); font-weight:600;">${step.note}</div>
-                    <div style="font-family: var(--font-mono); font-size:10px; color: var(--paper-dim); margin-top:2px;">
-                      ${step.durationType === 'time' ? secToMMSS(step.durationValue) : step.durationType === 'distance' ? (step.durationValue/1609.344).toFixed(2)+' mi' : 'open'}
-                      ${step.targetType === 'heart_rate' ? ` · HR ${step.targetLow}-${step.targetHigh} bpm` : ''}
-                    </div>
-                  </div>
-                  <span class="badge day" style="font-size:9px;">${step.intensity.toUpperCase()}</span>
-                </div>
-              `).join('')}
+              ${renderStepsTable(s, structuredSteps)}
               <button class="btn btn-primary" style="width:100%; margin-top: 14px;" onclick="exportSessionToGarmin(${s.day})">
                 ${t('export_garmin_btn')}
               </button>
@@ -6045,33 +6432,77 @@
       race_sim:  { en: 'Treat like race day — mobility primer only.', es: 'Trátalo como día de carrera — solo primer de movilidad.' }
     };
 
-    // Compact card used in both the Home "today" hero and the session detail view — shows
-    // the top exercise from each recommended category for today's plan session type.
-    function renderStrengthRecCard(sessionType) {
+    // One category = title (+ optional "why") + a table: exercise (tap for technique) | sets×reps | load.
+    function strengthTableHtml(catKey, opts) {
+      opts = opts || {};
+      const es = getLang() === 'es';
+      const cat = STRENGTH_LIBRARY[catKey];
+      if (!cat) return '';
+      return `
+        <div style="margin-top:10px;">
+          <div style="font-family:var(--font-mono); font-size:10px; letter-spacing:1px; color:var(--coyote); text-transform:uppercase; margin-bottom:4px;">${tr(cat.name)}</div>
+          ${opts.why ? `<p style="font-size:11px; color:var(--paper-dim); margin-bottom:6px; line-height:1.5;">${tr(cat.why)}</p>` : ''}
+          <table class="splits-table">
+            <thead>
+              <tr>
+                <th>${es ? 'Ejercicio' : 'Exercise'}</th>
+                <th>${es ? 'Series×Reps' : 'Sets×Reps'}</th>
+                <th>${es ? 'Carga' : 'Load'}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${cat.exercises.map(ex => `
+                <tr>
+                  <td style="font-size:11px;">
+                    <details class="fc-details">
+                      <summary>${ex.name} <span style="color:var(--paper-dim);">▾</span></summary>
+                      <div style="font-size:10px; color:var(--paper-dim); margin-top:4px; line-height:1.5;">→ ${tr(ex.tip)}</div>
+                    </details>
+                  </td>
+                  <td class="num-cell" style="white-space:nowrap; font-size:11px;">${ex.sets}</td>
+                  <td style="font-size:10px; color:var(--coyote-dim);">${tr(ex.load)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    // Compact two-column table (top 2 exercises per category) for the weekly calendar.
+    function strengthCompactTable(cats) {
+      const es = getLang() === 'es';
+      return `
+        <table class="splits-table">
+          <thead><tr><th>${es ? 'Ejercicio' : 'Exercise'}</th><th>${es ? 'Series×Reps' : 'Sets×Reps'}</th></tr></thead>
+          <tbody>
+            ${cats.map(k => {
+              const c = STRENGTH_LIBRARY[k];
+              if (!c) return '';
+              return `<tr><td colspan="2" style="color:var(--coyote-dim); font-size:9px; letter-spacing:1px; text-transform:uppercase; padding-top:6px;">${tr(c.name)}</td></tr>` +
+                c.exercises.slice(0, 2).map(e => `<tr><td style="font-size:11px;">${e.name}</td><td class="num-cell" style="white-space:nowrap; font-size:11px;">${e.sets}</td></tr>`).join('');
+            }).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    // Card used on Home (collapsed) and in the session detail / Strength tab (open): every exercise
+    // recommended for today's plan session type, as tables.
+    function renderStrengthRecCard(sessionType, open) {
       const es = getLang() === 'es';
       const cats = STRENGTH_SCHEDULE[sessionType] || STRENGTH_SCHEDULE.easy;
       const blurb = STRENGTH_DAY_BLURB[sessionType] || STRENGTH_DAY_BLURB.easy;
       if (!cats.length) return '';
+      const total = cats.reduce((n, k) => n + (STRENGTH_LIBRARY[k] ? STRENGTH_LIBRARY[k].exercises.length : 0), 0);
       return `
         <div class="card" style="border-left:3px solid var(--olive-bright);">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-            <div class="card-title" style="margin:0;">💪 ${es?'FUERZA DE HOY':"TODAY'S STRENGTH"}</div>
-            <span style="font-size:9px; color:var(--paper-dim); cursor:pointer;" onclick="switchView('strength')">${es?'ver todo →':'see all →'}</span>
-          </div>
-          <p style="font-size:11px; color:var(--paper-dim); margin-bottom:8px; line-height:1.4;">${blurb[es?'es':'en']}</p>
-          ${cats.map(catKey => {
-            const cat = STRENGTH_LIBRARY[catKey];
-            if (!cat) return '';
-            const ex = cat.exercises[0];
-            return `
-              <div style="padding:6px 0; border-top:1px solid var(--field-line);">
-                <div style="display:flex; justify-content:space-between; align-items:baseline;">
-                  <div style="font-size:12px; color:var(--paper); font-weight:600;">${tr(cat.name)}</div>
-                  <div style="font-size:10px; color:var(--coyote); font-family:var(--font-mono);">${ex.sets}</div>
-                </div>
-                <div style="font-size:11px; color:var(--paper-dim); margin-top:1px;">${ex.name}</div>
-              </div>`;
-          }).join('')}
+          <details class="fc-details" ${open ? 'open' : ''}>
+            <summary style="display:flex; justify-content:space-between; align-items:center;">
+              <span class="card-title" style="margin:0;">💪 ${es ? 'FUERZA DE HOY' : "TODAY'S STRENGTH"}</span>
+              <span style="font-size:9px; color:var(--paper-dim);">${total} ${es ? 'ejercicios' : 'exercises'} ▾</span>
+            </summary>
+            <p style="font-size:11px; color:var(--paper-dim); margin:8px 0 2px; line-height:1.4;">${blurb[es ? 'es' : 'en']}</p>
+            ${cats.map(k => strengthTableHtml(k)).join('')}
+            <div style="text-align:right; margin-top:8px;"><span style="font-size:10px; color:var(--coyote); cursor:pointer;" onclick="switchView('strength')">${es ? 'ver biblioteca →' : 'see library →'}</span></div>
+          </details>
         </div>`;
     }
 
@@ -6090,9 +6521,9 @@
 
       return `
         <div class="view-container">
-          <div class="sitrep-label">${es?'BIBLIOTECA DE FUERZA PARA CORREDORES':'STRENGTH LIBRARY FOR RUNNERS'}</div>
+          <div class="sitrep-label">${es ? 'BIBLIOTECA DE FUERZA PARA CORREDORES' : 'STRENGTH LIBRARY FOR RUNNERS'}</div>
 
-          ${todaySess ? renderStrengthRecCard(todaySess.type) : ''}
+          ${todaySess ? renderStrengthRecCard(todaySess.type, true) : ''}
 
           <div style="display:flex; gap:6px; overflow-x:auto; margin:14px 0 4px; padding-bottom:4px;">
             <button class="btn-small" style="white-space:nowrap; ${activeFilter==='all'?'border-color:var(--coyote);color:var(--coyote);':''}" onclick="setStrengthFilter('all')">${es?'Todos':'All'}</button>
@@ -6101,31 +6532,14 @@
             `).join('')}
           </div>
 
-          ${filtered.map(key => {
-            const cat = STRENGTH_LIBRARY[key];
-            return `
-            <div class="card" style="margin-bottom:10px;">
-              <div class="card-title" style="margin-bottom:10px;">${tr(cat.name)}</div>
-              <p style="font-size:12px; color:var(--paper-dim); margin-bottom:12px; line-height:1.5;">${tr(cat.why)}</p>
-              ${cat.exercises.map(ex => `
-                <div style="padding:8px 0; border-top:1px solid var(--field-line);">
-                  <div style="display:flex; justify-content:space-between; align-items:baseline;">
-                    <div style="font-family:var(--font-display); font-size:14px; font-weight:500; color:var(--paper);">${ex.name}</div>
-                    <div style="font-family:var(--font-mono); font-size:10px; color:var(--coyote);">${ex.sets}</div>
-                  </div>
-                  <div style="font-family:var(--font-mono); font-size:10px; color:var(--coyote-dim); margin-top:2px;">${tr(ex.load)}</div>
-                  <div style="font-size:11px; color:var(--paper-dim); margin-top:3px;">→ ${tr(ex.tip)}</div>
-                </div>
-              `).join('')}
-            </div>`;
-          }).join('')}
+          ${filtered.map(key => `<div class="card" style="margin-bottom:10px;">${strengthTableHtml(key, { why: true })}</div>`).join('')}
 
           <div class="card" style="background:rgba(61,90,31,0.1); border-color:var(--olive);">
             <div class="card-title">${es?'PROTOCOLO SEMANAL DE FUERZA':'WEEKLY STRENGTH PROTOCOL'}</div>
             <p style="font-size:12px; color:var(--paper); line-height:1.6;">
               ${es
-                ? '2 sesiones de fuerza por semana. La recomendación "Fuerza de Hoy" ya ajusta qué categoría toca según tu sesión del plan — ligera en días de calidad, completa (con potencia) en descanso.'
-                : '2 strength sessions per week. The "Today Strength" pick already adjusts which category fits your plan session — light on quality days, full (with power work) on rest days.'}
+                ? '2 sesiones de fuerza por semana. La recomendación "Fuerza de Hoy" ya ajusta qué categoría toca según tu sesión del plan — ligera en días de calidad, completa (con potencia) en descanso. Toca el nombre de un ejercicio para ver la técnica. Progresión: cuando completes todas las series con buena forma, sube la carga un paso; si la forma se rompe, baja.'
+                : '2 strength sessions per week. The "Today Strength" pick already adjusts which category fits your plan session — light on quality days, full (with power work) on rest days. Tap an exercise name for technique. Progression: when you complete all sets with good form, increase the load one step; if form breaks down, drop it.'}
             </p>
           </div>
         </div>`;
@@ -6217,8 +6631,8 @@
           ${state.manualSessions.slice().reverse().slice(0, 10).map(m => `
             <div class="activity-list-item">
               <div class="activity-list-left">
-                <div class="alt-date">${m.dateISO} · ${m.type === 'strength' ? (getLang()==='es'?'Fuerza':'Strength') : (getLang()==='es'?'Cardio':'Cardio')}</div>
-                <div class="alt-meta">${m.durationMin || 0} min${m.notes ? ' · ' + m.notes : ''}</div>
+                <div class="alt-date">${m.dateISO} · ${manualTypeLabel(m.type)}</div>
+                <div class="alt-meta">${m.distMi > 0 ? m.distMi.toFixed(2) + ' mi · ' : ''}${m.durationMin || 0} min${m.notes ? ' · ' + esc(m.notes) : ''}</div>
               </div>
               <button class="btn-small" onclick="deleteManualSession('${m.id}')">✕</button>
             </div>
@@ -6227,33 +6641,54 @@
       `;
     }
 
+    function manualTypeLabel(type) {
+      const es = getLang() === 'es';
+      return ({ strength: es ? 'Fuerza' : 'Strength', ruck: 'Ruck', run: es ? 'Corrida' : 'Run', cardio: 'Cardio' })[type] || 'Cardio';
+    }
+
+    function manualTypeChanged() {
+      const sel = document.getElementById('manualSessType');
+      const row = document.getElementById('manualDistRow');
+      if (sel && row) row.style.display = (sel.value === 'ruck' || sel.value === 'run') ? 'grid' : 'none';
+    }
+
     function renderManualSessionForm() {
+      const es = getLang() === 'es';
       return `
         <div class="card" style="margin-top:10px; background:var(--field-surface);">
           <div class="manual-field-row">
-            <label>${getLang()==='es'?'Fecha':'Date'}</label>
+            <label for="manualSessDate">${es?'Fecha':'Date'}</label>
             <input type="date" id="manualSessDate" value="${todayISO()}" style="text-align:right;" />
           </div>
-          <div class="manual-field-row">
-            <label>${getLang()==='es'?'Tipo':'Type'}</label>
-            <select id="manualSessType" style="text-align:right;">
-              <option value="strength">${getLang()==='es'?'Fuerza':'Strength'}</option>
-              <option value="cardio">${getLang()==='es'?'Cardio (sin TCX)':'Cardio (no TCX)'}</option>
+          <div class="manual-field-row" style="grid-template-columns:1fr 160px;">
+            <label for="manualSessType">${es?'Tipo':'Type'}</label>
+            <select id="manualSessType" style="text-align:right;" onchange="manualTypeChanged()">
+              <option value="strength">${es?'Fuerza':'Strength'}</option>
+              <option value="ruck">Ruck (${es?'millas':'miles'})</option>
+              <option value="run">${es?'Corrida (sin TCX)':'Run (no TCX)'}</option>
+              <option value="cardio">${es?'Cardio (sin TCX)':'Cardio (no TCX)'}</option>
             </select>
           </div>
-          <div class="manual-field-row">
-            <label>${getLang()==='es'?'Duración (min)':'Duration (min)'}</label>
-            <input type="number" id="manualSessDuration" placeholder="45" min="5" max="240" />
+          <div class="manual-field-row" id="manualDistRow" style="display:none;">
+            <label for="manualSessDist">${es?'Distancia (mi)':'Distance (mi)'}</label>
+            <input type="number" id="manualSessDist" step="0.01" min="0" placeholder="4" inputmode="decimal" />
           </div>
           <div class="manual-field-row">
-            <label>${getLang()==='es'?'FC Promedio (opcional)':'Avg HR (optional)'}</label>
+            <label for="manualSessDuration">${es?'Duración (min)':'Duration (min)'}</label>
+            <input type="number" id="manualSessDuration" placeholder="45" min="5" max="600" />
+          </div>
+          <div class="manual-field-row">
+            <label for="manualSessHR">${es?'FC Promedio (opcional)':'Avg HR (optional)'}</label>
             <input type="number" id="manualSessHR" placeholder="120" />
           </div>
           <div class="form-group" style="margin-top:8px;">
-            <label class="form-label" style="margin-bottom:4px;">${getLang()==='es'?'Notas':'Notes'}</label>
-            <input type="text" id="manualSessNotes" placeholder="${getLang()==='es'?'Ej: Piernas + core':'E.g. Legs + core'}" style="width:100%;" />
+            <label class="form-label" for="manualSessNotes" style="margin-bottom:4px;">${es?'Notas':'Notes'}</label>
+            <input type="text" id="manualSessNotes" placeholder="${es?'Ej: Piernas + core':'E.g. Legs + core'}" style="width:100%;" />
           </div>
-          <button class="btn btn-primary" style="width:100%; margin-top:12px;" onclick="saveManualSession()">${getLang()==='es'?'GUARDAR':'SAVE'}</button>
+          <p style="font-size:10px; color:var(--paper-dim); margin-top:8px; line-height:1.4;">${es
+            ? 'Ruck y Corrida cuentan para GRIT 100. No registres aquí lo que ya subiste como TCX (se contaría doble).'
+            : 'Ruck and Run count toward GRIT 100. Do not log here what you already uploaded as TCX (it would count twice).'}</p>
+          <button class="btn btn-primary" style="width:100%; margin-top:12px;" onclick="saveManualSession()">${es?'GUARDAR':'SAVE'}</button>
         </div>
       `;
     }
@@ -6444,12 +6879,7 @@
                     <div style="font-family:var(--font-mono); font-size:9px; color:var(--coyote-dim); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
                       💪 ${getLang()==='es'?'FUERZA COMPLEMENTARIA':'STRENGTH COMPLEMENT'}
                     </div>
-                    ${strength.map(cat => {
-                      const s = STRENGTH_LIBRARY[cat];
-                      const catName = tr(s.name);
-                      const ex = s.exercises.slice(0,2).map(e => `${e.name} ${e.sets}`).join(' · ');
-                      return `<div style="font-size:11px; color:var(--paper); margin-bottom:2px;"><strong>${catName}:</strong> ${ex}</div>`;
-                    }).join('')}
+                    ${strengthCompactTable(strength)}
                   </div>
                 ` : ''}
               </div>
@@ -7397,8 +7827,6 @@
             <button class="btn btn-primary" style="width: 100%;" onclick="generateRaceStrategyPDF()">${t('view_strategy_card')}</button>
           </div>
           ${renderBodyMeasurementsCard()}
-          ${renderPaceReferenceCard()}
-          ${renderHRZoneReferenceCard()}
           ${renderDataManagementCard()}
           <div class="card">
             <div class="card-title">${t('settings_label')}</div>
@@ -7458,6 +7886,7 @@
           <div class="view ${currentView === 'tcx' ? 'active' : ''}">${renderTCX()}</div>
           <div class="view ${currentView === 'calendar' ? 'active' : ''}">${currentView === 'calendar' ? renderCalendarView() : ''}</div>
           <div class="view ${currentView === 'stats' ? 'active' : ''}">${currentView === 'stats' ? renderStatsView() : ''}</div>
+          <div class="view ${currentView === 'calc' ? 'active' : ''}">${currentView === 'calc' ? renderCalcView() : ''}</div>
           <div class="view ${currentView === 'more' ? 'active' : ''}">${renderMore()}</div>
           <div class="view ${currentView === 'profile' ? 'active' : ''}">${currentView === 'profile' ? renderProfileView() : ''}</div>
           <div class="view ${currentView === 'strength' ? 'active' : ''}">${currentView === 'strength' ? renderStrengthView() : ''}</div>
@@ -7474,6 +7903,9 @@
           </button>
           <button class="${currentView === 'strength' ? 'active' : ''}" onclick="switchView('strength')">
             <span class="nav-icon">💪</span><span>${getLang()==='es'?'FUERZA':'STRENGTH'}</span>
+          </button>
+          <button class="${currentView === 'calc' ? 'active' : ''}" onclick="switchView('calc')" aria-label="${getLang()==='es'?'Calculadora de zonas y metas':'Zones and goals calculator'}">
+            <span class="nav-icon">∑</span><span>CALC</span>
           </button>
           <button class="${currentView === 'more' ? 'active' : ''}" onclick="switchView('more')">
             <span class="nav-icon">⚙</span><span>${t('nav_more')}</span>
@@ -7896,26 +8328,33 @@
     }
 
     function saveManualSession() {
+      const es = getLang() === 'es';
       const dateISO = document.getElementById('manualSessDate')?.value;
       const type = document.getElementById('manualSessType')?.value;
       const durationMin = parseInt(document.getElementById('manualSessDuration')?.value) || 0;
       const avgHR = parseInt(document.getElementById('manualSessHR')?.value) || null;
       const notes = document.getElementById('manualSessNotes')?.value || '';
+      const hasDist = type === 'ruck' || type === 'run';
+      const distMi = hasDist ? (parseFloat(document.getElementById('manualSessDist')?.value) || 0) : 0;
 
       if (!dateISO || !durationMin) {
-        showToast(getLang() === 'es' ? '⚠ Fecha y duración requeridas' : '⚠ Date and duration required');
+        showToast(es ? '⚠ Fecha y duración requeridas' : '⚠ Date and duration required');
+        return;
+      }
+      if (hasDist && distMi <= 0) {
+        showToast(es ? '⚠ Pon la distancia en millas' : '⚠ Enter distance in miles');
         return;
       }
 
       if (!state.manualSessions) state.manualSessions = [];
       state.manualSessions.push({
         id: 'manual_' + Date.now(),
-        dateISO, type, durationMin, avgHR, notes
+        dateISO, type, durationMin, distMi, avgHR, notes
       });
       saveState();
       manualSessionFormOpen = false;
       render();
-      showToast(getLang() === 'es' ? '✓ SESIÓN REGISTRADA' : '✓ SESSION LOGGED');
+      showToast(es ? '✓ SESIÓN REGISTRADA' : '✓ SESSION LOGGED');
     }
 
     function deleteManualSession(id) {
@@ -9820,7 +10259,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.08.25-1';
+    const APP_BUILD = '2026.10.13-1';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
