@@ -8459,7 +8459,7 @@
         lines.push('');
         lines.push(`- **1ª mitad:** ${fmtPace(A.halves.firstPace)} · FC ${A.halves.firstHR || ND}`);
         lines.push(`- **2ª mitad:** ${fmtPace(A.halves.secondPace)} · FC ${A.halves.secondHR || ND}`);
-        lines.push(`- **Diferencia:** ${A.halves.deltaSec > 0 ? '+' : ''}${Math.round(A.halves.deltaSec)} s/mi (${A.halves.deltaSec > 0 ? 'positive split' : 'negative split'}; ojo: el perfil de elevación afecta esta lectura)`);
+        lines.push(`- **Diferencia:** ${A.halves.deltaSec > 0 ? '+' : ''}${Math.round(A.halves.deltaSec)} s/mi (${Math.abs(A.halves.deltaSec) < 3 ? 'parejo' : (A.halves.deltaSec > 0 ? 'positive split' : 'negative split')}; ojo: el perfil de elevación afecta esta lectura)`);
         if (A.finish) lines.push(`- **Últimos 400 m:** ${fmtPace(A.finish.lastPace)} vs ${fmtPace(A.finish.prevMilePace)} la milla previa (${A.finish.deltaSec > 0 ? '+' : ''}${Math.round(A.finish.deltaSec)} s/mi) · FC ${A.finish.lastHR || ND}`);
         if (A.best) lines.push(`- **Mejor cuarto:** mi ${A.best.startMi.toFixed(2)}–${A.best.endMi.toFixed(2)} a ${fmtPace(A.best.paceSecPerMi)} (${A.best.gradePct != null ? A.best.gradePct + '%' : ND})`);
         if (A.worst) lines.push(`- **Peor cuarto:** mi ${A.worst.startMi.toFixed(2)}–${A.worst.endMi.toFixed(2)} a ${fmtPace(A.worst.paceSecPerMi)} (${A.worst.gradePct != null ? A.worst.gradePct + '%' : ND})`);
