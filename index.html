@@ -4234,7 +4234,7 @@
           steps.push({
             durationType: 'time', durationValue: Math.max(60, totalSec),
             intensity: 'active', targetType: 'heart_rate',
-            targetLow: Math.round(hrCeiling * 0.92), targetHigh: hrCeiling,
+            targetLow: Math.round(hrCeiling * 0.92), targetHigh: Math.round(hrCeiling * 0.95),
             note: 'Tempo effort'
           });
           steps.push({ durationType: 'time', durationValue: 420, intensity: 'cooldown', targetType: 'open', note: 'Cool-down jog' });
@@ -10259,7 +10259,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.10.13-1';
+    const APP_BUILD = '2026.10.13-2';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
