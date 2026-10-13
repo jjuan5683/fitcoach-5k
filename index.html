@@ -4615,13 +4615,13 @@
       start: '2026-11-01',
       end: '2026-11-30',
       weeklyPreMi: 20, // weekly volume to hold BEFORE Nov 1 (rolling 7 days)
-      // Date blocks that add up to 100 mi: 20 + 22 + 25 + 28 + 5
+      // Date blocks that add up to 100 mi: 21 + 23 + 26 + 27 + 3
       ramp: [
-        { from: '2026-11-01', to: '2026-11-07', mi: 20 },
-        { from: '2026-11-08', to: '2026-11-14', mi: 22 },
-        { from: '2026-11-15', to: '2026-11-21', mi: 25 },
-        { from: '2026-11-22', to: '2026-11-28', mi: 28 },
-        { from: '2026-11-29', to: '2026-11-30', mi: 5 }
+        { from: '2026-11-01', to: '2026-11-07', mi: 21 },
+        { from: '2026-11-08', to: '2026-11-14', mi: 23 },
+        { from: '2026-11-15', to: '2026-11-21', mi: 26 },
+        { from: '2026-11-22', to: '2026-11-28', mi: 27 },
+        { from: '2026-11-29', to: '2026-11-30', mi: 3 }
       ]
     };
 
@@ -10259,7 +10259,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.10.13-2';
+    const APP_BUILD = '2026.10.13-3';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
