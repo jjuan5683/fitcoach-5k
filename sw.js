@@ -17,7 +17,7 @@
 // After editing this file, bump CACHE_VERSION. That byte change is what tells the browser a new
 // worker exists.
 
-const CACHE_VERSION = 'fitcoach-v2026.09.26-1';
+const CACHE_VERSION = 'fitcoach-v2026.10.18-1';
 const SHELL = ['./', './index.html'];
 
 self.addEventListener('install', (event) => {
