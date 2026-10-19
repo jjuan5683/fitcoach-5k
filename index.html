@@ -1974,7 +1974,8 @@
         if (dt <= 0 || dt > 30) continue;
         totalSec += dt;
         const dHR = Math.abs(valid[i].hr - valid[i - 1].hr);
-        if (dHR / dt > 1.2) glitchSec += dt;
+        // 1-2 bpm steps per second are normal beat-to-beat noise at integer resolution; real sensor glitches are jumps > 4 bpm/s.
+        if (dHR / dt > 4) glitchSec += dt;
         if (dHR === 0) { flatlineRun += dt; worstFlatline = Math.max(worstFlatline, flatlineRun); }
         else flatlineRun = 0;
       }
@@ -9028,6 +9029,9 @@
           lines.push(`**Tiempo corriendo:** ${secToHHMMSS(a.runWalk.runTimeSec)} (${a.runWalk.runPct}%)`);
           lines.push(`**Tiempo caminando:** ${secToHHMMSS(a.runWalk.walkTimeSec)} (${100-a.runWalk.runPct}%)`);
           lines.push(`**Pausas detectadas:** ${a.runWalk.walkSegments?.length || 0}`);
+          if (a.slowSegments && a.slowSegments.totalSec > (a.runWalk.walkTimeSec || 0) + 10) {
+            lines.push(`**Tramos lentos/caminata por cadencia:** ${a.slowSegments.segments.length} tramo(s), ${secToHHMMSS(a.slowSegments.totalSec)} (velocidad < 2.3 m/s y cadencia < 140 spm) — detalle en Análisis Avanzado`);
+          }
           if (a.runWalk.walkSegments?.length) {
             lines.push('');
             lines.push('| # | Inicio | Duración |');
@@ -9364,7 +9368,7 @@
 
       lines.push('---');
       lines.push('');
-      lines.push(`*Generado por FitCoach 5K — ${new Date().toISOString().split('T')[0]}*`);
+      lines.push(`*Generado por FitCoach 5K — ${todayISO()}*`); // local date (toISOString is UTC and flips after 8 PM in PR)
 
       // Filter sections if in quick mode — keep only the essentials for a coach-facing summary
       if (reportMode === 'quick') {
