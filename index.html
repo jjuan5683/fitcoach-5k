@@ -7496,88 +7496,277 @@
       `;
     }
 
-    // ── Weekly Update Prompt generator ──
-    // Builds a self-contained prompt: last 7 days of activities, auto-derived wins/improvements,
-    // and an explicit instruction to return next week's plan in a format compatible with
-    // "Import Claude Plan" (parseClaudePlan expects lines like "Monday: Easy Run 5 miles").
+    // ── Weekly Update Prompt generator (v2) ──
+    // Self-contained prompt for Claude/ChatGPT: athlete + zones, race goal + prediction, load (CTL/ATL/TSB/ACWR),
+    // 4-week volume trend, plan vs actual for the last 7 days, deep per-activity detail (zones, drift, splits,
+    // quarter-mile data on key sessions, stride/cadence), manual sessions (ruck/strength), subjective state,
+    // auto-flags, MISSING DATA the coach must ask about, and strict output rules for "Import Claude Plan".
+    const WP_DOW_ES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const WP_DOW_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    function wpDow(iso) { const d = parseISODateLocal(iso).getDay(); return (getLang() === 'es' ? WP_DOW_ES : WP_DOW_EN)[d]; }
+    function wpDur(sec) { sec = Math.round(sec || 0); return sec <= 0 ? '0:00' : secToHHMMSS(sec); }
+    function wpPace(sec) { return sec > 0 ? secToMMSS(sec) + '/mi' : 'N/D'; }
+    function wpNum(v, dec) { return v == null || isNaN(v) ? 'N/D' : Number(v).toFixed(dec == null ? 0 : dec); }
+    function wpMfNum(v) { const n = parseFloat(v); return isNaN(n) ? null : n; }
+    function wpClip(str, n) { str = String(str || '').replace(/\s+/g, ' ').trim(); return str.length > n ? str.slice(0, n - 1) + '…' : str; }
+    function wpIsKeySession(s, typeStr) {
+      return /tempo|interval|long|race/i.test(typeStr || '') || (s.totalDistMi || 0) >= 4;
+    }
+
     function generateWeeklyPrompt() {
-      const lang = getLang();
+      const es = getLang() === 'es';
+      const L = (a, b) => (es ? a : b);
+      const prof = state.profile || {};
+      const lthr = prof.lthr || 174;
       const today = todayISO();
-      const cutDate = new Date(); cutDate.setDate(cutDate.getDate() - 7);
-      const cutISO = cutDate.toISOString().split('T')[0];
+      const cutISO = addDaysISO(today, -6); // rolling 7 days, today included (matches the GRIT card)
+      const dow = parseISODateLocal(today).getDay() || 7; // Mon=1..Sun=7
+      const targetMon = addDaysISO(today, (8 - dow) % 7); // next Monday (today if it is Monday)
+      const targetSun = addDaysISO(targetMon, 6);
 
-      const weekActivities = [...state.tcxSessions]
+      const sessions = [...(state.tcxSessions || [])]
         .filter(s => s.dateISO >= cutISO && s.dateISO <= today)
-        .sort((a,b) => a.dateISO.localeCompare(b.dateISO));
+        .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+      const manual = [...(state.manualSessions || [])]
+        .filter(m => m.dateISO >= cutISO && m.dateISO <= today)
+        .sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+      const planWeek = (state.plan || []).filter(s => s.dateISO >= cutISO && s.dateISO <= today);
+      const planNext = (state.plan || []).filter(s => s.dateISO > today && s.dateISO <= addDaysISO(today, 7));
+      const typeOf = (s) => {
+        const linked = s.linkedPlanDay ? state.plan.find(p => p.day === s.linkedPlanDay) : null;
+        return (linked && linked.type) || s.manualFields?.trainingType || '';
+      };
+      const typeLabel = (t) => SESSION_TYPE_LABELS[t] || ({ cross_training: 'Cross-training', strength: L('Fuerza', 'Strength'), ruck: 'Ruck' }[t]) || t || L('sin tipo', 'untyped');
 
-      const weekPlanned = state.plan.filter(s => s.dateISO >= cutISO && s.dateISO <= today && s.type !== 'rest');
-      const weekCompleted = weekPlanned.filter(s => s.completed);
+      const out = [];
+      const h = (txt) => { out.push(''); out.push('## ' + txt); };
 
-      const totalMi = weekActivities.reduce((sum, s) => sum + (s.totalDistMi || 0), 0);
-      const totalSec = weekActivities.reduce((sum, s) => sum + (s.totalTimeSec || 0), 0);
-      const avgPaceSec = weekActivities.length ? weekActivities.reduce((sum, s) => sum + (s.avgPaceSecPerMi || 0), 0) / weekActivities.length : 0;
+      out.push('# FitCoach — ' + L('Actualización Semanal', 'Weekly Update'));
+      out.push(L('Generado: ', 'Generated: ') + today + ' | ' + L('Ventana analizada: ', 'Window: ') + cutISO + ' → ' + today + ' (7 ' + L('días', 'days') + ')');
+      out.push(L('Semana a planear: ', 'Week to plan: ') + targetMon + ' (' + L('Lun', 'Mon') + ') → ' + targetSun + ' (' + L('Dom', 'Sun') + ')');
 
-      // Heuristic wins / improvements from grade, decoupling, and pace-target adherence
-      const wentWell = [];
-      const toImprove = [];
-      weekActivities.forEach(s => {
-        const grade = s.analysis?.sessionGrade;
-        const decoupling = s.analysis?.aerobicDecouplingPct;
-        const label = `${s.dateISO} (${s.manualFields?.trainingType || 'sin tipo'}, ${s.totalDistMi?.toFixed(1)}mi)`;
-        if (grade && ['A','A-','B+','B'].includes(grade)) wentWell.push(`${label}: grade ${grade}`);
-        if (grade && ['D','D-','F'].includes(grade)) toImprove.push(`${label}: grade ${grade}`);
-        const decOK = s.analysis?.decouplingValid;
-        if (decOK && decoupling != null && decoupling > 8) toImprove.push(`${label}: aerobic decoupling ${decoupling.toFixed(1)}% (alto)`);
-        if (decOK && decoupling != null && decoupling <= 5) wentWell.push(`${label}: decoupling ${decoupling.toFixed(1)}% (bueno)`);
-      });
-      const missedSessions = weekPlanned.filter(s => !s.completed);
+      // ── 1. Athlete ──
+      h(L('1. Atleta y zonas', '1. Athlete and zones'));
+      const allSess = (state.tcxSessions || []);
+      const obsMax = allSess.reduce((m, s) => Math.max(m, s.maxHR || 0), 0);
+      const rhrs = allSess.filter(s => wpMfNum(s.manualFields?.restingHR)).sort((a, b) => b.dateISO.localeCompare(a.dateISO));
+      out.push('- ' + L('Edad', 'Age') + ': ' + (prof.age || 'N/D') + ' | LTHR: ' + lthr + ' bpm | ' + L('FC máx configurada', 'Configured max HR') + ': ' + (prof.maxHR ? prof.maxHR + ' bpm' : L('no configurada', 'not set')) + ' | ' + L('FC máx observada (histórico)', 'Observed max HR (all-time)') + ': ' + (obsMax || 'N/D') + ' bpm');
+      out.push('- ' + L('FC reposo más reciente', 'Latest resting HR') + ': ' + (rhrs.length ? rhrs[0].manualFields.restingHR + ' bpm (' + rhrs[0].dateISO + ')' : L('N/D (no registrada)', 'N/D (not logged)')));
+      try {
+        const zr = buildHRZoneReference(lthr);
+        out.push('- ' + L('Zonas (basadas en LTHR)', 'Zones (LTHR-based)') + ': ' + zr.map(z => 'Z' + z.num + ' ' + fmtZoneRange(z)).join(' | '));
+      } catch (e) { /* zones are optional context */ }
 
-      const daysLeft = daysUntil(state.profile?.raceDateISO);
+      // ── 2. Goal ──
+      h(L('2. Objetivo y proyección', '2. Goal and projection'));
+      try {
+        const ar = typeof activeRace === 'function' ? activeRace() : null;
+        const rp = getRacePrediction();
+        if (ar || rp) {
+          const nm = ar && ar.name ? ar.name + ' — ' : '';
+          out.push('- ' + L('Carrera activa', 'Active race') + ': ' + nm + (rp?.raceLabel || '') + ' | ' + (prof.raceDateISO || 'N/D') + ' | ' + L('días restantes', 'days left') + ': ' + (rp?.daysLeft ?? 'N/D') + ' | ' + L('en botas', 'in boots') + ': ' + (prof.raceInBoots === false ? L('no', 'no') : L('sí', 'yes')));
+          if (ar && ar.note) out.push('- ' + L('Nota del recorrido', 'Course note') + ': ' + wpClip(ar.note, 300));
+          if (rp) {
+            out.push('- ' + L('Meta', 'Goal') + ': ' + fmtRaceTime(rp.goalSec) + ' | ' + L('Proyección plana', 'Flat projection') + ': ' + fmtRaceTime(rp.flatPredSec) + ' | ' + L('Realista', 'Realistic') + ': ' + fmtRaceTime(rp.realisticSec) + ' (' + fmtRaceTime(rp.lowSec) + '–' + fmtRaceTime(rp.highSec) + ') | ' + L('basada en VDOT', 'VDOT-based') + ': ' + (rp.hasVdot ? L('sí', 'yes') + ' (' + rp.vdotCount + ' ' + L('sesiones', 'sessions') + ')' : L('no, estimada', 'no, estimated')));
+            out.push('- ' + L('Veredicto de la app', 'App verdict') + ': ' + rp.verdict);
+          }
+        }
+        const others = (prof.races || []).filter(r => r.dateISO && r.dateISO >= today && (!ar || r.id !== ar.id));
+        others.forEach(r => out.push('- ' + L('Otra carrera', 'Other race') + ': ' + (r.name || raceLabelByKey(r.distanceKey)) + ' ' + r.dateISO + ' | ' + L('meta', 'goal') + ' ' + (r.goalSec ? fmtRaceTime(r.goalSec) : 'N/D')));
+        const vd = getLatestVDOT();
+        if (vd) out.push('- VDOT: ' + L('mejor', 'best') + ' ' + wpNum(vd.bestVdot, 1) + ' | ' + L('último', 'latest') + ' ' + wpNum(vd.latestVdot, 1) + ' (' + vd.latestDate + ')');
+      } catch (e) { out.push('- (' + L('no se pudo calcular la proyección', 'projection unavailable') + ')'); }
+      try {
+        const g = gritStats();
+        const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+        if (!g.started) out.push('- GRIT 100: ' + L('inicia en', 'starts in') + ' ' + g.daysToStart + ' ' + L('días', 'days') + ' | ' + L('últimos 7 días', 'last 7 days') + ': ' + f1(g.rolling7.total) + ' mi (' + L('correr', 'run') + ' ' + f1(g.rolling7.run) + ' / ruck ' + f1(g.rolling7.ruck) + ') ' + L('vs. meta previa', 'vs. pre-GRIT target') + ' ' + GRIT.weeklyPreMi + ' mi');
+        else if (!g.finished) out.push('- GRIT 100: ' + f1(g.all.total) + '/' + GRIT.target + ' mi (' + L('esperado a hoy', 'expected by today') + ' ' + f1(g.expected) + ') | ' + L('bloque actual', 'current block') + ': ' + (g.block ? g.block.mi + ' mi ' + g.block.from + '→' + g.block.to + ', ' + f1(g.blockDone) + ' ' + L('hechas', 'done') : 'N/D'));
+      } catch (e) { /* GRIT card is optional context */ }
 
-      let p = '';
-      p += `# FitCoach — ${lang==='es' ? 'Actualización Semanal' : 'Weekly Update'}\n`;
-      p += `${lang==='es' ? 'Semana' : 'Week'}: ${cutISO} → ${today} | ${lang==='es' ? 'Días para la carrera' : 'Days to race'}: ${daysLeft}\n\n`;
-
-      p += `## ${lang==='es' ? 'Resumen de la semana' : 'Week summary'}\n`;
-      p += `- ${lang==='es' ? 'Sesiones planeadas' : 'Planned sessions'}: ${weekPlanned.length} | ${lang==='es' ? 'completadas' : 'completed'}: ${weekCompleted.length}\n`;
-      p += `- ${lang==='es' ? 'Actividades TCX registradas' : 'TCX activities logged'}: ${weekActivities.length}\n`;
-      p += `- ${lang==='es' ? 'Distancia total' : 'Total distance'}: ${totalMi.toFixed(1)} mi | ${lang==='es' ? 'Tiempo total' : 'Total time'}: ${secToHHMMSS(totalSec)}\n`;
-      p += `- ${lang==='es' ? 'Pace promedio' : 'Average pace'}: ${avgPaceSec ? secToMMSS(avgPaceSec) + '/mi' : 'N/D'}\n\n`;
-
-      p += `## ${lang==='es' ? 'Historial de actividades' : 'Activity history'}\n`;
-      if (weekActivities.length) {
-        weekActivities.forEach(s => {
-          const a = s.analysis || {};
-          p += `- ${s.dateISO} | ${s.manualFields?.trainingType || (lang==='es'?'sin tipo':'untyped')} | ${s.totalDistMi?.toFixed(2)}mi | ${secToHHMMSS(s.totalTimeSec)} | ${secToMMSS(s.avgPaceSecPerMi)}/mi | HR ${s.avgHR} | ${lang==='es'?'grado':'grade'} ${a.sessionGrade || '--'}`;
-          if (a.aerobicDecouplingPct != null) p += ` | decoupling ${a.aerobicDecouplingPct.toFixed(1)}%`;
-          if (s.manualFields?.rpe) p += ` | RPE ${s.manualFields.rpe}/10`;
-          p += '\n';
+      // ── 3. Load and volume ──
+      h(L('3. Carga y volumen', '3. Load and volume'));
+      try {
+        const ld = getCurrentLoadStatus();
+        const ac = getACWR();
+        if (ld) out.push('- CTL ' + ld.ctl + ' | ATL ' + ld.atl + ' | TSB ' + (ld.tsb > 0 ? '+' : '') + ld.tsb + ' — ' + ld.formLabel);
+        if (ac) out.push('- ACWR ' + ac.ratio + ' — ' + ac.band);
+      } catch (e) { /* load is optional context */ }
+      const wkBlock = (fromISO, toISO) => {
+        const g = gritMilesBetween(fromISO, toISO);
+        let tss = 0, long = 0, n = 0, strengthMin = 0;
+        allSess.filter(s => s.dateISO >= fromISO && s.dateISO <= toISO && s.sport !== 'biking').forEach(s => {
+          tss += estimateTSS(s.totalDistMi, s.totalTimeSec, s.avgHR, lthr); long = Math.max(long, s.totalDistMi || 0); n++;
         });
+        (state.manualSessions || []).filter(m => m.dateISO >= fromISO && m.dateISO <= toISO).forEach(m => { if (m.type === 'strength') strengthMin += m.durationMin || 0; });
+        return { run: g.run, ruck: g.ruck, tss, long, n, strengthMin };
+      };
+      for (let w = 0; w < 4; w++) {
+        const to = addDaysISO(today, -7 * w), from = addDaysISO(to, -6);
+        const b = wkBlock(from, to);
+        out.push('- ' + (w === 0 ? L('Esta ventana', 'This window') : L('Hace ', '') + w + (es ? ' sem.' : 'w ago')) + ' (' + from + '→' + to + '): ' + wpNum(b.run, 1) + ' mi ' + L('corridas', 'run') + ' + ' + wpNum(b.ruck, 1) + ' mi ruck | ' + L('larga máx', 'longest') + ' ' + wpNum(b.long, 1) + ' mi | TSS ' + Math.round(b.tss) + ' | ' + b.n + ' ' + L('actividades', 'activities') + ' | ' + L('fuerza', 'strength') + ' ' + b.strengthMin + ' min');
+      }
+      // Time-in-zone distribution of the window (polarization check)
+      const zsec = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      sessions.forEach(s => { const z = s.analysis?.timeInZones?.seconds; if (z) [1, 2, 3, 4, 5].forEach(k => { zsec[k] += z[k] || 0; }); });
+      const ztot = Object.values(zsec).reduce((a, b) => a + b, 0);
+      if (ztot > 0) out.push('- ' + L('Tiempo en zonas (ventana)', 'Time in zones (window)') + ': ' + [1, 2, 3, 4, 5].map(k => 'Z' + k + ' ' + Math.round(zsec[k] / ztot * 100) + '% (' + wpDur(zsec[k]) + ')').join(' | '));
+
+      // ── 4. Plan vs actual ──
+      h(L('4. Plan vs. realizado (últimos 7 días)', '4. Plan vs. actual (last 7 days)'));
+      for (let i = 0; i < 7; i++) {
+        const iso = addDaysISO(cutISO, i);
+        const pl = planWeek.find(p => p.dateISO === iso);
+        const acts = sessions.filter(s => s.dateISO === iso);
+        const man = manual.filter(m => m.dateISO === iso);
+        let line = '- ' + iso + ' ' + wpDow(iso) + ' | ' + L('Plan', 'Plan') + ': ';
+        line += pl ? typeLabel(pl.type) + (pl.dist && pl.dist !== '—' ? ' ' + pl.dist : '') + (pl.type !== 'rest' ? (pl.completed ? ' ✓' : ' ✗') : '') + (pl.notes ? ' — ' + wpClip(pl.notes, 160) : '') : L('sin plan', 'no plan');
+        line += ' | ' + L('Real', 'Actual') + ': ';
+        const parts = acts.map(s => wpNum(s.totalDistMi, 2) + ' mi ' + wpPace(s.avgPaceSecPerMi) + ' HR ' + s.avgHR).concat(man.map(m => (m.type || 'manual') + (m.distMi ? ' ' + m.distMi + ' mi' : '') + (m.durationMin ? ' ' + m.durationMin + ' min' : '')));
+        line += parts.length ? parts.join(' + ') : L('nada registrado', 'nothing logged');
+        out.push(line);
+      }
+
+      // ── 5. Activities ──
+      h(L('5. Actividades — detalle', '5. Activities — detail'));
+      if (!sessions.length) out.push(L('Sin actividades TCX en la ventana.', 'No TCX activities in the window.'));
+      sessions.forEach((s) => {
+        const a = s.analysis || {}, mf = s.manualFields || {}, adv = a.advanced || null;
+        const ty = typeOf(s);
+        out.push('');
+        out.push('### ' + s.dateISO + ' ' + wpDow(s.dateISO) + ' — ' + typeLabel(ty) + ' (' + (s.sport || 'running') + ')' + (mf.locationName ? ' @ ' + mf.locationName : ''));
+        out.push('- ' + wpNum(s.totalDistMi, 2) + ' mi | ' + secToHHMMSS(s.totalTimeSec) + ' | ' + wpPace(s.avgPaceSecPerMi) + ' | HR ' + s.avgHR + '/' + s.maxHR + ' bpm (' + (s.avgHR ? Math.round(s.avgHR / lthr * 100) : 'N/D') + '% / ' + (s.maxHR ? Math.round(s.maxHR / lthr * 100) : 'N/D') + '% LTHR) | ' + L('cadencia', 'cadence') + ' ' + (s.avgCadSPM || 'N/D') + ' spm | +' + (s.elevGainFt ?? 'N/D') + '/-' + (s.elevLossFt ?? 'N/D') + ' ft | TSS ' + Math.round(estimateTSS(s.totalDistMi, s.totalTimeSec, s.avgHR, lthr)));
+        if (a.sessionGrade) out.push('- ' + L('Nota de la app', 'App grade') + ': ' + a.sessionGrade + (a.sessionScore != null ? ' (' + a.sessionScore + ')' : '') + (a.categoryGrades ? ' | ' + Object.entries(a.categoryGrades).filter(([k, v]) => k !== 'hrQualityDiagnostics' && v && v.letter).map(([k, v]) => k + ' ' + v.letter + (v.flagged ? '?' : '')).join(', ') : ''));
+        const tz = a.timeInZones;
+        if (tz && tz.pct) out.push('- ' + L('Zonas', 'Zones') + ': Z1 ' + tz.pct.z1 + '% | Z2 ' + tz.pct.z2 + '% | Z3 ' + tz.pct.z3 + '% | Z4 ' + tz.pct.z4 + '% | Z5 ' + tz.pct.z5 + '%' + (adv ? ' | ' + L('tiempo con HR ≥ LTHR', 'time with HR ≥ LTHR') + ': ' + wpDur(adv.timeAboveLthrSec) : ''));
+        if (a.cardiacDrift) out.push('- ' + L('Deriva cardíaca', 'Cardiac drift') + ': ' + a.cardiacDrift.avgHRFirstHalf + ' → ' + a.cardiacDrift.avgHRSecondHalf + ' bpm (' + (a.cardiacDrift.driftPct > 0 ? '+' : '') + a.cardiacDrift.driftPct + '%), pace ' + L('cambió', 'changed') + ': ' + (a.cardiacDrift.pacingChanged ? L('sí', 'yes') : L('no', 'no')) + (a.decouplingValid && a.aerobicDecouplingPct != null ? ' | decoupling ' + a.aerobicDecouplingPct.toFixed(1) + '%' : ' | decoupling ' + L('no válido (terreno/intervalos)', 'not valid (terrain/intervals)')));
+        if (a.pacingConsistency) out.push('- ' + L('Consistencia de pace', 'Pace consistency') + ': CV ' + a.pacingConsistency.cvPct + '% (' + a.pacingConsistency.rating + ')');
+        if (a.vdot && !a.vdotTerrainInvalid) out.push('- VDOT ' + a.vdot + ' | ' + L('pred. 5K', 'pred. 5K') + ' ' + (a.predicted5KSec ? secToMMSS(a.predicted5KSec) : 'N/D'));
+        else if (a.vdotTerrainInvalid) out.push('- VDOT: ' + L('no válido para esta sesión (terreno/intensidad)', 'not valid for this session (terrain/intensity)'));
+        if (s.avgTempF != null) out.push('- ' + L('Clima', 'Weather') + ': ' + s.avgTempF + '°F' + (mf.humidity ? ', ' + L('humedad', 'humidity') + ' ' + mf.humidity + '%' : '') + (s.heatBpmPenalty ? ', ' + L('penalización calor', 'heat penalty') + ' +' + s.heatBpmPenalty + ' bpm' : ''));
+        else if (mf.humidity || mf.feelsLike) out.push('- ' + L('Clima (manual)', 'Weather (manual)') + ': ' + [mf.feelsLike && ('feels ' + mf.feelsLike), mf.humidity && (mf.humidity + '% RH'), mf.wind && ('wind ' + mf.wind)].filter(Boolean).join(', '));
+        const realBreaks = (a.runWalk && a.runWalk.walkSegments ? a.runWalk.walkSegments : []).filter(w => w.durationSec >= 15);
+        if (realBreaks.length) out.push('- Run/Walk: ' + a.runWalk.runPct + '% ' + L('corriendo', 'running') + ', ' + realBreaks.length + ' ' + L('pausas', 'breaks') + ' (' + realBreaks.map(w => '@' + secToMMSSOffset(w.startOffsetSec) + ' ' + Math.round(w.durationSec) + 's').join(', ') + ')');
+        if (a.slowSegments && a.slowSegments.segments && a.slowSegments.segments.length) out.push('- ' + L('Tramos lentos/caminata (velocidad+cadencia)', 'Slow/walk segments (speed+cadence)') + ': ' + a.slowSegments.segments.length + ' / ' + wpDur(a.slowSegments.totalSec) + ' → ' + a.slowSegments.segments.slice(0, 6).map(x => '@' + secToMMSSOffset(x.startOffsetSec) + ' ' + x.durationSec + 's HR ' + (x.avgHR || 'N/D') + ' cad ' + (x.avgCad || 'N/D')).join('; '));
+        const sp = a.realSplitsMi || [];
+        if (sp.length) out.push('- ' + L('Splits por milla', 'Mile splits') + ': ' + sp.map(x => '#' + x.splitNum + (x.partial ? '*' : '') + ' ' + wpPace(x.paceSecPerUnit) + ' HR ' + (x.avgHR ? Math.round(x.avgHR) : 'N/D') + '/' + (x.maxHR || 'N/D') + ' cad ' + (x.avgCadence ? Math.round(x.avgCadence) : 'N/D') + ' +' + Math.round((x.elevGainM || 0) * 3.28) + '/-' + Math.round((x.elevLossM || 0) * 3.28) + 'ft').join(' | '));
+        if (adv) {
+          if (adv.bands && adv.bands.length) out.push('- ' + L('Por pendiente', 'By grade') + ': ' + adv.bands.map(b => b.label + ' ' + wpNum(b.distMi, 2) + 'mi ' + wpPace(b.paceSecPerMi) + ' HR ' + (b.avgHR || 'N/D')).join(' | '));
+          if (adv.halves) out.push('- ' + L('Mitades', 'Halves') + ': ' + wpPace(adv.halves.firstPace) + ' HR ' + (adv.halves.firstHR || 'N/D') + ' → ' + wpPace(adv.halves.secondPace) + ' HR ' + (adv.halves.secondHR || 'N/D'));
+          if (adv.finish) out.push('- ' + L('Últimos 400 m', 'Last 400 m') + ': ' + wpPace(adv.finish.lastPace) + ' vs ' + wpPace(adv.finish.prevMilePace) + ' ' + L('milla previa', 'previous mile') + ' | HR ' + (adv.finish.lastHR || 'N/D'));
+          if (adv.stride) out.push('- ' + L('Zancada (m/paso) inicio → final', 'Stride (m/step) start → end') + ': ' + adv.stride.firstQuarterAvgM + ' → ' + adv.stride.lastQuarterAvgM);
+          if (adv.milestones && adv.milestones.length) out.push('- ' + L('Primera vez en % LTHR', 'First time at % LTHR') + ': ' + adv.milestones.map(m => m.label.split(' (')[0] + ' @' + secToMMSSOffset(m.tSec) + ' (mi ' + m.distMi.toFixed(2) + ')').join(' | '));
+          if (wpIsKeySession(s, ty) && adv.segments && adv.segments.length) {
+            out.push('- ' + L('Cuartos de milla (pace | HR | cad | pendiente | zancada)', 'Quarter miles (pace | HR | cad | grade | stride)') + ':');
+            adv.segments.forEach(q => out.push('    ' + q.startMi.toFixed(2) + '–' + q.endMi.toFixed(2) + ' | ' + wpPace(q.paceSecPerMi) + ' | ' + (q.avgHR || 'N/D') + ' | ' + (q.avgCad || 'N/D') + ' | ' + (q.gradePct != null ? q.gradePct + '%' : 'N/D') + ' | ' + (q.strideM || 'N/D')));
+          }
+        } else {
+          out.push('- ' + L('(Sin análisis avanzado: vuelve a subir este TCX para generarlo)', '(No advanced analysis: re-upload this TCX to generate it)'));
+        }
+        if (a.keyFindings && a.keyFindings.length) out.push('- ' + L('Hallazgos de la app', 'App findings') + ': ' + a.keyFindings.slice(0, 5).map(f => wpClip(f.text, 140)).join(' / '));
+        // Subjective block for this activity
+        const subj = [
+          mf.sleepHours && (L('sueño ', 'sleep ') + mf.sleepHours + 'h' + (mf.sleepQuality ? ' (' + mf.sleepQuality + '/10)' : '')),
+          mf.energyLevel && (L('energía ', 'energy ') + mf.energyLevel + '/10'),
+          mf.stressLevel && (L('estrés ', 'stress ') + mf.stressLevel + '/10'),
+          mf.rpe && ('RPE ' + mf.rpe + '/10'),
+          mf.painNotes && (L('dolor: ', 'pain: ') + wpClip(mf.painNotes, 160)),
+          mf.hrv && ('HRV ' + mf.hrv),
+          mf.restingHR && (L('FC reposo ', 'RHR ') + mf.restingHR),
+          mf.bodyWeight && (L('peso ', 'weight ') + mf.bodyWeight),
+          mf.athleteNotes && (L('notas: ', 'notes: ') + wpClip(mf.athleteNotes, 240))
+        ].filter(Boolean);
+        out.push('- ' + L('Estado subjetivo', 'Subjective state') + ': ' + (subj.length ? subj.join(' | ') : L('N/D (no registrado)', 'N/D (not logged)')));
+      });
+
+      // ── 6. Manual sessions ──
+      h(L('6. Sesiones manuales (ruck / fuerza / otras)', '6. Manual sessions (ruck / strength / other)'));
+      if (!manual.length) out.push(L('Ninguna registrada en la ventana.', 'None logged in the window.'));
+      manual.forEach(m => out.push('- ' + m.dateISO + ' ' + wpDow(m.dateISO) + ' | ' + (m.type || 'manual') + (m.distMi ? ' | ' + m.distMi + ' mi' : '') + (m.durationMin ? ' | ' + m.durationMin + ' min' : '') + (m.avgHR ? ' | HR ' + m.avgHR : '') + (m.notes ? ' | ' + wpClip(m.notes, 200) : '')));
+
+      // ── 7. Auto flags ──
+      const wins = [], flags = [];
+      sessions.forEach(s => {
+        const a = s.analysis || {}, ty = typeOf(s), lab = s.dateISO + ' (' + typeLabel(ty) + ', ' + wpNum(s.totalDistMi, 1) + ' mi)';
+        const isEasy = /easy|z2|long|^$/i.test(ty || '');
+        // Letter grades are provisional until the activity is typed/linked to a plan day — do not flag on them before that.
+        if (ty && a.sessionGrade && /^(A|B\+|B)/.test(a.sessionGrade)) wins.push(lab + ': ' + L('nota ', 'grade ') + a.sessionGrade);
+        if (ty && a.sessionGrade && /^(D|F)/.test(a.sessionGrade)) flags.push(lab + ': ' + L('nota ', 'grade ') + a.sessionGrade);
+        if (a.decouplingValid && a.aerobicDecouplingPct != null) {
+          if (a.aerobicDecouplingPct > 8) flags.push(lab + ': decoupling ' + a.aerobicDecouplingPct.toFixed(1) + '% (' + L('alto', 'high') + ')');
+          else if (a.aerobicDecouplingPct <= 5) wins.push(lab + ': decoupling ' + a.aerobicDecouplingPct.toFixed(1) + '% (' + L('bueno', 'good') + ')');
+        }
+        if (a.cardiacDrift && a.cardiacDrift.driftPct > 8 && !a.cardiacDrift.pacingChanged) flags.push(lab + ': ' + L('deriva cardíaca ', 'cardiac drift ') + a.cardiacDrift.driftPct + '% ' + L('con pace estable', 'at steady pace'));
+        if (isEasy && a.timeInZones && a.timeInZones.pct) {
+          const above = a.timeInZones.pct.z3 + a.timeInZones.pct.z4 + a.timeInZones.pct.z5;
+          if (above >= 15) flags.push(lab + ': ' + above + '% ' + L('del tiempo sobre Z2 en sesión fácil/larga', 'of time above Z2 in an easy/long session'));
+          else if (above <= 8) wins.push(lab + ': ' + L('disciplina de Z2 (', 'Z2 discipline (') + (100 - above) + '% ' + L('en Z1–Z2)', 'in Z1–Z2)'));
+        }
+        if (/tempo|interval/i.test(ty || '') && s.analysis?.advanced?.milestones) {
+          const m105 = s.analysis.advanced.milestones.find(m => m.label.indexOf('105%') === 0);
+          if (m105 && m105.tSec < 600) flags.push(lab + ': ' + L('FC pasó 105% LTHR en los primeros ', 'HR passed 105% LTHR within the first ') + secToMMSSOffset(m105.tSec) + ' (' + L('arranque demasiado rápido', 'start too fast') + ')');
+        }
+        if (s.analysis?.advanced?.stride) {
+          const st = s.analysis.advanced.stride;
+          if (st.firstQuarterAvgM > 0 && st.lastQuarterAvgM / st.firstQuarterAvgM < 0.85) flags.push(lab + ': ' + L('zancada se acortó ', 'stride shortened ') + Math.round((1 - st.lastQuarterAvgM / st.firstQuarterAvgM) * 100) + '%');
+        }
+        const pn = (s.manualFields?.painNotes || '').trim();
+        if (pn && !/^(ninguno|none|no|n\/a|0)$/i.test(pn)) flags.push(lab + ': ' + L('dolor reportado — ', 'pain reported — ') + wpClip(pn, 120));
+      });
+      const missed = planWeek.filter(p => p.type !== 'rest' && !p.completed);
+      missed.forEach(p => flags.push(L('Sesión no completada: ', 'Missed session: ') + p.dateISO + ' ' + wpDow(p.dateISO) + ' — ' + typeLabel(p.type) + (p.dist && p.dist !== '—' ? ' ' + p.dist : '')));
+      h(L('7. Banderas automáticas (heurísticas — valídalas tú)', '7. Auto flags (heuristics — validate them)'));
+      out.push(L('Bien:', 'Going well:'));
+      out.push(wins.length ? wins.map(x => '- ' + x).join('\n') : '- ' + L('(sin datos suficientes)', '(not enough data)'));
+      out.push(L('A vigilar:', 'To watch:'));
+      out.push(flags.length ? flags.map(x => '- ' + x).join('\n') : '- ' + L('(sin banderas rojas detectadas)', '(no red flags detected)'));
+
+      // ── 8. Missing data ──
+      const missing = [];
+      if (!sessions.length) missing.push(L('No hay TCX en los últimos 7 días.', 'No TCX in the last 7 days.'));
+      const untyped = sessions.filter(s => !typeOf(s));
+      if (untyped.length) missing.push(L('Sesiones sin tipo ni vínculo al plan (' + untyped.map(s => s.dateISO).join(', ') + '): dime qué eran (fácil, tempo, long run…) para evaluarlas bien', 'Sessions without a type or plan link (' + untyped.map(s => s.dateISO).join(', ') + '): tell me what they were (easy, tempo, long run…) so they are graded correctly'));
+      if (sessions.length && !sessions.some(s => s.manualFields?.sleepHours)) missing.push(L('Horas/calidad de sueño', 'Sleep hours/quality'));
+      if (sessions.length && !sessions.some(s => s.manualFields?.rpe)) missing.push(L('RPE de las sesiones', 'Session RPE'));
+      if (sessions.length && !sessions.some(s => (s.manualFields?.painNotes || '').trim())) missing.push(L('Estado de dolor/molestias (espinillas, cuádriceps, rodillas) de 0 a 10', 'Pain/soreness status (shins, quads, knees) 0–10'));
+      if (sessions.length && !sessions.some(s => s.manualFields?.restingHR)) missing.push(L('FC en reposo y HRV', 'Resting HR and HRV'));
+      if (sessions.some(s => s.avgTempF == null && !s.manualFields?.humidity)) missing.push(L('Clima/calor de las sesiones sin datos', 'Weather/heat missing for some sessions'));
+      if (sessions.some(s => !s.analysis?.advanced)) missing.push(L('Hay TCX sin análisis avanzado (se subieron antes de esta versión): vuelve a subirlos', 'Some TCX lack advanced analysis (uploaded before this version): re-upload them'));
+      if (!(state.manualSessions || []).some(m => m.dateISO >= cutISO && m.type === 'strength')) missing.push(L('No hay sesiones de fuerza registradas en la ventana (¿se hicieron?)', 'No strength sessions logged in the window (were they done?)'));
+      if (!prof.maxHR) missing.push(L('FC máxima no configurada en el perfil', 'Max HR not set in the profile'));
+      h(L('8. Datos que faltan (pregúntame antes de ajustar el plan)', '8. Missing data (ask me before adjusting the plan)'));
+      out.push(missing.length ? missing.map(x => '- ' + x).join('\n') : '- ' + L('Nada crítico.', 'Nothing critical.'));
+
+      // ── 9. Plan already in the app for next 7 days ──
+      h(L('9. Plan que ya existe en la app (próximos 7 días)', '9. Plan already in the app (next 7 days)'));
+      out.push(planNext.length ? planNext.map(p => '- ' + p.dateISO + ' ' + wpDow(p.dateISO) + ' | ' + typeLabel(p.type) + (p.dist && p.dist !== '—' ? ' ' + p.dist : '') + (p.notes ? ' — ' + wpClip(p.notes, 200) : '')).join('\n') : '- ' + L('(vacío)', '(empty)'));
+
+      // ── 10. Instructions ──
+      h(L('10. Instrucciones para ti (Claude)', '10. Instructions for you (Claude)'));
+      if (es) {
+        out.push('Eres mi entrenador de running (5K/10K). Trabaja con TODOS los datos de arriba. Reglas:');
+        out.push('1. Resultado primero. Si falta un dato de la sección 8 que cambie el plan, haz UNA pregunta a la vez antes de generar el plan; si no cambia nada, sigue.');
+        out.push('2. Evalúa la semana: qué funcionó, qué corregir (con la evidencia: zonas, deriva, splits, zancada, dolor). No inventes fisiología; si dudas, dilo.');
+        out.push('3. Señala de inmediato: FC fuera de zona, dolor articular/óseo, deshidratación o señales de sobreentrenamiento. La FC (no el pace) manda en terreno de Orocovis.');
+        out.push('4. Respeta mi meta, mis carreras, el GRIT 100 y la regla de no subir el volumen de golpe (ACWR 0.8–1.3).');
+        out.push('5. Entrega el plan de la semana ' + targetMon + ' → ' + targetSun + ' como UN bloque de código listo para pegar en "Importar plan de Claude", con EXACTAMENTE 7 líneas, así:');
+        out.push('   Lun: [sesión]');
+        out.push('   Mar: [sesión]   (… hasta Dom:)');
+        out.push('   - Prefijos en español: Lun, Mar, Mié, Jue, Vie, Sáb, Dom. Una sesión principal por línea; el trabajo de fuerza va en la misma línea después de "Luego".');
+        out.push('   - Tipo de sesión con la palabra clave: carrera fácil / tempo / intervalos / long run / descanso / cross-training.');
+        out.push('   - Distancia siempre en "miles" (decimales con punto, ej. 4.5 miles). Nada de km.');
+        out.push('   - Intensidad por FC (ej. "FC ≤140"). NO escribas rangos de pace tipo "mm:ss-mm:ss" ni "mm:ss/mi" salvo para strides o intervalos donde sí quiero un pace objetivo.');
+        out.push('   - Dentro de las líneas NO uses las palabras "martes", "miércoles", "confirmar", "marcha" ni otros nombres de día/abreviaturas que confundan al importador.');
+        out.push('   - Después del bloque, 3 líneas máximo con el porqué de los cambios. Idioma de la respuesta: español.');
       } else {
-        p += `${lang==='es' ? 'Sin actividades registradas esta semana.' : 'No activities logged this week.'}\n`;
+        out.push('You are my running coach (5K/10K). Use ALL the data above. Rules:');
+        out.push('1. Result first. If a section-8 item would change the plan, ask ONE question at a time before generating it; otherwise proceed.');
+        out.push('2. Evaluate the week: what worked, what to fix (cite the evidence: zones, drift, splits, stride, pain). Do not invent physiology; say so when unsure.');
+        out.push('3. Flag immediately: HR out of zone, joint/bone pain, dehydration or overtraining signs. HR (not pace) governs on mountain terrain.');
+        out.push('4. Respect my goal, races, GRIT 100 and no sudden volume jumps (ACWR 0.8–1.3).');
+        out.push('5. Deliver the week ' + targetMon + ' → ' + targetSun + ' as ONE code block ready for "Import Claude Plan", EXACTLY 7 lines: "Mon: ..." … "Sun: ...". One main session per line (strength after "Then"), distances in miles with a decimal point, intensity by HR, no mm:ss–mm:ss pace ranges except for strides/intervals, no day names inside other lines. Add max 3 lines explaining the changes.');
       }
-      p += '\n';
 
-      p += `## ${lang==='es' ? 'Dónde hice buen trabajo' : 'Where I did well'}\n`;
-      p += (wentWell.length ? wentWell.map(w => `- ${w}`).join('\n') : `- ${lang==='es' ? '(sin datos suficientes — evalúa tú con lo anterior)' : '(not enough data — assess from the above)'}`) + '\n\n';
-
-      p += `## ${lang==='es' ? 'Dónde puedo mejorar' : 'Where I can improve'}\n`;
-      p += (toImprove.length ? toImprove.map(w => `- ${w}`).join('\n') : `- ${lang==='es' ? '(sin banderas rojas detectadas)' : '(no red flags detected)'}`) + '\n';
-      if (missedSessions.length) {
-        p += missedSessions.map(s => `- ${lang==='es'?'Sesión no completada':'Missed session'}: Day ${s.day} (${s.dateISO}) — ${SESSION_TYPE_LABELS[s.type] || s.type}`).join('\n') + '\n';
-      }
-      p += '\n';
-
-      p += `## ${lang==='es' ? 'Qué debo mantener' : 'What to maintain'}\n`;
-      p += `- ${lang==='es' ? 'Estructura semanal actual: intervalos, fácil, tempo progresivo, fácil+strides, larga.' : 'Current weekly structure: intervals, easy, progressive tempo, easy+strides, long run.'}\n`;
-      p += `- ${lang==='es' ? 'LTHR de referencia' : 'Reference LTHR'}: ${state.profile?.lthr || 174} bpm.\n\n`;
-
-      p += `## ${lang==='es' ? 'Instrucciones' : 'Instructions'}\n`;
-      p += lang==='es'
-        ? `Eres mi entrenador de 5K táctico. Con base en lo anterior, evalúa mi semana y genera el plan de la PRÓXIMA semana (7 días). Indica para cada día: tipo de sesión (fácil, tempo, intervalos, larga, descanso, cruzado), distancia o duración, y pace/HR objetivo. Devuélvelo en formato simple compatible con esta app, una línea por día, por ejemplo:\nLunes: Intervalos 4x800m\nMartes: Fácil 3 miles\nMiércoles: Tempo progresivo 25 min\nJueves: Fácil + Strides 3 miles\nViernes: Descanso\nSábado: Larga 5 miles\nDomingo: Descanso\nAjusta el volumen/intensidad según lo que mejoró o empeoró esta semana. Meta: 5K sub-30:00 el 16 AGO 2026 en botas y uniforme OCP.`
-        : `You are my tactical 5K coach. Based on the above, evaluate my week and generate NEXT week's plan (7 days). For each day, specify: session type (easy, tempo, intervals, long, rest, cross), distance or duration, and target pace/HR. Return it in a simple format compatible with this app, one line per day, e.g.:\nMonday: Intervals 4x800m\nTuesday: Easy 3 miles\nWednesday: Progressive tempo 25 min\nThursday: Easy + Strides 3 miles\nFriday: Rest\nSaturday: Long run 5 miles\nSunday: Rest\nAdjust volume/intensity based on what improved or worsened this week. Goal: sub-30:00 5K on 16 AUG 2026 in boots and OCP uniform.`;
-
-      weeklyPromptBlock = p;
+      weeklyPromptBlock = out.join('\n');
       render();
     }
 
