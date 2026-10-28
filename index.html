@@ -1117,6 +1117,8 @@
     details.fc-details > summary::-webkit-details-marker { display: none; }
     .steps-table td { vertical-align: top; }
     @media (max-width: 420px) { nav button { font-size: 8px; letter-spacing: 0.3px; } }
+    /* 2026.10.28: example text must not look like a filled value */
+    input::placeholder, textarea::placeholder { color: var(--paper-dim); opacity: .55; font-style: italic; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
@@ -1315,6 +1317,23 @@
     }
 
     // Activity detail card: gear + HR source selectors, recommendation, optical warning.
+    // Follow-up (phase 6) needs these notes in every report. Shown from the start of follow-up on. (2026.10.28)
+    const FOLLOWUP_FROM = '2026-10-28';
+    function renderFollowupMissing(act) {
+      if (!act || (act.dateISO || '') < FOLLOWUP_FROM) return '';
+      const es = getLang() === 'es';
+      const mf = act.manualFields || {};
+      const need = [
+        ['rpe', es ? 'esfuerzo (RPE)' : 'effort (RPE)'], ['painNotes', es ? 'dolor' : 'pain'],
+        ['sleepHours', es ? 'sueño' : 'sleep'], ['hrv', es ? 'VFC de la noche' : 'overnight HRV'],
+        ['restingHR', es ? 'FC en reposo' : 'resting HR'], ['feelsLike', es ? 'sensación térmica' : 'feels-like'],
+        ['gearId', es ? 'zapato' : 'shoe'], ['hrSource', es ? 'fuente de FC' : 'HR source']
+      ].filter(([k]) => mf[k] === undefined || mf[k] === null || String(mf[k]).trim() === '').map(([, l]) => l);
+      if (!need.length) return `<p style="font-size:11px; color:var(--olive-bright); margin:0 0 12px;">${es ? '✓ Notas del seguimiento completas.' : '✓ Follow-up notes complete.'}</p>`;
+      return `<div class="card" style="border-left:3px solid var(--signal-amber);">
+        <p style="font-size:11px; color:var(--signal-amber); line-height:1.5;">${es ? 'Faltan para el informe: ' : 'Missing for the report: '}<strong>${need.join(', ')}</strong>.${es ? ' En el dolor escribe "0" si no hay.' : ' For pain write "0" if none.'}</p>
+      </div>`;
+    }
     function renderGearHrCard(act) {
       const es = getLang() === 'es';
       const mf = act.manualFields || {};
@@ -1502,9 +1521,14 @@
       return new Date(y, m - 1, d);
     };
 
+    // Calendar days from today (local) to `iso` (local). new Date('YYYY-MM-DD') is UTC midnight —
+    // 8 PM the day before in Puerto Rico — so the old formula said 45 where the races card said 46.
     const daysUntil = (iso) => {
       if (!iso) return 0;
-      return Math.max(0, Math.round((new Date(iso).getTime() - Date.now()) / 86400000));
+      const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+      const now = new Date();
+      const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return Math.max(0, Math.round((new Date(y, m - 1, d) - t0) / 86400000));
     };
 
     const fmtPace = (spm) => {
@@ -1519,8 +1543,18 @@
 
     const SESSION_TAGS = {
       easy: 'EZ', tempo: 'TMP', intervals: 'INT',
-      long: 'LNG', race_sim: 'SIM', rest: 'REST'
+      long: 'LNG', race_sim: 'SIM', rest: 'REST', cross_training: 'CRUZ'
     };
+    // Per-session tag: cross-training days are either a vest march or strength-only.
+    function sessionTag(s) {
+      if (!s) return '—';
+      if (s.type === 'cross_training') {
+        const txt = String(s.notes || '').toLowerCase();
+        if (/chaleco|caminata/.test(txt)) return getLang() === 'es' ? 'MARCHA' : 'RUCK';
+        if (/fuerza/.test(txt)) return getLang() === 'es' ? 'FZA' : 'STR';
+      }
+      return SESSION_TAGS[s.type] || String(s.type || '—').toUpperCase();
+    }
 
     const danielsVO2 = (v) => -4.60 + 0.182258 * v + 0.000104 * v * v;
     const danielsPct = (t) => 0.8 + 0.1894393 * Math.exp(-0.012778 * t) + 0.2989558 * Math.exp(-0.1932605 * t);
@@ -1767,7 +1801,7 @@
       const rows = [...p.races].filter(r => r.dateISO).sort((a, b) => a.dateISO.localeCompare(b.dateISO)).map(r => {
         const past = r.dateISO < today;
         const isActive = r.id === p.activeRaceId && !past;
-        const days = Math.max(0, Math.round((new Date(r.dateISO + 'T12:00:00').getTime() - Date.now()) / 86400000));
+        const days = daysUntil(r.dateISO);
         const label = esc(r.name) || raceLabelByKey(r.distanceKey);
         const right = past
           ? (r.resultSec ? (es ? 'Resultado ' : 'Result ') + fmtRaceTime(r.resultSec) : (es ? 'Completada' : 'Done'))
@@ -3393,10 +3427,11 @@
     }
 
     const FIT_INTENSITY = { active: 0, rest: 1, warmup: 2, cooldown: 3 };
-    const FIT_DURATION_TYPE = { time: 0, distance: 1, open: 7 };
-    const FIT_TARGET_TYPE = { speed: 0, heart_rate: 1, open: 0xFF, cadence: 3, power: 4 };
+    const FIT_DURATION_TYPE = { time: 0, distance: 1, open: 5 }; // FIT profile: 5 = open (7 was repeat_until_time)
+    const FIT_TARGET_TYPE = { speed: 0, heart_rate: 1, open: 2, cadence: 3, power: 4 };   // FIT profile: 2 = open
     const FIT_SPORT = { running: 1 };
 
+    const fitAscii = (str) => String(str).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '').slice(0, 15);
     function buildFitWorkout({ name, steps }) {
       const body = new FitWriter();
 
@@ -3411,7 +3446,7 @@
         { num: 4, type: 'enum' }, { num: 6, type: 'uint16' }, { num: 8, type: 'string', count: 16 }
       ];
       fitWriteDefinition(body, 1, 26, workoutFields);
-      fitWriteData(body, 1, workoutFields, [FIT_SPORT.running, steps.length, (name || 'Workout').slice(0, 15)]);
+      fitWriteData(body, 1, workoutFields, [FIT_SPORT.running, steps.length, fitAscii(name || 'Workout')]);
 
       const stepFields = [
         { num: 254, type: 'uint16' }, { num: 0, type: 'string', count: 16 },
@@ -3441,7 +3476,7 @@
         }
 
         fitWriteData(body, 2, stepFields, [
-          idx, (step.note || '').slice(0, 15), durType, durValue,
+          idx, fitAscii(step.fitName || step.note || ''), durType, durValue,
           targetType, targetValue, customLow, customHigh,
           FIT_INTENSITY[step.intensity] ?? FIT_INTENSITY.active
         ]);
@@ -4457,7 +4492,135 @@
     // STRUCTURED STEP GENERATOR — converts a plan session into FIT workout steps
     // ═══════════════════════════════════════════════════════════════════════
 
+    // ═══ PLAN-LINE STEPS (2026.10.28) ═══
+    // Imported sessions carry the coach's exact line in `notes`. The old builder ignored it and
+    // used fixed templates (tempo = whole session at 92–95% LTHR, i.e. Z3; intervals = 4×400 m),
+    // which contradicted the plan and was exported to the watch. This reads minutes, reps,
+    // recoveries and HR straight from the line. Returns null when there is no line (auto plan →
+    // old templates). When the line cannot be converted exactly, returns one open step flagged
+    // steps.planParsed = 'approx' so the UI can say so instead of inventing a structure.
+    const MI_M = 1609.344;
+    function planLineTargets(session) {
+      const txt = String(session?.notes || '').toLowerCase();
+      if (!txt) return null;
+      const out = {};
+      const range = /fc\s+(\d{3})\s*(?:a|-|–)\s*(\d{3})/.exec(txt);
+      if (range) { out.hrLow = +range[1]; out.hrHigh = +range[2]; }
+      const cap = /fc\s+(\d{3})\s+o\s+menos/.exec(txt);
+      if (cap) out.hrCap = +cap[1];
+      if (!range && cap) { out.hrHigh = +cap[1]; out.hrCapOnly = true; }
+      const dist = /(\d+(?:\.\d+)?)\s*miles?/.exec(txt);
+      if (dist) out.distMi = parseFloat(dist[1]);
+      const eff = /esfuerzo\s+(?:de\s+)?(\d+\s*a\s*\d+|5k|10k)/.exec(txt);
+      if (eff) out.effort = eff[1].replace(/\s+/g, ' ');
+      const reps = /(\d+)\s*x\s*(\d+)\s*(s|min)\b/.exec(txt);
+      if (reps) out.repsText = `${reps[1]} × ${reps[2]} ${reps[3]}`;
+      return out;
+    }
+    function planLineSteps(session) {
+      const txt = String(session?.notes || '').toLowerCase().replace(/^\s*[a-záéíóú]+\s*:\s*/, '');
+      if (!txt || session.type === 'rest') return null;
+      const T = planLineTargets(session) || {};
+      const steps = [];
+      const st = (o) => steps.push(Object.assign({ fromPlan: true, targetType: 'open' }, o));
+      const hr = (lo, hi) => ({ targetType: 'heart_rate', targetLow: lo, targetHigh: hi });
+      const warmM = /(\d+)\s*min\s+suaves/.exec(txt);
+      const strides = /(\d+)\s*aceleraciones(?:\s+de\s+(\d+)\s*s)?/.exec(txt);
+      const coolM = /(\d+)\s*min\s+(?:de\s+)?trote\s+final/.exec(txt);
+      const warmup = () => {
+        if (warmM) st({ durationType: 'time', durationValue: +warmM[1] * 60, intensity: 'warmup', ...hr(100, 148),
+          label: 'Calentamiento suave', cue: 'Z1–Z2; sube la FC poco a poco.', fitName: 'Calentamiento' });
+        if (strides) {
+          const n = +strides[1], sec = strides[2] ? +strides[2] : 20;
+          for (let i = 1; i <= n; i++) {
+            st({ durationType: 'time', durationValue: sec, intensity: 'active', label: `Aceleración ${i}/${n}`,
+              cue: 'Rápido y suelto, no a tope.', fitName: `Acel ${i}/${n}` });
+            st({ durationType: 'open', durationValue: 0, intensity: 'rest', label: 'Trote suave',
+              cue: 'Libre: pulsa Vuelta en el reloj cuando estés listo.', fitName: 'Trote suave' });
+          }
+        }
+      };
+      const cooldown = () => {
+        if (coolM) st({ durationType: 'time', durationValue: +coolM[1] * 60, intensity: 'cooldown', ...hr(100, 148),
+          label: 'Trote final', cue: 'Baja la FC; camina si hace falta.', fitName: 'Trote final' });
+      };
+
+      // 1) Sustained-pace (tempo) with "N min a FC a b" — first 2 min at 12:00–12:30/mi (project rule).
+      const tempoM = /(\d+)(?:\s*a\s*(\d+))?\s*min\s+a\s+fc\s+(\d{3})\s*a\s*(\d{3})/.exec(txt);
+      if (session.type === 'tempo' && tempoM) {
+        const minLo = +tempoM[1], minHi = tempoM[2] ? +tempoM[2] : null, lo = +tempoM[3], hi = +tempoM[4];
+        warmup();
+        st({ durationType: 'time', durationValue: 120, intensity: 'active', targetType: 'speed',
+          targetLow: MI_M / 750, targetHigh: MI_M / 720, paceText: '12:00–12:30/mi',
+          label: 'Ritmo sostenido: arranque', cue: 'Primeros 2 min controlados aunque te sientas bien.', fitName: 'RS arranque' });
+        st({ durationType: 'time', durationValue: (minLo - 2) * 60, intensity: 'active', ...hr(lo, hi),
+          label: 'Ritmo sostenido', cue: (minHi ? `${minLo} min (hasta ${minHi} si la FC está estable). ` : '') + 'Si pasas de 174 más de 60 s, baja el ritmo.',
+          fitName: 'Ritmo sostenido' });
+        cooldown();
+        steps.planParsed = 'exact';
+        return steps;
+      }
+
+      // 2) Repetitions: "N x D s|min ..." (one or two sets joined by "+").
+      const setRe = /(\d+)\s*x\s*(\d+)\s*(s|min)\b([^+]*)/g;
+      const sets = [];
+      let m;
+      while ((m = setRe.exec(txt))) sets.push({ n: +m[1], sec: +m[2] * (m[3] === 'min' ? 60 : 1), tail: m[4] });
+      if (session.type === 'intervals' && sets.length) {
+        warmup();
+        sets.forEach((set, si) => {
+          const up = /subiendo/.test(set.tail), down = /bajando/.test(set.tail);
+          const recM = /con\s+(\d+)\s*min\s+de\s+trote/.exec(set.tail);
+          const effort = /esfuerzo\s+(?:de\s+)?(\d+\s*a\s*\d+|5k)/.exec(set.tail);
+          const what = up ? 'Subida' : down ? 'Bajada' : 'Repetición';
+          for (let i = 1; i <= set.n; i++) {
+            st({ durationType: 'time', durationValue: set.sec, intensity: 'active',
+              label: `${what} ${i}/${set.n}`,
+              cue: effort ? `Esfuerzo ${effort[1].replace('5k', 'de 5K')}.` : (down ? 'Ritmo de carrera, zancada corta y cadencia alta.' : ''),
+              fitName: `${what.slice(0, 6)} ${i}/${set.n}` });
+            const last = si === sets.length - 1 && i === set.n;
+            if (last) continue;
+            if (recM) st({ durationType: 'time', durationValue: +recM[1] * 60, intensity: 'rest',
+              label: 'Trote de recuperación', cue: `${recM[1]} min de trote.`, fitName: 'Recuperacion' });
+            else st({ durationType: 'open', durationValue: 0, intensity: 'rest',
+              label: up ? 'Bajada trotando' : down ? 'Regreso caminando o trotando' : 'Recuperación',
+              cue: 'Libre: pulsa Vuelta en el reloj cuando estés listo.', fitName: 'Recuperacion' });
+          }
+        });
+        cooldown();
+        steps.planParsed = 'exact';
+        return steps;
+      }
+
+      // 3) Continuous run or vest march by distance with an HR range/cap, no other structure.
+      const complex = /milla\s+\d+\s+a\s+fc|milla\s+\d+\s+fuerte/.test(txt);
+      const isRun = session.type === 'easy' || session.type === 'long';
+      const isMarch = session.type === 'cross_training' && /chaleco|caminata/.test(txt);
+      if ((isRun || isMarch) && T.distMi && !complex && (T.hrHigh || isMarch)) {
+        // March: the vest cap ("FC 150 o menos") wins over an optional PM run range on the same line;
+        // with no FC on the line the project rule applies (vest march ≤150).
+        const hi = isMarch ? (T.hrCap || 150) : T.hrHigh;
+        const lo = isMarch ? 100 : (T.hrLow || 100);
+        st({ durationType: 'distance', durationValue: T.distMi * MI_M, intensity: 'active', ...hr(lo, hi),
+          label: isMarch ? 'Marcha con chaleco' : (session.type === 'long' ? 'Carrera larga' : 'Carrera fácil'),
+          cue: isMarch ? 'Pasos cortos; se marcha, no se corre. Revisa los pies en la milla 1.' : 'Guíate por la FC: si sube de la zona, baja el paso.',
+          fitName: isMarch ? 'Marcha chaleco' : (session.type === 'long' ? 'Larga Z2' : 'Facil Z2') });
+        steps.planParsed = 'exact';
+        return steps;
+      }
+
+      // Strength-only cross-training day: nothing to run.
+      if (session.type === 'cross_training' && !isMarch) { steps.planParsed = 'none'; return steps; }
+
+      // 4) Anything else (course-specific session, etc.): don't invent a structure.
+      st({ durationType: T.distMi ? 'distance' : 'open', durationValue: T.distMi ? T.distMi * MI_M : 0, intensity: 'active',
+        label: 'Sigue la instrucción del plan', cue: 'Esta línea no se puede convertir en pasos exactos.', fitName: 'Ver plan' });
+      steps.planParsed = 'approx';
+      return steps;
+    }
+
     function generateStructuredSteps(session, lthr) {
+      if (session && session.notes) { const fromLine = planLineSteps(session); if (fromLine) return fromLine; }
       const pace = session.pacePerMi; // sec/mi
       const hrCeiling = lthr || 174;
       const steps = [];
@@ -4825,6 +4988,30 @@
     }
 
     // ── "TODAY" hero — the one-glance answer: what's today and at what pace ──
+    // Headline target for a plan session (2026.10.28). Imported sessions are run by HR, so the big
+    // number is the HR range from the line — never a pace (the old pace guide pushed easy runs too fast).
+    // Auto-generated sessions (no line) keep the pace guide.
+    function sessionHeadline(s) {
+      const es = getLang() === 'es';
+      const dist = s && s.dist && s.dist !== '—' ? s.dist : '';
+      if (!s || !s.notes) return { big: s ? s.paceGuide : '—', label: t('target_pace_label'), small: dist, mono: true };
+      const txt = String(s.notes).toLowerCase();
+      const T = planLineTargets(s) || {};
+      const sr = strengthForSession(s);
+      const march = s.type === 'cross_training' && /chaleco|caminata/.test(txt);
+      if (s.type === 'cross_training' && !march && sr)
+        return { big: (es ? 'Fuerza ' : 'Strength ') + sr.key, label: es ? 'Sesión' : 'Session', small: sr.sets ? (es ? `${sr.sets} series · sin correr` : `${sr.sets} sets · no running`) : '', mono: false };
+      const miTxt = T.distMi ? T.distMi + ' mi' : dist;
+      if (/milla\s+\d+\s+a\s+fc/.test(txt))
+        return { big: es ? 'Recorrido' : 'Course', label: es ? 'Sesión' : 'Session', small: miTxt + (es ? ' · ver instrucción' : ' · see instruction'), mono: false };
+      if (s.type === 'intervals' && T.repsText)
+        return { big: T.repsText.replace(/(\d+) × (\d+)/, '$1×$2'), label: es ? 'Repeticiones' : 'Reps', small: [T.effort ? (es ? 'esfuerzo ' : 'effort ') + T.effort.replace('5k', '5K') : '', miTxt].filter(Boolean).join(' · '), mono: true };
+      if (march) return { big: `FC ≤${T.hrCap || 150}`, label: es ? 'FC objetivo' : 'Target HR', small: miTxt, mono: true };
+      if (T.hrLow) return { big: `FC ${T.hrLow}–${T.hrHigh}`, label: es ? 'FC objetivo' : 'Target HR', small: miTxt, mono: true };
+      if (T.hrHigh) return { big: `FC ≤${T.hrHigh}`, label: es ? 'FC objetivo' : 'Target HR', small: miTxt, mono: true };
+      return { big: s.paceGuide, label: t('target_pace_label'), small: miTxt, mono: true };
+    }
+
     function renderTodayHero() {
       const today = todayISO();
       const todaySess = state.plan.find(s => s.dateISO === today);
@@ -4843,13 +5030,14 @@
         <div class="card" style="border:1px solid var(--coyote); ${todaySess.completed?'':'background:linear-gradient(135deg, rgba(201,169,97,0.10), rgba(61,90,31,0.06));'}" onclick="openSessionDetail(${todaySess.day})">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
             <span style="font-size:10px; letter-spacing:1px; color:var(--paper-dim);">${es?'HOY · QUÉ TOCA':'TODAY · WHAT IS ON'}</span>
-            ${todaySess.completed ? `<span class="badge">${t('badge_done')}</span>` : `<span class="session-tag">${SESSION_TAGS[todaySess.type]}</span>`}
+            ${todaySess.completed ? `<span class="badge">${t('badge_done')}</span>` : `<span class="session-tag">${sessionTag(todaySess)}</span>`}
           </div>
           <div style="font-size:22px; font-weight:700; color:var(--paper); margin-bottom:2px;">${sessionTitle(todaySess)}</div>
-          <div style="display:flex; align-items:baseline; gap:6px;">
-            <span style="font-size:28px; font-weight:700; color:var(--coyote); font-family:var(--font-mono);">${todaySess.paceGuide}</span>
-            <span style="font-size:12px; color:var(--paper-dim);">${todaySess.dist}</span>
-          </div>
+          ${(() => { const h = sessionHeadline(todaySess); return `
+          <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
+            <span style="font-size:28px; font-weight:700; color:var(--coyote); font-family:var(--font-mono);">${h.big}</span>
+            <span style="font-size:12px; color:var(--paper-dim);">${h.small}</span>
+          </div>`; })()}
           ${renderGearRecLine(todaySess)}
           <p style="font-size:11px; color:var(--paper-dim); margin-top:8px;">${es?'Toca para ver la sesión completa y los segmentos':'Tap to see the full session and segments'} →</p>
         </div>`;
@@ -4935,14 +5123,16 @@
       let boxes, pct, color, line1, line2 = '', status;
 
       if (!g.started) {
+        // Before Nov 1 there is no mileage target: the pre-challenge week is set by the plan
+        // (Sat 31 is rest). The old "20 mi in the last 7 days" line pushed extra miles. (2026.10.28)
         const r = g.rolling7;
-        const met = r.total >= GRIT.weeklyPreMi;
-        boxes = box(f1(r.total), es ? 'mi · 7 días' : 'mi · 7 days') + box(GRIT.weeklyPreMi, es ? 'meta semanal' : 'weekly goal') + box(g.daysToStart, es ? 'días al 1 nov' : 'days to Nov 1');
-        pct = Math.min(100, r.total / GRIT.weeklyPreMi * 100);
-        color = met ? 'var(--olive-bright)' : 'var(--coyote)';
-        line1 = es ? `Últimos 7 días — Correr: ${f1(r.run)} mi · Ruck: ${f1(r.ruck)} mi` : `Last 7 days — Run: ${f1(r.run)} mi · Ruck: ${f1(r.ruck)} mi`;
-        status = met ? (es ? '✓ Meta semanal cumplida. Mantén el volumen hasta el 1 de noviembre.' : '✓ Weekly goal met. Hold the volume until Nov 1.')
-                     : (es ? `Te faltan ${f1(GRIT.weeklyPreMi - r.total)} mi para tus ${GRIT.weeklyPreMi} de los últimos 7 días.` : `${f1(GRIT.weeklyPreMi - r.total)} mi to reach ${GRIT.weeklyPreMi} over the last 7 days.`);
+        const w1 = GRIT.ramp[0];
+        boxes = box(f1(r.total), es ? 'mi · 7 días' : 'mi · 7 days') + box(w1.mi, es ? 'meta semana 1' : 'week 1 goal') + box(g.daysToStart, es ? 'días al 1 nov' : 'days to Nov 1');
+        pct = 0;
+        color = 'var(--paper-dim)';
+        line1 = es ? `Últimos 7 días — Correr: ${f1(r.run)} mi · Marcha: ${f1(r.ruck)} mi (no cuentan para el reto)` : `Last 7 days — Run: ${f1(r.run)} mi · Ruck: ${f1(r.ruck)} mi (not counted)`;
+        status = es ? `Empieza el ${fmtMD(GRIT.start)}. Semana 1: ${w1.mi} mi (${w1.run} corriendo + ${w1.ruck} marcha). Hasta entonces sigue el plan; no sumes millas extra.`
+                    : `Starts ${fmtMD(GRIT.start)}. Week 1: ${w1.mi} mi (${w1.run} run + ${w1.ruck} ruck). Until then follow the plan; no extra miles.`;
       } else if (g.finished) {
         const ok = g.all.total >= GRIT.target;
         boxes = box(f1(g.all.total), es ? 'mi total' : 'total mi') + box(f1(g.remaining), es ? 'faltaron' : 'short') + box(GRIT.target, es ? 'meta' : 'goal');
@@ -5169,7 +5359,8 @@
       'Race pace simulation': 'Simulacro a ritmo de carrera'
     };
 
-    function stepLabel(note) {
+    function stepLabel(note, step) {
+      if (step && step.label) return step.label;
       if (getLang() !== 'es') return note;
       const m = /^Interval (\d+)\/(\d+)$/.exec(note);
       if (m) return 'Intervalo ' + m[1] + '/' + m[2];
@@ -5177,6 +5368,7 @@
     }
 
     function stepCue(session, step) {
+      if (step.fromPlan) return step.cue || '';
       const es = getLang() === 'es';
       if (step.intensity === 'warmup') return es ? 'Sube la FC poco a poco; termina en Z1–Z2.' : 'Raise HR gradually; finish in Z1–Z2.';
       if (step.intensity === 'cooldown') return es ? 'Baja la FC; camina si hace falta.' : 'Bring HR down; walk if needed.';
@@ -5189,6 +5381,7 @@
     }
 
     function stepPaceText(session, step) {
+      if (step.fromPlan) return step.paceText || '';
       if (step.intensity !== 'active') return '';
       if (session.type === 'race_sim') return activeRaceGoalPaceStr() + '/mi';
       const row = PACE_REF_ROWS.find(r => r.type === session.type && !r.effortOnly);
@@ -5205,7 +5398,7 @@
         let dur;
         if (st.durationType === 'time') dur = secToMMSS(st.durationValue);
         else if (st.durationType === 'distance') dur = (st.durationValue / 1609.344).toFixed(2) + ' mi<br><span style="color:var(--paper-dim); font-size:9px;">' + Math.round(st.durationValue) + ' m</span>';
-        else dur = es ? 'Libre' : 'Open';
+        else dur = es ? 'Libre<br><span style="color:var(--paper-dim); font-size:9px;">botón Vuelta</span>' : 'Open<br><span style="color:var(--paper-dim); font-size:9px;">Lap button</span>';
         let hr = '';
         if (st.targetType === 'heart_rate') {
           const z = hrZoneFromBpm(Math.round((st.targetLow + st.targetHigh) / 2), lthr);
@@ -5217,7 +5410,7 @@
           <tr>
             <td class="num-cell">${i + 1}</td>
             <td style="border-left:3px solid ${COLORS[st.intensity] || 'var(--field-line)'}; padding-left:6px;">
-              <div style="font-size:12px; font-weight:600;">${stepLabel(st.note)}</div>
+              <div style="font-size:12px; font-weight:600;">${stepLabel(st.note, st)}</div>
               ${cue ? `<div style="font-size:9px; color:var(--paper-dim); margin-top:2px; line-height:1.4;">${cue}</div>` : ''}
             </td>
             <td class="num-cell" style="white-space:nowrap;">${dur}</td>
@@ -5278,7 +5471,7 @@
           ${renderRecalcBanner()}
           ${renderTaperCard()}
           ${renderTodayHero()}
-          ${(() => { const ts = state.plan.find(s => s.dateISO === todayISO()); return ts ? renderStrengthRecCard(ts.type) : ''; })()}
+          ${(() => { const ts = state.plan.find(s => s.dateISO === todayISO()); return ts ? renderStrengthRecCard(ts) : ''; })()}
           ${renderGritCard()}
           ${renderRacePredictionCard()}
           ${renderACWRCard()}
@@ -5304,7 +5497,7 @@
             <div class="session-card" onclick="openSessionDetail(${s.day})">
               <div class="session-header">
                 <div class="session-left">
-                  <span class="session-tag">${SESSION_TAGS[s.type]}</span>
+                  <span class="session-tag">${sessionTag(s)}</span>
                   <div class="session-info">
                     <h3>${sessionTitle(s)}</h3>
                     <p>${s.dateISO}</p>
@@ -5321,7 +5514,7 @@
               <div class="session-card ${s.completed ? 'completed' : ''}" onclick="openSessionDetail(${s.day})">
                 <div class="session-header">
                   <div class="session-left">
-                    <span class="session-tag">${SESSION_TAGS[s.type]}</span>
+                    <span class="session-tag">${sessionTag(s)}</span>
                     <div class="session-info">
                       <h3>${sessionTitle(s)}</h3>
                       <p>${s.dateISO}${s.linkedActivityId ? ' · ' + t('linked_suffix') : ''}</p>
@@ -6037,6 +6230,7 @@
             </div>
 
             ${renderGearHrCard(act)}
+            ${renderFollowupMissing(act)}
 
             <div class="card">
               <div class="card-title">${t('link_to_plan_day')}</div>
@@ -6169,31 +6363,31 @@
             <div class="card">
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Horas de sueño' : 'Sleep hours'}</label>
-                <input type="text" inputmode="decimal" id="mf-sleepHours-${act.id}" value="${mf.sleepHours}" placeholder="7.5" step="0.5" min="0" max="14" onblur="saveManualField('${act.id}', 'sleepHours', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-sleepQuality-${act.id}')" />
+                <input type="text" inputmode="decimal" id="mf-sleepHours-${act.id}" value="${mf.sleepHours}" placeholder="—" step="0.5" min="0" max="14" onblur="saveManualField('${act.id}', 'sleepHours', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-sleepQuality-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Calidad sueño (1-10)' : 'Sleep quality (1-10)'}</label>
-                <input type="text" inputmode="numeric" id="mf-sleepQuality-${act.id}" value="${mf.sleepQuality}" placeholder="7" min="1" max="10" onblur="saveManualField('${act.id}', 'sleepQuality', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-energyLevel-${act.id}')" />
+                <input type="text" inputmode="numeric" id="mf-sleepQuality-${act.id}" value="${mf.sleepQuality}" placeholder="—" min="1" max="10" onblur="saveManualField('${act.id}', 'sleepQuality', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-energyLevel-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Nivel de energía (1-10)' : 'Energy level (1-10)'}</label>
-                <input type="text" inputmode="numeric" id="mf-energyLevel-${act.id}" value="${mf.energyLevel}" placeholder="7" min="1" max="10" onblur="saveManualField('${act.id}', 'energyLevel', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-stressLevel-${act.id}')" />
+                <input type="text" inputmode="numeric" id="mf-energyLevel-${act.id}" value="${mf.energyLevel}" placeholder="—" min="1" max="10" onblur="saveManualField('${act.id}', 'energyLevel', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-stressLevel-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Estrés (1-10)' : 'Stress (1-10)'}</label>
-                <input type="text" inputmode="numeric" id="mf-stressLevel-${act.id}" value="${mf.stressLevel}" placeholder="3" min="1" max="10" onblur="saveManualField('${act.id}', 'stressLevel', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-restingHR-${act.id}')" />
+                <input type="text" inputmode="numeric" id="mf-stressLevel-${act.id}" value="${mf.stressLevel}" placeholder="—" min="1" max="10" onblur="saveManualField('${act.id}', 'stressLevel', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-restingHR-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'FC en reposo (bpm)' : 'Resting HR (bpm)'}</label>
-                <input type="text" inputmode="numeric" id="mf-restingHR-${act.id}" value="${mf.restingHR}" placeholder="52" onblur="saveManualField('${act.id}', 'restingHR', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-hrv-${act.id}')" />
+                <input type="text" inputmode="numeric" id="mf-restingHR-${act.id}" value="${mf.restingHR}" placeholder="—" onblur="saveManualField('${act.id}', 'restingHR', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-hrv-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>HRV (ms)</label>
-                <input type="text" inputmode="decimal" id="mf-hrv-${act.id}" value="${mf.hrv}" placeholder="55" onblur="saveManualField('${act.id}', 'hrv', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-bodyWeight-${act.id}')" />
+                <input type="text" inputmode="decimal" id="mf-hrv-${act.id}" value="${mf.hrv}" placeholder="—" onblur="saveManualField('${act.id}', 'hrv', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-bodyWeight-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Peso corporal (lb)' : 'Body weight (lb)'}</label>
-                <input type="text" inputmode="decimal" id="mf-bodyWeight-${act.id}" value="${mf.bodyWeight}" placeholder="196" step="0.5" onblur="saveManualField('${act.id}', 'bodyWeight', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-painNotes-${act.id}')" />
+                <input type="text" inputmode="decimal" id="mf-bodyWeight-${act.id}" value="${mf.bodyWeight}" placeholder="—" step="0.5" onblur="saveManualField('${act.id}', 'bodyWeight', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-painNotes-${act.id}')" />
               </div>
               <div class="form-group" style="margin-top:8px;">
                 <label class="form-label" style="margin-bottom:4px;">${getLang() === 'es' ? 'Dolor o molestias' : 'Pain / discomfort'}</label>
@@ -6209,15 +6403,15 @@
               <p id="weatherFetchStatus-${act.id}" style="font-size:10px; color:var(--paper-dim); margin-bottom:8px; display:none;"></p>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Humedad %' : 'Humidity %'}</label>
-                <input type="text" inputmode="numeric" id="mf-humidity-${act.id}" value="${mf.humidity}" placeholder="78" onblur="saveManualField('${act.id}', 'humidity', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-wind-${act.id}')" />
+                <input type="text" inputmode="numeric" id="mf-humidity-${act.id}" value="${mf.humidity}" placeholder="—" onblur="saveManualField('${act.id}', 'humidity', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-wind-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Viento (mph)' : 'Wind (mph)'}</label>
-                <input type="text" inputmode="decimal" id="mf-wind-${act.id}" value="${mf.wind}" placeholder="5" onblur="saveManualField('${act.id}', 'wind', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-feelsLike-${act.id}')" />
+                <input type="text" inputmode="decimal" id="mf-wind-${act.id}" value="${mf.wind}" placeholder="—" onblur="saveManualField('${act.id}', 'wind', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-feelsLike-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Sensación térmica °F' : 'Feels like °F'}</label>
-                <input type="text" inputmode="decimal" id="mf-feelsLike-${act.id}" value="${mf.feelsLike}" placeholder="92" onblur="saveManualField('${act.id}', 'feelsLike', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-aerobicTE-${act.id}')" />
+                <input type="text" inputmode="decimal" id="mf-feelsLike-${act.id}" value="${mf.feelsLike}" placeholder="—" onblur="saveManualField('${act.id}', 'feelsLike', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-aerobicTE-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Superficie' : 'Surface'}</label>
@@ -6464,7 +6658,7 @@
 
       const linkedActivity = s.linkedActivityId ? state.tcxSessions.find(act => act.id === s.linkedActivityId) : null;
       const unlinkedActivities = state.tcxSessions.filter(act => !act.linkedPlanDay || act.linkedPlanDay === day);
-      const cfg = SESSION_TAGS[s.type];
+      const cfg = sessionTag(s);
       const info = getWorkoutInfo(s.type);
       const structuredSteps = s.type !== 'rest' ? generateStructuredSteps(s, state.profile?.lthr || 174) : [];
       const dayWord = getLang() === 'es' ? 'DÍA' : 'DAY';
@@ -6485,13 +6679,13 @@
                 <input type="date" value="${s.dateISO}" onchange="updateSessionDate(${s.day}, this.value)" />
               </div>
               <div class="stat-grid">
-                <div class="stat-box"><div class="value">${s.paceGuide}</div><div class="label">${t('target_pace_label')}</div></div>
+                ${(() => { const h = sessionHeadline(s); return `<div class="stat-box"><div class="value">${h.big}</div><div class="label">${h.label}</div></div>`; })()}
                 <div class="stat-box"><div class="value">${s.dist}</div><div class="label">${t('target_distance_label')}</div></div>
               </div>
               ${renderGearRecLine(s)}
             </div>
 
-            ${renderStrengthRecCard(s.type, true)}
+            ${renderStrengthRecCard(s, true)}
 
             ${s.notes ? `
             <div class="sitrep-label">${getLang() === 'es' ? 'INSTRUCCIÓN DEL PLAN' : 'PLAN INSTRUCTION'}</div>
@@ -6533,16 +6727,20 @@
               <p style="font-size:13px; color: var(--paper); line-height:1.6;">${tr(info.benefit)}</p>
             </div>
 
+            ${structuredSteps.planParsed === 'none' ? '' : `
             <div class="sitrep-label">${t('structured_steps_label')}</div>
             <div class="card">
+              ${structuredSteps.planParsed === 'exact' ? `<p style="font-size:10px; color:var(--olive-bright); margin-bottom:8px;">${getLang()==='es' ? '✓ Pasos leídos de la línea del plan.' : '✓ Steps read from the plan line.'}</p>` : ''}
+              ${structuredSteps.planParsed === 'approx' ? `<p style="font-size:11px; color:var(--signal-amber); margin-bottom:8px; line-height:1.5;">${getLang()==='es' ? '⚠ Esta línea del plan no se puede convertir en pasos exactos. Corre con la instrucción del plan; no se exporta al reloj.' : '⚠ This plan line cannot be turned into exact steps. Follow the plan instruction; not exported to the watch.'}</p>` : ''}
               ${renderStepsTable(s, structuredSteps)}
+              ${structuredSteps.planParsed === 'approx' ? '' : `
               <button class="btn btn-primary" style="width:100%; margin-top: 14px;" onclick="exportSessionToGarmin(${s.day})">
                 ${t('export_garmin_btn')}
               </button>
               <p style="font-size:10px; color: var(--paper-dim); margin-top:8px; line-height:1.5;">
                 ${t('export_garmin_hint')}
-              </p>
-            </div>
+              </p>`}
+            </div>`}
             ` : ''}
 
             <div class="sitrep-label">${t('expected_to_happen_label')}</div>
@@ -6592,106 +6790,59 @@
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    // STRENGTH TRAINING LIBRARY — runner-specific exercises by category
+    // STRENGTH — routines A and B from the November plan (2026.10.28). Equipment on hand:
+    // dumbbells up to 25 lb, 10 lb kettlebell, band up to 50 lb, step. No bench, bar or machine.
+    // Strength shows ONLY on days whose plan line says "fuerza A/B" (or "sesión A/B").
     // ═══════════════════════════════════════════════════════════════════════
-
     const STRENGTH_LIBRARY = {
-      glutes: {
-        name: { en: 'Glutes & Hip Drive', es: 'Glúteos y Propulsión de Cadera' },
-        why: { en: 'Main power source for uphill running and pace maintenance late in a race.', es: 'Principal fuente de potencia en subidas y para mantener el pace al final de una carrera.' },
+      A: {
+        name: { es: 'Fuerza A · lunes, después de la calidad', en: 'Strength A · Monday, after quality' },
+        why: { es: 'Piernas para las bajadas del 10K, cadera estable y empuje para el AFT.', en: 'Legs for the 10K downhills, stable hips and pushing strength for the AFT.' },
         exercises: [
-          { name: 'Hip Thrust', sets: '3×10-12', load: { en: 'Bodyweight → add weight', es: 'Peso corporal → agregar peso' }, tip: { en: 'Full hip extension at top, hold 1 sec', es: 'Extensión completa de cadera arriba, mantén 1 seg' } },
-          { name: 'Single-Leg Romanian Deadlift (SLRDL)', sets: '3×8/side', load: { en: 'Light dumbbell → moderate', es: 'Mancuerna ligera → moderada' }, tip: { en: 'Hinge at hip, maintain flat back, feel hamstring stretch', es: 'Bisagra en cadera, espalda recta, siente el jalón en isquiotibiales' } },
-          { name: 'Step-Up with Knee Drive', sets: '3×10/side', load: { en: 'Bodyweight → add dumbbells', es: 'Peso corporal → con mancuernas' }, tip: { en: 'Drive knee up to hip height at top', es: 'Lleva la rodilla a la altura de la cadera arriba' } },
-          { name: 'Clamshell', sets: '2×15/side', load: { en: 'Resistance band', es: 'Banda de resistencia' }, tip: { en: 'Target glute medius, keep pelvis still', es: 'Activa glúteo medio, pelvis quieta' } }
+          { name: { es: 'Sentadilla goblet, bajando en 3 s', en: 'Goblet squat, 3 s lowering' }, sets: '3×8–10', load: { es: 'Mancuerna de 25 lb al pecho', en: '25 lb dumbbell at chest' }, tip: { es: 'Cuádriceps y glúteos. La bajada lenta prepara las piernas para las bajadas del recorrido.', en: 'Quads and glutes. Slow lowering prepares the legs for the course downhills.' } },
+          { name: { es: 'Bajada en el escalón con una pierna (3–4 s)', en: 'Single-leg step-down (3–4 s)' }, sets: '3×8 por pierna', load: { es: 'Peso corporal · escalón', en: 'Bodyweight · step' }, tip: { es: 'Control de la rodilla y cuádriceps de una pierna: así se baja corriendo.', en: 'Knee control and single-leg quads: how you run downhill.' } },
+          { name: { es: 'Peso muerto rumano', en: 'Romanian deadlift' }, sets: '3×10', load: { es: '2 mancuernas de 25 lb', en: '2 × 25 lb dumbbells' }, tip: { es: 'Isquiotibiales y glúteos. Protege rodillas y espalda baja y mejora el empuje.', en: 'Hamstrings and glutes. Protects knees and low back, improves push-off.' } },
+          { name: { es: 'Puente de glúteo a una pierna', en: 'Single-leg glute bridge' }, sets: '3×10 por pierna', load: { es: 'Peso corporal', en: 'Bodyweight' }, tip: { es: 'Glúteo: estabiliza la pelvis en cada zancada.', en: 'Glutes: stabilises the pelvis every stride.' } },
+          { name: { es: 'Plancha lateral', en: 'Side plank' }, sets: '3×30 s por lado', load: { es: 'Peso corporal', en: 'Bodyweight' }, tip: { es: 'Core lateral: evita que la cadera caiga al correr y con chaleco.', en: 'Lateral core: keeps the hip from dropping when running and rucking.' } },
+          { name: { es: 'Flexiones', en: 'Push-ups' }, sets: '2×15', load: { es: 'Peso corporal', en: 'Bodyweight' }, tip: { es: 'Mantiene la fuerza de empuje para el AFT.', en: 'Keeps pushing strength for the AFT.' } }
         ]
       },
-      calves: {
-        name: { en: 'Calves & Achilles', es: 'Pantorrillas y Tendón de Aquiles' },
-        why: { en: 'Repetitive running load concentrates heavily on the calves and Achilles. Critical for injury prevention.', es: 'La carga repetitiva de correr se concentra fuertemente en pantorrillas y tendón de Aquiles. Crítico para prevención de lesiones.' },
+      B: {
+        name: { es: 'Fuerza B · viernes (jueves en la semana 2)', en: 'Strength B · Friday (Thursday in week 2)' },
+        why: { es: 'Fuerza de una pierna, potencia para las cuestas, Aquiles y espalda alta para el chaleco.', en: 'Single-leg strength, hill power, Achilles and upper back for the vest.' },
         exercises: [
-          { name: 'Single-Leg Calf Raise (off step)', sets: '3×12-15/side', load: { en: 'Bodyweight → add weight', es: 'Peso corporal → agregar peso' }, tip: { en: 'Slow eccentric (3 sec down), full range of motion', es: 'Excéntrico lento (3 seg bajando), rango completo de movimiento' } },
-          { name: 'Seated Calf Raise', sets: '3×12', load: { en: 'Barbell on thighs or machine', es: 'Barra en muslos o máquina' }, tip: { en: 'Targets soleus — critical for endurance running', es: 'Activa sóleo — crítico para la carrera de resistencia' } },
-          { name: 'Ankle Hop (bilateral)', sets: '3×20', load: { en: 'Bodyweight only', es: 'Solo peso corporal' }, tip: { en: 'Stiff ankle, quick contact, train elastic energy storage', es: 'Tobillo rígido, contacto rápido, entrena almacenamiento de energía elástica' } }
-        ]
-      },
-      core: {
-        name: { en: 'Core & Running Posture', es: 'Core y Postura de Carrera' },
-        why: { en: 'A stable core reduces compensatory fatigue and energy leakage, especially in the second half of a run.', es: 'Un core estable reduce la fatiga compensatoria y la pérdida de energía, especialmente en la segunda mitad de la carrera.' },
-        exercises: [
-          { name: 'Dead Bug', sets: '3×8/side', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Lower back stays flat on floor throughout', es: 'La espalda baja permanece plana en el suelo todo el tiempo' } },
-          { name: 'Pallof Press', sets: '3×10/side', load: { en: 'Light resistance band or cable', es: 'Banda ligera o cable' }, tip: { en: 'Anti-rotation — do not let the band pull you', es: 'Anti-rotación — no dejes que la banda te jale' } },
-          { name: 'Plank with Hip Extension', sets: '3×30 sec', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Squeeze glute of lifted leg, hips stay level', es: 'Aprieta el glúteo de la pierna levantada, caderas a nivel' } },
-          { name: 'Copenhagen Plank', sets: '3×20 sec/side', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Adductor strength — prevents groin injuries', es: 'Fuerza de aductores — previene lesiones en la ingle' } }
-        ]
-      },
-      hipFlexors: {
-        name: { en: 'Hip Flexors & Quad Strength', es: 'Flexores de Cadera y Fuerza de Cuádriceps' },
-        why: { en: 'Weak hip flexors cause stride shortening under fatigue.', es: 'Los flexores de cadera débiles acortan la zancada bajo fatiga.' },
-        exercises: [
-          { name: 'Rear-Foot Elevated Split Squat (RFESS)', sets: '3×8-10/side', load: { en: 'Bodyweight → dumbbells', es: 'Peso corporal → mancuernas' }, tip: { en: 'Stay upright, front knee tracks over second toe', es: 'Mantente erguido, rodilla frontal sobre el segundo dedo del pie' } },
-          { name: 'Reverse Lunge', sets: '3×10/side', load: { en: 'Bodyweight → barbell or dumbbells', es: 'Peso corporal → barra o mancuernas' }, tip: { en: 'More glute-dominant than forward lunge', es: 'Más dominante de glúteos que la zancada hacia adelante' } },
-          { name: 'Lying Hip Flexor Raise', sets: '2×12/side', load: { en: 'Ankle weight (1-3 lb)', es: 'Peso en tobillo (0.5-1.5 kg)' }, tip: { en: 'Straight leg, controlled. Targets iliopsoas directly', es: 'Pierna recta, controlado. Activa el iliopsoas directamente' } }
-        ]
-      },
-      upperBody: {
-        name: { en: 'Upper Body & Arm Drive', es: 'Tren Superior y Propulsión de Brazos' },
-        why: { en: 'Arm drive generates ~10% of forward propulsion. Upper body strength helps maintain posture when fatigued.', es: 'La propulsión de brazos genera ~10% del avance. La fuerza del tren superior ayuda a mantener la postura bajo fatiga.' },
-        exercises: [
-          { name: 'Bent-Over Row', sets: '3×10', load: { en: 'Dumbbells or barbell — moderate', es: 'Mancuernas o barra — moderado' }, tip: { en: 'Retract scapulae, elbows close to body', es: 'Retrae las escápulas, codos cerca del cuerpo' } },
-          { name: 'Push-Up (strict)', sets: '3×12-15', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Full range, chest touches ground', es: 'Rango completo, pecho toca el suelo' } },
-          { name: 'Face Pull', sets: '3×15', load: { en: 'Light resistance band', es: 'Banda de resistencia ligera' }, tip: { en: 'Targets rear delts and external rotators — prevents shoulder rounding', es: 'Activa deltoides posterior y rotadores externos — previene el redondeo de hombros' } }
-        ]
-      },
-      mobility: {
-        name: { en: 'Mobility & Injury Prevention', es: 'Movilidad y Prevención de Lesiones' },
-        why: { en: 'Boot-specific: your ankle dorsiflexion is likely restricted by the boot shaft. This is the #1 compensatory injury risk.', es: 'Específico para botas: tu dorsiflexión de tobillo está restringida por el caño de la bota. Este es el riesgo #1 de lesión compensatoria.' },
-        exercises: [
-          { name: 'World\'s Greatest Stretch', sets: '5/side', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Hip flexor + thoracic rotation + hamstring in one movement', es: 'Flexor de cadera + rotación torácica + isquiotibial en un movimiento' } },
-          { name: 'Ankle Dorsiflexion Mobilization', sets: '2×10/side', load: { en: 'Bodyweight against wall', es: 'Peso corporal contra pared' }, tip: { en: 'Knee drives over pinky toe, heel stays down', es: 'La rodilla va sobre el meñique, talón abajo' } },
-          { name: 'Couch Stretch', sets: '2×45 sec/side', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Deep hip flexor stretch — counteracts boot and sitting tightness', es: 'Estiramiento profundo de flexor de cadera — contrarrestad la tensión de botas y sentarse' } },
-          { name: 'Banded Hip Distraction', sets: '2×30 sec/side', load: { en: 'Light resistance band', es: 'Banda de resistencia ligera' }, tip: { en: 'Decompresses hip joint — reduces hip clicking and tightness', es: 'Descomprime la articulación de la cadera — reduce chasquidos y tensión' } }
-        ]
-      },
-      power: {
-        name: { en: 'Plyometrics & Power', es: 'Pliometría y Potencia' },
-        why: { en: 'Trains tendon stiffness and explosive single-leg power — the "free energy return" behind an efficient stride. Best done on a day with no run scheduled, so tissue has full recovery time before the next session.', es: 'Entrena rigidez tendinosa y potencia explosiva a una pierna — el "retorno de energía gratis" detrás de una zancada eficiente. Mejor en un día sin carrera programada, para que el tejido tenga tiempo completo de recuperación.' },
-        exercises: [
-          { name: 'Pogo Hops', sets: '3×15-20', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Stiff ankles, minimal knee bend, quick ground contact', es: 'Tobillos rígidos, poca flexión de rodilla, contacto rápido con el suelo' } },
-          { name: 'Single-Leg Bounds', sets: '3×6/side', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Land soft, drive the opposite knee up and forward', es: 'Aterriza suave, impulsa la rodilla opuesta hacia arriba y adelante' } },
-          { name: 'Box Step-Up (explosive)', sets: '3×8/side', load: { en: 'Bodyweight → dumbbells', es: 'Peso corporal → mancuernas' }, tip: { en: 'Drive up fast off the lead leg, control the landing down', es: 'Impulsa rápido con la pierna delantera, controla el aterrizaje' } },
-          { name: 'Skater Hops', sets: '3×10/side', load: { en: 'Bodyweight', es: 'Peso corporal' }, tip: { en: 'Lateral power + landing stability — trains the plane running never does', es: 'Potencia lateral + estabilidad de aterrizaje — entrena el plano que correr nunca trabaja' } }
+          { name: { es: 'Sentadilla dividida con mancuernas', en: 'Dumbbell split squat' }, sets: '3×8 por pierna', load: { es: 'Mancuernas', en: 'Dumbbells' }, tip: { es: 'Fuerza de una pierna; corrige desbalances. Pasa a búlgara (pie atrás en el escalón) en la semana 3 si no hay molestias.', en: 'Single-leg strength; fixes imbalances. Move to Bulgarian (rear foot on step) in week 3 if pain-free.' } },
+          { name: { es: 'Subida al escalón con mancuerna', en: 'Dumbbell step-up' }, sets: '3×8 por pierna', load: { es: 'Mancuerna · escalón', en: 'Dumbbell · step' }, tip: { es: 'Potencia para las cuestas.', en: 'Power for the hills.' } },
+          { name: { es: 'Elevación de talón a una pierna, bajando lento', en: 'Single-leg calf raise, slow lowering' }, sets: '3×12', load: { es: 'Peso corporal · escalón', en: 'Bodyweight · step' }, tip: { es: 'Pantorrilla y tendón de Aquiles: absorben el impacto en las bajadas y en la marcha.', en: 'Calf and Achilles: absorb impact on downhills and rucks.' } },
+          { name: { es: 'Caminata lateral con banda', en: 'Banded lateral walk' }, sets: '3×12 pasos por lado', load: { es: 'Banda', en: 'Band' }, tip: { es: 'Glúteo medio: controla la rodilla (ayuda con el colapso medial del pie izquierdo).', en: 'Glute medius: knee control (helps the left foot medial collapse).' } },
+          { name: { es: 'Remo con mancuerna', en: 'Dumbbell row' }, sets: '3×10 por brazo', load: { es: 'Mancuerna', en: 'Dumbbell' }, tip: { es: 'Espalda alta: sostener el chaleco y la postura.', en: 'Upper back: carrying the vest and posture.' } },
+          { name: { es: 'Bicho muerto', en: 'Dead bug' }, sets: '3×8 por lado', load: { es: 'Peso corporal', en: 'Bodyweight' }, tip: { es: 'Core: protege la espalda baja con carga.', en: 'Core: protects the low back under load.' } }
         ]
       }
     };
 
-    // Which strength categories to include on which training day type. Rest days get real
-    // power/plyo work — tissue has full recovery time before the next run. Quality days
-    // (tempo/intervals) get nothing that pre-fatigues the legs.
-    const STRENGTH_SCHEDULE = {
-      easy:      ['glutes', 'core'],
-      tempo:     ['mobility'],
-      intervals: ['mobility'],
-      hill:      ['mobility'],
-      reps400:   ['mobility'],
-      long:      ['glutes', 'core', 'calves'],
-      rest:      ['power', 'glutes', 'core'],
-      race_sim:  ['mobility']
+    // Reads the plan line: "Luego fuerza A", "fuerza B en la tarde", "fuerza introductoria (sesión B a 2 series)".
+    function strengthForSession(session) {
+      const txt = String(session?.notes || '').toLowerCase();
+      if (!txt || !/fuerza/.test(txt)) return null;
+      const k = /fuerza\s+([ab])\b/.exec(txt) || /sesi[oó]n\s+([ab])\b/.exec(txt);
+      if (!k) return null;
+      const n = /a\s+(\d)\s+series/.exec(txt);
+      return { key: k[1].toUpperCase(), sets: n ? +n[1] : null };
+    }
+    // "3×8 por pierna" → "2×8 por pierna" when the line says "a 2 series".
+    const strengthSets = (sets, n) => {
+      let out = n ? String(sets).replace(/^\d+×/, n + '×') : String(sets);
+      if (getLang() !== 'es') out = out.replace(' pasos por lado', ' steps per side').replace(' por pierna', ' per leg').replace(' por lado', ' per side').replace(' por brazo', ' per arm');
+      return out;
     };
+    // Project rule: strength never the day before a quality session.
+    function strengthBeforeQuality(session) {
+      if (!session?.dateISO) return false;
+      const next = state.plan.find(p => p.dateISO === addDaysISO(session.dateISO, 1));
+      return !!next && ['tempo', 'intervals', 'race_sim'].includes(next.type);
+    }
 
-    // Blurb explaining WHY each day gets what it gets — shown on the compact daily card.
-    const STRENGTH_DAY_BLURB = {
-      easy:      { en: 'Keep it light — glutes + core. Building strength without adding leg fatigue.', es: 'Mantenlo ligero — glúteos + core. Construyes fuerza sin sumar fatiga de piernas.' },
-      tempo:     { en: 'Quality day — mobility only. Legs stay fresh for the effort that matters today.', es: 'Día de calidad — solo movilidad. Las piernas quedan frescas para el esfuerzo de hoy.' },
-      intervals: { en: 'Quality day — mobility only. Save real strength work for an easy/rest day.', es: 'Día de calidad — solo movilidad. Deja el trabajo de fuerza real para un día fácil/descanso.' },
-      hill:      { en: 'Hills already load the legs hard — mobility only today.', es: 'Las cuestas ya cargan bastante las piernas — solo movilidad hoy.' },
-      reps400:   { en: 'Speed day — mobility primer only, nothing that pre-fatigues the legs.', es: 'Día de velocidad — solo movilidad, nada que pre-fatigue las piernas.' },
-      long:      { en: 'After the long run: prevention work while tissue is warm, plus core. Skip power today.', es: 'Después de la larga: prevención con el tejido caliente, más core. Evita potencia hoy.' },
-      rest:      { en: 'Rest from running is the BEST day for real strength — power/plyo + glutes + core, full session.', es: 'El descanso de correr es el MEJOR día para fuerza real — potencia/pliometría + glúteos + core, sesión completa.' },
-      race_sim:  { en: 'Treat like race day — mobility primer only.', es: 'Trátalo como día de carrera — solo primer de movilidad.' }
-    };
-
-    // One category = title (+ optional "why") + a table: exercise (tap for technique) | sets×reps | load.
     function strengthTableHtml(catKey, opts) {
       opts = opts || {};
       const es = getLang() === 'es';
@@ -6705,7 +6856,7 @@
             <thead>
               <tr>
                 <th>${es ? 'Ejercicio' : 'Exercise'}</th>
-                <th>${es ? 'Series×Reps' : 'Sets×Reps'}</th>
+                <th>${es ? 'Series×Rep.' : 'Sets×Reps'}</th>
                 <th>${es ? 'Carga' : 'Load'}</th>
               </tr>
             </thead>
@@ -6714,59 +6865,61 @@
                 <tr>
                   <td style="font-size:11px;">
                     <details class="fc-details">
-                      <summary>${ex.name} <span style="color:var(--paper-dim);">▾</span></summary>
+                      <summary>${tr(ex.name)} <span style="color:var(--paper-dim);">▾</span></summary>
                       <div style="font-size:10px; color:var(--paper-dim); margin-top:4px; line-height:1.5;">→ ${tr(ex.tip)}</div>
                     </details>
                   </td>
-                  <td class="num-cell" style="white-space:nowrap; font-size:11px;">${ex.sets}</td>
-                  <td style="font-size:10px; color:var(--coyote-dim);">${tr(ex.load)}</td>
+                  <td class="num-cell" style="white-space:nowrap; font-size:11px;">${strengthSets(ex.sets, opts.sets)}</td>
+                  <td style="font-size:10px; color:var(--paper-dim);">${tr(ex.load)}</td>
                 </tr>`).join('')}
             </tbody>
           </table>
         </div>`;
     }
 
-    // Compact two-column table (top 2 exercises per category) for the weekly calendar.
-    function strengthCompactTable(cats) {
+    // Two-column table for the weekly calendar (all exercises of the routine).
+    function strengthCompactTable(cats, setsN) {
       const es = getLang() === 'es';
       return `
         <table class="splits-table">
-          <thead><tr><th>${es ? 'Ejercicio' : 'Exercise'}</th><th>${es ? 'Series×Reps' : 'Sets×Reps'}</th></tr></thead>
+          <thead><tr><th>${es ? 'Ejercicio' : 'Exercise'}</th><th>${es ? 'Series×Rep.' : 'Sets×Reps'}</th></tr></thead>
           <tbody>
             ${cats.map(k => {
               const c = STRENGTH_LIBRARY[k];
               if (!c) return '';
-              return `<tr><td colspan="2" style="color:var(--coyote-dim); font-size:9px; letter-spacing:1px; text-transform:uppercase; padding-top:6px;">${tr(c.name)}</td></tr>` +
-                c.exercises.slice(0, 2).map(e => `<tr><td style="font-size:11px;">${e.name}</td><td class="num-cell" style="white-space:nowrap; font-size:11px;">${e.sets}</td></tr>`).join('');
+              return c.exercises.map(e => `<tr><td style="font-size:11px;">${tr(e.name)}</td><td class="num-cell" style="white-space:nowrap; font-size:11px;">${strengthSets(e.sets, setsN)}</td></tr>`).join('');
             }).join('')}
           </tbody>
         </table>`;
     }
 
-    // Card used on Home (collapsed) and in the session detail / Strength tab (open): every exercise
-    // recommended for today's plan session type, as tables.
-    function renderStrengthRecCard(sessionType, open) {
+    const STRENGTH_RULES = {
+      es: '~25 min, esfuerzo 6–7 de 10: deja 2–3 repeticiones en reserva y nunca llegues al fallo.',
+      en: '~25 min, effort 6–7/10: leave 2–3 reps in reserve, never to failure.'
+    };
+
+    // Home (collapsed), session detail and Strength tab (open). Takes the plan SESSION, not a type.
+    function renderStrengthRecCard(session, open) {
       const es = getLang() === 'es';
-      const cats = STRENGTH_SCHEDULE[sessionType] || STRENGTH_SCHEDULE.easy;
-      const blurb = STRENGTH_DAY_BLURB[sessionType] || STRENGTH_DAY_BLURB.easy;
-      if (!cats.length) return '';
-      const total = cats.reduce((n, k) => n + (STRENGTH_LIBRARY[k] ? STRENGTH_LIBRARY[k].exercises.length : 0), 0);
+      const r = strengthForSession(session);
+      if (!r || !STRENGTH_LIBRARY[r.key]) return '';
+      const total = STRENGTH_LIBRARY[r.key].exercises.length;
+      const warn = strengthBeforeQuality(session);
       return `
-        <div class="card" style="border-left:3px solid var(--olive-bright);">
+        <div class="card" style="border-left:3px solid ${warn ? 'var(--rust-bright)' : 'var(--olive-bright)'};">
           <details class="fc-details" ${open ? 'open' : ''}>
             <summary style="display:flex; justify-content:space-between; align-items:center;">
-              <span class="card-title" style="margin:0;">💪 ${es ? 'FUERZA DE HOY' : "TODAY'S STRENGTH"}</span>
-              <span style="font-size:9px; color:var(--paper-dim);">${total} ${es ? 'ejercicios' : 'exercises'} ▾</span>
+              <span class="card-title" style="margin:0;">${es ? 'FUERZA ' : 'STRENGTH '}${r.key}${r.sets ? (es ? ` · ${r.sets} SERIES` : ` · ${r.sets} SETS`) : ''}</span>
+              <span style="font-size:10px; color:var(--paper-dim);">${total} ${es ? 'ejercicios' : 'exercises'} ▾</span>
             </summary>
-            <p style="font-size:11px; color:var(--paper-dim); margin:8px 0 2px; line-height:1.4;">${blurb[es ? 'es' : 'en']}</p>
-            ${cats.map(k => strengthTableHtml(k)).join('')}
-            <div style="text-align:right; margin-top:8px;"><span style="font-size:10px; color:var(--coyote); cursor:pointer;" onclick="switchView('strength')">${es ? 'ver biblioteca →' : 'see library →'}</span></div>
+            ${warn ? `<p style="font-size:11px; color:var(--rust-bright); margin:8px 0 2px; line-height:1.4;">${es ? '⚠ Mañana hay sesión de calidad: la fuerza nunca va el día antes. Muévela.' : '⚠ Quality session tomorrow: strength never goes the day before. Move it.'}</p>` : ''}
+            <p style="font-size:11px; color:var(--paper-dim); margin:8px 0 2px; line-height:1.4;">${STRENGTH_RULES[es ? 'es' : 'en']}</p>
+            ${strengthTableHtml(r.key, { sets: r.sets })}
+            <div style="text-align:right; margin-top:8px;"><span style="font-size:10px; color:var(--coyote); cursor:pointer;" onclick="switchView('strength')">${es ? 'ver rutinas A y B →' : 'see routines A and B →'}</span></div>
           </details>
         </div>`;
     }
 
-    // Dedicated STRENGTH tab: today's complement up top, full browsable library below with
-    // category filter chips.
     let strengthFilter = 'all';
     function setStrengthFilter(cat) { strengthFilter = cat; render(); }
 
@@ -6774,31 +6927,35 @@
       const es = getLang() === 'es';
       const today = todayISO();
       const todaySess = state.plan.find(s => s.dateISO === today);
+      const todayCard = todaySess ? renderStrengthRecCard(todaySess, true) : '';
+      const nextSess = state.plan.filter(s => s.dateISO > today && strengthForSession(s)).sort((a, b) => a.dateISO.localeCompare(b.dateISO))[0];
+      const nextR = nextSess ? strengthForSession(nextSess) : null;
+      const fmtDay = (iso) => parseISODateLocal(iso).toLocaleDateString(es ? 'es-PR' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short' });
       const activeFilter = strengthFilter || 'all';
       const catKeys = Object.keys(STRENGTH_LIBRARY);
       const filtered = activeFilter === 'all' ? catKeys : catKeys.filter(k => k === activeFilter);
 
       return `
         <div class="view-container">
-          <div class="sitrep-label">${es ? 'BIBLIOTECA DE FUERZA PARA CORREDORES' : 'STRENGTH LIBRARY FOR RUNNERS'}</div>
+          <div class="sitrep-label">${es ? 'FUERZA · RUTINAS A Y B' : 'STRENGTH · ROUTINES A AND B'}</div>
 
-          ${todaySess ? renderStrengthRecCard(todaySess.type, true) : ''}
+          ${todayCard || `<div class="card"><p style="font-size:12px; color:var(--paper-dim);">${es ? 'Hoy no toca fuerza.' : 'No strength today.'}${nextR ? (es ? ` Próxima: <strong style="color:var(--paper);">${fmtDay(nextSess.dateISO)} · fuerza ${nextR.key}${nextR.sets ? ` (${nextR.sets} series)` : ''}</strong>.` : ` Next: <strong style="color:var(--paper);">${fmtDay(nextSess.dateISO)} · strength ${nextR.key}</strong>.`) : ''}</p></div>`}
 
           <div style="display:flex; gap:6px; overflow-x:auto; margin:14px 0 4px; padding-bottom:4px;">
-            <button class="btn-small" style="white-space:nowrap; ${activeFilter==='all'?'border-color:var(--coyote);color:var(--coyote);':''}" onclick="setStrengthFilter('all')">${es?'Todos':'All'}</button>
+            <button class="btn-small" style="white-space:nowrap; ${activeFilter==='all'?'border-color:var(--coyote);color:var(--coyote);':''}" onclick="setStrengthFilter('all')">${es?'Ambas':'Both'}</button>
             ${catKeys.map(k => `
-              <button class="btn-small" style="white-space:nowrap; ${activeFilter===k?'border-color:var(--coyote);color:var(--coyote);':''}" onclick="setStrengthFilter('${k}')">${tr(STRENGTH_LIBRARY[k].name)}</button>
+              <button class="btn-small" style="white-space:nowrap; ${activeFilter===k?'border-color:var(--coyote);color:var(--coyote);':''}" onclick="setStrengthFilter('${k}')">${es ? 'Fuerza ' : 'Strength '}${k}</button>
             `).join('')}
           </div>
 
           ${filtered.map(key => `<div class="card" style="margin-bottom:10px;">${strengthTableHtml(key, { why: true })}</div>`).join('')}
 
           <div class="card" style="background:rgba(61,90,31,0.1); border-color:var(--olive);">
-            <div class="card-title">${es?'PROTOCOLO SEMANAL DE FUERZA':'WEEKLY STRENGTH PROTOCOL'}</div>
+            <div class="card-title">${es?'REGLAS':'RULES'}</div>
             <p style="font-size:12px; color:var(--paper); line-height:1.6;">
               ${es
-                ? '2 sesiones de fuerza por semana. La recomendación "Fuerza de Hoy" ya ajusta qué categoría toca según tu sesión del plan — ligera en días de calidad, completa (con potencia) en descanso. Toca el nombre de un ejercicio para ver la técnica. Progresión: cuando completes todas las series con buena forma, sube la carga un paso; si la forma se rompe, baja.'
-                : '2 strength sessions per week. The "Today Strength" pick already adjusts which category fits your plan session — light on quality days, full (with power work) on rest days. Tap an exercise name for technique. Progression: when you complete all sets with good form, increase the load one step; if form breaks down, drop it.'}
+                ? `2 sesiones por semana. ${STRENGTH_RULES.es} Ninguna va el día antes de una sesión de calidad. <strong>Progresión:</strong> primero subes repeticiones (hasta el tope del rango) o haces la bajada más lenta; después subes el peso. En la semana 1 es normal un dolor muscular leve. Toca el nombre de un ejercicio para ver para qué sirve.`
+                : `2 sessions a week. ${STRENGTH_RULES.en} Never the day before a quality session. <strong>Progression:</strong> first add reps (to the top of the range) or slow the lowering; then add weight. Mild soreness in week 1 is normal. Tap an exercise for its purpose.`}
             </p>
           </div>
         </div>`;
@@ -7104,7 +7261,7 @@
                 <div style="background:${d.isToday ? 'rgba(201,169,97,0.1)' : 'var(--field-dark)'}; border:1px solid ${d.isToday ? 'var(--coyote)' : 'var(--field-line)'}; border-bottom: 3px solid ${color}; padding:8px 4px;">
                   <div style="font-family:var(--font-display); font-size:18px; color:${d.isToday ? 'var(--coyote)' : 'var(--paper)'};">${d.dayNum}</div>
                   <div style="font-family:var(--font-mono); font-size:8px; color:${color}; letter-spacing:0.3px; margin-top:2px;">
-                    ${d.session ? SESSION_TAGS[d.session.type] : '—'}
+                    ${d.session ? sessionTag(d.session) : '—'}
                   </div>
                   ${done ? '<div style="font-size:8px; color:var(--olive-bright);">✓</div>' : (d.activity ? '<div style="font-size:8px; color:var(--signal-blue);">↑</div>' : '<div style="height:10px;"></div>')}
                 </div>
@@ -7115,7 +7272,8 @@
           <!-- DAY DETAILS -->
           ${weekDays.map(d => {
             if (!d.session) return '';
-            const strength = STRENGTH_SCHEDULE[d.session.type] || [];
+            const sr = strengthForSession(d.session);
+            const strength = sr ? [sr.key] : [];
             const isToday = d.isToday;
             return `
               <div style="margin-bottom:14px;">
@@ -7123,10 +7281,10 @@
                 <div class="session-card ${d.session.completed ? 'completed' : ''}" onclick="openSessionDetail(${d.session.day})" style="margin-bottom:6px;">
                   <div class="session-header">
                     <div class="session-left">
-                      <span class="session-tag">${SESSION_TAGS[d.session.type]}</span>
+                      <span class="session-tag">${sessionTag(d.session)}</span>
                       <div class="session-info">
                         <h3>${sessionTitle(d.session)}</h3>
-                        <p>${d.session.paceGuide} · ${d.session.dist}</p>
+                        <p>${(() => { const h = sessionHeadline(d.session); return [h.big, h.small].filter(x => x && x !== '—').join(' · ') || '—'; })()}</p>
                       </div>
                     </div>
                     ${d.session.completed ? `<div class="badge">${t('badge_done')}</div>` : ''}
@@ -7136,9 +7294,9 @@
                 ${strength.length > 0 ? `
                   <div style="background:var(--field-surface); border:1px solid var(--field-line); border-left:3px solid var(--coyote-dim); padding:10px 12px;">
                     <div style="font-family:var(--font-mono); font-size:9px; color:var(--coyote-dim); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
-                      💪 ${getLang()==='es'?'FUERZA COMPLEMENTARIA':'STRENGTH COMPLEMENT'}
+                      💪 ${getLang()==='es'?'FUERZA ':'STRENGTH '}${sr ? sr.key : ''}${sr && sr.sets ? (getLang()==='es' ? ` · ${sr.sets} series` : ` · ${sr.sets} sets`) : ''}
                     </div>
-                    ${strengthCompactTable(strength)}
+                    ${strengthCompactTable(strength, sr && sr.sets)}
                   </div>
                 ` : ''}
               </div>
@@ -7146,8 +7304,8 @@
           }).join('')}
 
           <div class="card" style="cursor:pointer; text-align:center;" onclick="switchView('strength')">
-            <div style="font-size:13px; color:var(--coyote); font-weight:600;">💪 ${getLang()==='es'?'Ver Biblioteca de Fuerza completa':'View full Strength Library'}</div>
-            <p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">${getLang()==='es'?'Todos los ejercicios por categoría, con recomendación del día':'All exercises by category, with the days recommendation'}</p>
+            <div style="font-size:13px; color:var(--coyote); font-weight:600;">💪 ${getLang()==='es'?'Ver rutinas de fuerza A y B':'View strength routines A and B'}</div>
+            <p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">${getLang()==='es'?'Con series, carga y para qué sirve cada ejercicio':'With sets, load and purpose of each exercise'}</p>
           </div>
 
         </div>`;
@@ -7690,7 +7848,7 @@
     // ── CONTEXT SECTION ────────────────────────────────────────────────────
     function renderStatsContext() {
       const today = todayISO();
-      const daysLeft = Math.max(0, Math.round((new Date(state.profile?.raceDateISO || todayISO()).getTime() - new Date().getTime()) / 86400000));
+      const daysLeft = daysUntil(state.profile?.raceDateISO || todayISO());
       const completed = state.plan.filter(s => s.completed).length;
       const total = state.plan.filter(s => !s.isRest).length;
       
@@ -8047,7 +8205,7 @@
 
     function generateContextBlock() {
       const today = todayISO();
-      const daysLeft = Math.max(0, Math.round((new Date(state.profile?.raceDateISO || todayISO()).getTime() - new Date().getTime()) / 86400000));
+      const daysLeft = daysUntil(state.profile?.raceDateISO || todayISO());
       const completed = state.plan.filter(s => s.completed).length;
       const total = state.plan.filter(s => !s.isRest).length;
       
@@ -9876,18 +10034,29 @@
     }
 
     // ═══ GARMIN .FIT WORKOUT EXPORT ═══
+    // Short ASCII workout name for the watch list, e.g. "Sostenido 29/10", "Cuestas 2/11".
+    function fitWorkoutName(s) {
+      const txt = String(s.notes || '').toLowerCase();
+      const [, mm, dd] = String(s.dateISO).split('-').map(Number);
+      const kind = s.type === 'tempo' ? (/espec[ií]fico|recorrido/.test(txt) ? 'Recorrido' : 'Sostenido')
+        : s.type === 'intervals' ? (/cuesta/.test(txt) ? 'Cuestas' : 'Interv')
+        : s.type === 'long' ? 'Larga' : s.type === 'easy' ? 'Facil'
+        : (/chaleco|caminata/.test(txt) ? 'Marcha' : 'Sesion');
+      return `${kind} ${dd}/${mm}`;
+    }
     function exportSessionToGarmin(day) {
       const s = state.plan.find(p => p.day === day);
       if (!s || s.type === 'rest') return;
       try {
         const lthr = state.profile?.lthr || 174;
         const steps = generateStructuredSteps(s, lthr);
-        const fitBytes = buildFitWorkout({ name: sessionTitle(s), steps });
+        if (!steps.length || steps.planParsed === 'approx' || steps.planParsed === 'none') { showToast(getLang()==='es' ? 'Esta sesión no tiene pasos exactos para el reloj.' : 'No exact steps for the watch.'); return; }
+        const fitBytes = buildFitWorkout({ name: s.notes ? fitWorkoutName(s) : sessionTitle(s), steps });
         const blob = new Blob([fitBytes], { type: 'application/octet-stream' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Day${s.day}-${s.type}.fit`;
+        a.download = s.notes ? `FitCoach_${s.dateISO}_${fitAscii(fitWorkoutName(s).split(' ')[0]).toLowerCase()}.fit` : `Day${s.day}-${s.type}.fit`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -10718,7 +10887,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.10.27-2';
+    const APP_BUILD = '2026.10.28-1';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
