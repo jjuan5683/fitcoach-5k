@@ -1117,48 +1117,6 @@
     details.fc-details > summary::-webkit-details-marker { display: none; }
     .steps-table td { vertical-align: top; }
     @media (max-width: 420px) { nav button { font-size: 8px; letter-spacing: 0.3px; } }
-    /* ── Visual pack 2026.10.28-2 ───────────────────────────────────── */
-    .status-chip { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.5px; border: 1px solid; padding: 3px 7px; white-space: nowrap; flex-shrink: 0; }
-    .ready-dot { display: inline-block; width: 14px; height: 14px; border-radius: 50%; }
-    .ready-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 10px; }
-    .ready-field { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--paper-dim); }
-    .ready-field input { width: 100%; padding: 8px 6px; font-size: 14px; text-align: center; }
-    @media (max-width: 360px) { .ready-grid { grid-template-columns: repeat(2, 1fr); } }
-    .grit-ring-arc { transition: stroke-dasharray 0.8s ease; }
-    .grit-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; align-items: end; }
-    .grit-bar-col { display: flex; flex-direction: column; align-items: center; }
-    .grit-bar-wrap { position: relative; width: 100%; max-width: 22px; }
-    .grit-bar-fill { position: absolute; left: 0; right: 0; border-radius: 2px 2px 0 0; transition: height 0.6s ease; }
-    .grit-bar-plan { position: absolute; left: 0; right: 0; bottom: 0; border: 1px dashed var(--paper-dim); border-radius: 2px; }
-    .grit-bar-lbl { font-family: var(--font-mono); font-size: 9px; color: var(--paper-dim); margin-top: 3px; }
-    .lg-sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
-    .ladder { display: flex; flex-wrap: wrap; gap: 4px; }
-    .ladder-step { font-family: var(--font-mono); font-size: 11px; padding: 4px 8px; border: 1px solid var(--field-line); color: var(--paper-dim); }
-    .ladder-step.ok { border-color: var(--olive-bright); color: var(--olive-bright); }
-    .ladder-step.cur { border-color: var(--coyote); color: var(--coyote); background: rgba(201,169,97,0.12); font-weight: 700; }
-    .hm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-    .hm-hdr { font-family: var(--font-mono); font-size: 9px; color: var(--paper-dim); text-align: center; }
-    .hm-cell { aspect-ratio: 1 / 1; border-radius: 4px; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; }
-    .hm-empty { background: transparent !important; border: none !important; cursor: default; }
-    .hm-day { font-family: var(--font-mono); font-size: 10px; color: var(--paper); }
-    .hm-mi { font-family: var(--font-mono); font-size: 9px; color: var(--paper); opacity: 0.9; }
-    .zone-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--field-surface); }
-    .mf-details > summary { list-style: none; }
-    .celebrate { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); z-index: 9999; animation: celFade 2.8s ease forwards; }
-    .celebrate-box { text-align: center; animation: celPop 0.6s cubic-bezier(.2,1.6,.4,1) both; }
-    .celebrate-icon { font-size: 72px; }
-    .celebrate-text { font-family: var(--font-display); font-size: 22px; color: var(--coyote); margin-top: 8px; letter-spacing: 1px; }
-    @keyframes celPop { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-    @keyframes celFade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
-    @media (prefers-reduced-motion: reduce) { .celebrate, .celebrate-box, .grit-ring-arc, .grit-bar-fill { animation: none !important; transition: none !important; } }
-    /* High contrast + larger text for outdoor use */
-    body.hc { --paper-dim: #cfccbd; --field-line: #555c48; }
-    body.hc [style*="font-size:8px"], body.hc [style*="font-size: 8px"] { font-size: 11px !important; }
-    body.hc [style*="font-size:9px"], body.hc [style*="font-size: 9px"] { font-size: 12px !important; }
-    body.hc [style*="font-size:10px"], body.hc [style*="font-size: 10px"] { font-size: 12px !important; }
-    body.hc [style*="font-size:11px"], body.hc [style*="font-size: 11px"] { font-size: 13px !important; }
-    body.hc .session-tag, body.hc .stat-box .label, body.hc .clock-stat-label, body.hc .sitrep-label, body.hc .status-chip, body.hc nav button { font-size: 11px !important; }
-    body.hc .alt-meta, body.hc .session-info p { font-size: 13px !important; }
     /* 2026.10.28: example text must not look like a filled value */
     input::placeholder, textarea::placeholder { color: var(--paper-dim); opacity: .55; font-style: italic; }
   </style>
@@ -1181,7 +1139,6 @@
       injuries: [], // [{ id, dateISO, bodyPart, severity, description, resolved, resolvedDateISO }]
       // Shoes/boots. Mileage = baseMi (Garmin total as of baseAsOfISO) + sessions assigned after that date.
       gear: [], // [{ id, name, kind:'shoe'|'boot', uses:[...], baseMi, baseAsOfISO, limitMi, retired }]
-      readiness: {}, // { 'YYYY-MM-DD': { sleep, hrv, rhr, heat, pain, sick } } — "¿salgo hoy?" check
       settings: {
         lang: 'en',
         lastGearId: null,      // remembered so the next imported activity is prefilled with it
@@ -1213,7 +1170,6 @@
     let onboardingData = {};
     let detailOverlay = null; // { type: 'session'|'activity', id: ... }
     let mdModalContent = null;
-    let _mfDetailsFor = null, _mfDetailsOpen = false; // collapsible manual-data block in activity detail
     let mdModalKind = 'report'; // 'report' | 'app' — which Markdown flavour the modal shows
     let activitySplitUnit = 'mi';
     let manualSessionFormOpen = false;
@@ -1489,32 +1445,12 @@
       if (!act.manualFields) act.manualFields = {};
       const mf = act.manualFields;
       if (!mf.hrSource) mf.hrSource = /instinct 2/i.test(act.activityName || '') ? 'optical' : (state.settings.lastHrSource || 'hrm600');
-      const rd = (state.readiness || {})[act.dateISO];
-      if (rd) {
-        if (!mf.sleepHours && rd.sleep) mf.sleepHours = String(rd.sleep);
-        if (!mf.hrv && rd.hrv) mf.hrv = String(rd.hrv);
-        if (!mf.restingHR && rd.rhr) mf.restingHR = String(rd.rhr);
-      }
       if (!mf.gearId && state.settings.lastGearId && gearById(state.settings.lastGearId) && !gearById(state.settings.lastGearId).retired) {
         mf.gearId = state.settings.lastGearId;
         mf.gearAuto = true;
       }
     }
     ensureGear(); // after the gear constants above are initialised
-    // One-time correction (28-oct-2026) with the athlete's confirmed data: 10K personal goal 55:00
-    // (app had 60:28), valid 5K 31:06 (app had 30:30), 179 lb, Dec-13 race NOT in boots.
-    (function ensureProfileFix20261028() {
-      const p = state.profile;
-      if (!p || state.settings.profileFix20261028) return;
-      if (p.goalRaceSec === 3628) p.goalRaceSec = 3300;
-      (p.races || []).forEach(r => { if (r.goalSec === 3628) r.goalSec = 3300; if (r.dateISO === '2026-12-13') r.inBoots = false; });
-      if (p.raceDateISO === '2026-12-13') p.raceInBoots = false;
-      if (p.currentFiveKSec === 1830) p.currentFiveKSec = 1866;
-      if (p.weightLb === 181) p.weightLb = 179;
-      if (!state.readiness) state.readiness = {};
-      state.settings.profileFix20261028 = true;
-      saveState();
-    })();
 
     let _quotaWarned = false;
     function saveState() {
@@ -1595,10 +1531,13 @@
       return Math.max(0, Math.round((new Date(y, m - 1, d) - t0) / 86400000));
     };
 
+    // Round to whole seconds BEFORE splitting into m:ss — rounding only the seconds part printed
+    // 839.6 s as "13:60/mi" instead of "14:00/mi".
     const fmtPace = (spm) => {
       if (!spm || spm <= 0) return '—';
-      const m = Math.floor(spm / 60);
-      const s = Math.round(spm % 60).toString().padStart(2, '0');
+      const r = Math.round(spm);
+      const m = Math.floor(r / 60);
+      const s = (r % 60).toString().padStart(2, '0');
       return `${m}:${s}/mi`;
     };
 
@@ -1616,13 +1555,6 @@
         const txt = String(s.notes || '').toLowerCase();
         if (/chaleco|caminata/.test(txt)) return getLang() === 'es' ? 'MARCHA' : 'RUCK';
         if (/fuerza/.test(txt)) return getLang() === 'es' ? 'FZA' : 'STR';
-      }
-      if (getLang() === 'es') {
-        const txt = String(s.notes || '').toLowerCase();
-        if (/recorrido de la carrera/.test(txt)) return 'CARRERA';
-        if (s.type === 'intervals' && /cuesta/.test(txt)) return 'CUESTAS';
-        const ES = { easy: 'FÁCIL', tempo: 'RITMO', intervals: 'INTERV', long: 'LARGA', race_sim: 'SIMUL', rest: 'DESC', cross_training: 'CRUZ' };
-        if (ES[s.type]) return ES[s.type];
       }
       return SESSION_TAGS[s.type] || String(s.type || '—').toUpperCase();
     }
@@ -1951,8 +1883,9 @@
 
     const fmtPaceNoUnit = (spm) => {
       if (!spm || spm <= 0) return '—';
-      const m = Math.floor(spm / 60);
-      const s = Math.round(spm % 60).toString().padStart(2, '0');
+      const r = Math.round(spm);
+      const m = Math.floor(r / 60);
+      const s = (r % 60).toString().padStart(2, '0');
       return `${m}:${s}`;
     };
 
@@ -2149,13 +2082,7 @@
     };
 
     const ZONE_COLORS = { 1: '#3d6b8a', 2: '#5a8530', 3: '#d4942e', 4: '#c9a961', 5: '#a8453a' };
-    const ZONE_LABELS = {
-      get 1() { return getLang() === 'es' ? 'Z1 RECUPERACIÓN' : 'Z1 RECOVERY'; },
-      get 2() { return getLang() === 'es' ? 'Z2 AERÓBICA' : 'Z2 AEROBIC'; },
-      get 3() { return getLang() === 'es' ? 'Z3 ZONA GRIS' : 'Z3 GREY ZONE'; },
-      get 4() { return getLang() === 'es' ? 'Z4 UMBRAL' : 'Z4 THRESH'; },
-      get 5() { return getLang() === 'es' ? 'Z5 MÁXIMO' : 'Z5 MAX'; }
-    };
+    const ZONE_LABELS = { 1: 'Z1 RECOVERY', 2: 'Z2 AEROBIC', 3: 'Z3 TEMPO', 4: 'Z4 THRESH', 5: 'Z5 MAX' };
     const ZONE_OBJECTIVES = {
       1: { en: 'Active recovery, warm-up and cool-down', es: 'Recuperación activa, calentamiento y enfriamiento' },
       2: { en: 'Aerobic base building and cardiovascular efficiency', es: 'Construcción de base aeróbica y eficiencia cardiovascular' },
@@ -2469,7 +2396,11 @@
     }
 
     function calcAerobicDecoupling(splits) {
-      const usable = (splits || []).filter(sp => sp.avgHR != null && sp.avgHR > 0 && sp.paceSecPerUnit > 0);
+      let usable = (splits || []).filter(sp => sp.avgHR != null && sp.avgHR > 0 && sp.paceSecPerUnit > 0);
+      // Mile 1 is warm-up: HR is still climbing, so it inflates the first-half efficiency and
+      // overstates decoupling. Drop it whenever at least 3 full miles remain (project rule).
+      const excludedFirst = usable.filter(sp => !sp.partial).length >= 4;
+      if (excludedFirst) usable = usable.slice(1);
       if (usable.length < 2) {
         return { value: null, valid: false, reasonEs: 'datos insuficientes', reasonEn: 'insufficient data' };
       }
@@ -2491,7 +2422,7 @@
       const valid = value != null && elevSkewM <= 30;
 
       return {
-        value, valid, elevSkewM: Math.round(elevSkewM),
+        value, valid, elevSkewM: Math.round(elevSkewM), excludedFirstMile: excludedFirst,
         avgHRFirst: Math.round(avgHR1), avgPaceFirst: avgPace1,
         avgHRSecond: Math.round(avgHR2), avgPaceSecond: avgPace2,
         reasonEs: valid ? null : `perfil de elevación asimétrico (${Math.round(elevSkewM)} m de diferencia neta entre mitades)`,
@@ -3020,13 +2951,24 @@
     }
 
     // ── Automatic evaluation based on parsed data ──
-    function calcAutoEvaluation(analysis, recentSessions) {
-      const { cardiacDrift, pacingConsistency, timeInZones, sessionScore, decouplingValid } = analysis;
+    function calcAutoEvaluation(analysis, recentSessions, sessionType) {
+      let { cardiacDrift, pacingConsistency, timeInZones, sessionScore, decouplingValid } = analysis;
       const fatigue = recentSessions?.signal;
+      const intent = ZONE_INTENT[normalizeSessionType(sessionType)] || null;
+      const quality = intent === 'threshold' || intent === 'maximal';
 
       // A decoupling number the elevation guard rejected carries no information about the
       // athlete, so treat it as absent rather than as evidence of fatigue.
-      const aerobicDecouplingPct = decouplingValid ? analysis.aerobicDecouplingPct : null;
+      let aerobicDecouplingPct = decouplingValid ? analysis.aerobicDecouplingPct : null;
+      // Structured session: judge the work block, never the warm-up + walks blend.
+      const seg = analysis.workSegment && analysis.workSegment.main;
+      if (seg) {
+        aerobicDecouplingPct = seg.decoupling && seg.decoupling.valid ? seg.decoupling.value : null;
+        cardiacDrift = seg.drift ? { driftPct: seg.drift.pct } : null;
+        pacingConsistency = seg.cvPct != null ? { cvPct: seg.cvPct } : pacingConsistency;
+      } else if (analysis.cardiacDriftValid === false) {
+        cardiacDrift = null;
+      }
 
       // Aerobic state
       let aerobicState = 'Aceptable';
@@ -3066,7 +3008,430 @@
       else if (recovery === '48 horas' || recovery === '72 horas') nextSession = 'Recuperación';
       else if (aerobicState === 'Excelente' && z4z5pct < 15) nextSession = 'Tempo';
 
+      // Quality day (tempo / intervals / hills): the time above threshold IS the workout, so it
+      // can't be read as overload. Project rule: 48 h before the next quality session, Z2 or rest
+      // in between; 72 h only with a real fatigue signal.
+      if (quality) {
+        const realFatigue = fatigue === 'high_fatigue' || (aerobicDecouplingPct != null && aerobicDecouplingPct > 12);
+        recovery = realFatigue ? '72 horas' : '48 horas antes de la próxima calidad';
+        nextSession = realFatigue ? 'Descanso o Z2 muy suave' : 'Z2 suave, descanso o fuerza (no calidad)';
+        if (aerobicState === 'Fatigado' && !realFatigue) aerobicState = 'Aceptable';
+      }
+
       return { aerobicState, consistencyLabel, driftInterp, recovery, nextSession };
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // STRUCTURED-SESSION ANALYSIS (2026.10.29)
+    // A tempo or interval session is warm-up + strides + work + cool-down. Judging the whole
+    // file as one effort (total distance / total time, zones over 50 min, decoupling across
+    // walk breaks) graded a well-executed calibration tempo as "F". The watch already records
+    // one lap per workout step, so the plan day tells us which laps are the work.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function buildTrace5(points, altMap) {
+      const v = [];
+      (points || []).forEach((p, i) => { if (p.time != null) v.push({ p, i }); });
+      if (v.length < 10) return null;
+      const t0 = v[0].p.time;
+      const firstD = v.find(x => x.p.dist != null);
+      const d0 = firstD ? firstD.p.dist : 0;
+      const end = (v[v.length - 1].p.time - t0) / 1000;
+      const hr = [], d = [], cad = [], alt = [];
+      let j = 0, lastD = 0;
+      for (let t = 0; t <= end; t += 5) {
+        const target = t0 + t * 1000;
+        while (j < v.length - 1 && v[j + 1].p.time <= target) j++;
+        const { p, i } = v[j];
+        const stale = target - p.time > 10000;          // paused / no data
+        if (p.dist != null) lastD = Math.round(p.dist - d0);
+        hr.push(!stale && p.hr > 0 ? Math.round(p.hr) : 0);
+        d.push(lastD);
+        cad.push(!stale && p.cadence > 0 ? Math.round(p.cadence) : 0);
+        const a = altMap && altMap.has(i) ? altMap.get(i) : p.alt;
+        alt.push(a != null && !isNaN(a) ? Math.round(a * 10) / 10 : null);
+      }
+      return { step: 5, hr, d, cad, alt };
+    }
+
+    // Uniform sample list for an activity: the 5-s trace when present, otherwise the 15-s
+    // export series every stored session already has (sessions imported before this version).
+    function sessionSamples(act) {
+      const a = act?.analysis || {};
+      const tr = a.trace5;
+      if (tr && Array.isArray(tr.hr) && tr.hr.length) {
+        return { step: tr.step || 5, list: tr.hr.map((h, i) => ({ t: i * (tr.step || 5), d: tr.d[i], hr: h, cad: tr.cad ? tr.cad[i] : 0, alt: tr.alt ? tr.alt[i] : null })) };
+      }
+      const s = a.advanced?.series;
+      if (Array.isArray(s) && s.length) {
+        return { step: 15, list: s.map(r => ({ t: r.tSec, d: (r.distMi || 0) * 1609.344, hr: r.hr || 0, cad: r.cad || 0, alt: r.altFt != null ? r.altFt / 3.28084 : null })) };
+      }
+      return null;
+    }
+
+    function lapTimeline(act) {
+      let cum = 0;
+      return (act.laps || []).map((l, i) => {
+        const start = l.startOffsetSec != null ? l.startOffsetSec : cum;
+        cum = start + (l.totalTimeSec || 0);
+        // Pace = lap time / lap distance (what the watch shows), not the mean of instantaneous speeds.
+        const pace = l.distanceMeters > 0 && l.totalTimeSec > 0 ? l.totalTimeSec / (l.distanceMeters / 1609.344) : (l.avgPaceSecPerMi || 0);
+        return { idx: i, lap: l, start, end: start + (l.totalTimeSec || 0), dur: l.totalTimeSec || 0, distM: l.distanceMeters || 0, avgHR: l.avgHR || 0, maxHR: l.maxHR || 0, pace };
+      });
+    }
+
+    // Planned structure for a tempo day, read from the same step generator that builds the
+    // watch workout — one source of truth for "what the session was".
+    function plannedTempoStructure(session, lthr) {
+      if (!session || normalizeSessionType(session.type) !== 'tempo') return null;
+      let steps;
+      try { steps = generateStructuredSteps(session, lthr); } catch (e) { return null; }
+      if (!steps || steps.planParsed !== 'exact') return null;
+      const ars = steps.find(s => s.fitName === 'RS arranque');
+      const main = steps.find(s => s.fitName === 'Ritmo sostenido');
+      if (!main) return null;
+      const txt = String(session.notes || '').toLowerCase();
+      const m = /(\d+)(?:\s*a\s*(\d+))?\s*min\s+a\s+fc/.exec(txt);
+      const workLo = m ? +m[1] * 60 : (ars ? ars.durationValue : 0) + main.durationValue;
+      const workHi = m && m[2] ? +m[2] * 60 : workLo;
+      return {
+        arranqueSec: ars ? ars.durationValue : 0,
+        arranquePaceFast: ars ? Math.round(1609.344 / ars.targetHigh) : null,
+        arranquePaceSlow: ars ? Math.round(1609.344 / ars.targetLow) : null,
+        workLoSec: workLo, workHiSec: workHi,
+        bandLo: main.targetLow, bandHi: main.targetHigh,
+        steps
+      };
+    }
+
+    // Statistics for one time window of the sample list.
+    function analyzeWindow(samples, from, to, lthr, bandLo, bandHi) {
+      const L = samples.list.filter(s => s.t >= from && s.t <= to);
+      if (L.length < 3) return null;
+      const f = zoneFloors(lthr);
+      const zs = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      let bandSec = 0, aboveSec = 0, run = 0, longest = 0, walkSec = 0, tot = 0, hrSum = 0, hrT = 0, maxHR = 0, cadSum = 0, cadT = 0;
+      for (let i = 1; i < L.length; i++) {
+        const dt = L[i].t - L[i - 1].t; if (dt <= 0 || dt > 30) continue;
+        const h = L[i].hr, spd = (L[i].d - L[i - 1].d) / dt;
+        tot += dt;
+        if (spd < 1.4) walkSec += dt;
+        if (h > 0) {
+          zs[hrZoneFromBpm(h, lthr)] += dt; hrSum += h * dt; hrT += dt; if (h > maxHR) maxHR = h;
+          if (h >= bandLo && h <= bandHi) bandSec += dt;
+          if (h > lthr) { aboveSec += dt; run += dt; if (run > longest) longest = run; } else run = 0;
+        }
+        if (L[i].cad > 0 && spd >= 1.4) { cadSum += L[i].cad * dt; cadT += dt; }
+      }
+      if (!tot) return null;
+      const distM = L[L.length - 1].d - L[0].d;
+      const pct = k => Math.round(zs[k] / (hrT || 1) * 100);
+      // 2-minute splits: the unit the athlete can act on during a 20-35 min block.
+      const splits = [];
+      for (let s = from; s < to - 30; s += 120) {
+        const e = Math.min(s + 120, to);
+        const W = L.filter(x => x.t >= s && x.t <= e);
+        if (W.length < 2) continue;
+        const dM = W[W.length - 1].d - W[0].d, dS = W[W.length - 1].t - W[0].t;
+        const hs = W.filter(x => x.hr > 0).map(x => x.hr);
+        const cs = W.filter(x => x.cad > 0).map(x => x.cad);
+        splits.push({
+          fromMin: Math.round((s - from) / 60), toMin: Math.round((e - from) / 60), durSec: dS,
+          paceSecPerUnit: dM > 0 ? dS / (dM / 1609.344) : 0,
+          avgHR: hs.length ? Math.round(hs.reduce((a, b) => a + b, 0) / hs.length) : null,
+          maxHR: hs.length ? Math.max(...hs) : null,
+          avgCadence: cs.length ? Math.round(cs.reduce((a, b) => a + b, 0) / cs.length) : null,
+          partial: dS < 100
+        });
+      }
+      const full = splits.filter(x => !x.partial && x.paceSecPerUnit > 0);
+      let cvPct = null;
+      if (full.length >= 2) {
+        const ps = full.map(x => x.paceSecPerUnit), mean = ps.reduce((a, b) => a + b, 0) / ps.length;
+        cvPct = Math.round(Math.sqrt(ps.reduce((a, p) => a + (p - mean) ** 2, 0) / ps.length) / mean * 1000) / 10;
+      }
+      // Halves by time: drift (HR only) and decoupling (speed per beat).
+      const mid = (from + to) / 2;
+      const half = (a0, a1) => {
+        const H = L.filter(x => x.t >= a0 && x.t <= a1);
+        if (H.length < 2) return null;
+        const hs = H.filter(x => x.hr > 0).map(x => x.hr);
+        const hr = hs.reduce((a, b) => a + b, 0) / (hs.length || 1);
+        const sp = (H[H.length - 1].d - H[0].d) / ((H[H.length - 1].t - H[0].t) || 1);
+        const alts = H.map(x => x.alt).filter(x => x != null);
+        return { hr, sp, netElev: alts.length >= 2 ? alts[alts.length - 1] - alts[0] : 0 };
+      };
+      const h1 = half(from, mid), h2 = half(mid, to);
+      let decoupling = null, drift = null;
+      if (h1 && h2 && h1.hr > 0 && h2.hr > 0) {
+        const ef1 = h1.sp / h1.hr, ef2 = h2.sp / h2.hr;
+        const walkPct = walkSec / tot * 100;
+        const elevSkew = Math.abs(h2.netElev - h1.netElev);
+        const reasons = [];
+        if (walkPct >= 5) reasons.push(`incluye ${Math.round(walkPct)} % de caminata`);
+        if (tot < 600) reasons.push('bloque de menos de 10 min');
+        if (elevSkew > 15) reasons.push(`perfil de elevación asimétrico (${Math.round(elevSkew)} m)`);
+        decoupling = {
+          value: ef1 > 0 ? Math.round((ef1 - ef2) / ef1 * 1000) / 10 : null,
+          valid: reasons.length === 0, reasonEs: reasons.join('; ') || null,
+          hr1: Math.round(h1.hr), hr2: Math.round(h2.hr),
+          pace1: h1.sp > 0 ? 1609.344 / h1.sp : 0, pace2: h2.sp > 0 ? 1609.344 / h2.sp : 0
+        };
+        drift = { bpm: Math.round((h2.hr - h1.hr) * 10) / 10, pct: Math.round((h2.hr - h1.hr) / h1.hr * 1000) / 10 };
+      }
+      return {
+        fromSec: from, toSec: to, durSec: to - from, distMi: distM / 1609.344,
+        paceSecPerMi: distM > 0 ? (to - from) / (distM / 1609.344) : 0,
+        avgHR: hrT ? Math.round(hrSum / hrT) : null, maxHR: maxHR || null,
+        avgCad: cadT ? Math.round(cadSum / cadT) : null,
+        timeInZones: { seconds: zs, pct: { z1: pct(1), z2: pct(2), z3: pct(3), z4: pct(4), z5: pct(5) }, totalSec: hrT },
+        bandLo, bandHi, bandSec: Math.round(bandSec), bandPct: Math.round(bandSec / (hrT || 1) * 100),
+        aboveLthrSec: Math.round(aboveSec), longestAboveLthrSec: Math.round(longest),
+        walkSec: Math.round(walkSec), runPct: Math.round((1 - walkSec / tot) * 100),
+        splits, cvPct, decoupling, drift, sampleStepSec: samples.step
+      };
+    }
+
+    // Finds the work block of a tempo (arranque + sustained portion) and analyses it.
+    function detectWorkSegment(act, session, lthr) {
+      lthr = lthr || 174;
+      const type = normalizeSessionType((session && session.type) || act?.manualFields?.trainingType);
+      if (type !== 'tempo' || act.sport === 'biking') return null;
+      const samples = sessionSamples(act);
+      const laps = lapTimeline(act).filter(l => l.dur >= 3);
+      if (!samples || !laps.length) return null;
+      const plan = plannedTempoStructure(session, lthr);
+      const isRunning = l => l.pace > 0 && l.pace < 960 && l.distM > 20;   // faster than 16:00/mi
+
+      let best = null, method = null;
+      if (plan) {
+        const tol = Math.max(60, plan.workLoSec * 0.1);
+        for (let i = 0; i < laps.length; i++) {
+          let sum = 0, hrW = 0;
+          for (let j = i; j < laps.length; j++) {
+            if (!isRunning(laps[j])) break;
+            sum += laps[j].dur; hrW += laps[j].avgHR * laps[j].dur;
+            if (sum > plan.workHiSec + tol) break;
+            const diff = sum < plan.workLoSec ? plan.workLoSec - sum : sum > plan.workHiSec ? sum - plan.workHiSec : 0;
+            if (diff > tol) continue;
+            const startsWithArranque = plan.arranqueSec > 0 && Math.abs(laps[i].dur - plan.arranqueSec) <= 15;
+            const cand = { i, j, sum, diff, startsWithArranque, hr: hrW / sum };
+            const better = !best || cand.diff < best.diff - 5
+              || (Math.abs(cand.diff - best.diff) <= 5 && (cand.startsWithArranque && !best.startsWithArranque
+                || (cand.startsWithArranque === best.startsWithArranque && cand.hr > best.hr)));
+            if (better) best = cand;
+          }
+        }
+        if (best) method = 'plan';
+      }
+      if (!best) {
+        // No usable plan: longest run of consecutive laps at ≥ 90 % of LTHR, at least 8 min.
+        for (let i = 0; i < laps.length; i++) {
+          let sum = 0, hrW = 0, j = i;
+          while (j < laps.length && isRunning(laps[j]) && laps[j].avgHR >= lthr * 0.9) { sum += laps[j].dur; hrW += laps[j].avgHR * laps[j].dur; j++; }
+          if (j > i && sum >= 480 && (!best || sum > best.sum)) best = { i, j: j - 1, sum, startsWithArranque: false, hr: hrW / sum };
+        }
+        if (best) method = 'auto';
+      }
+      if (!best) return null;
+
+      const first = laps[best.i], last = laps[best.j];
+      const start = first.start, end = last.end;
+      let mainStart = start;
+      if (plan && plan.arranqueSec > 0) mainStart = best.startsWithArranque ? first.end : start + plan.arranqueSec;
+      const bandLo = plan ? plan.bandLo : Math.round(lthr * 0.948);
+      const bandHi = plan ? plan.bandHi : lthr - 2;
+
+      const main = analyzeWindow(samples, mainStart, end, lthr, bandLo, bandHi);
+      if (!main) return null;
+      // Lap-exact pace/HR for the main block when it starts on a lap boundary.
+      const mainLaps = laps.slice(best.startsWithArranque ? best.i + 1 : best.i, best.j + 1);
+      if (best.startsWithArranque || !plan || !plan.arranqueSec) {
+        const dM = mainLaps.reduce((a, l) => a + l.distM, 0), dS = mainLaps.reduce((a, l) => a + l.dur, 0);
+        if (dM > 0) { main.paceSecPerMi = dS / (dM / 1609.344); main.distMi = dM / 1609.344; }
+        main.durSec = dS;
+      }
+      let arranque = null;
+      if (mainStart > start) {
+        const aw = analyzeWindow(samples, start, mainStart, lthr, 0, 999);
+        const lapA = best.startsWithArranque ? first : null;
+        const pace = lapA && lapA.distM > 0 ? lapA.dur / (lapA.distM / 1609.344) : (aw ? aw.paceSecPerMi : 0);
+        const L = samples.list.filter(s => s.t >= start && s.t <= mainStart && s.hr > 0);
+        arranque = {
+          durSec: mainStart - start, paceSecPerMi: pace,
+          hrStart: L.length ? L[0].hr : null, hrEnd: L.length ? L[L.length - 1].hr : null,
+          targetFast: plan.arranquePaceFast, targetSlow: plan.arranquePaceSlow
+        };
+      }
+      // Label every lap with the step it belongs to, for the per-lap table.
+      let accel = 0, prevAccel = false;
+      const lapLabels = laps.map((l, k) => {
+        let label;
+        if (k < best.i) {
+          if (l.dur <= 40 && isRunning(l)) { accel++; label = `Aceleración ${accel}`; prevAccel = true; }
+          else if (prevAccel && l.dur <= 180) { label = 'Pausa'; prevAccel = false; }
+          else { label = 'Calentamiento'; prevAccel = false; }
+        } else if (k <= best.j) {
+          label = (k === best.i && best.startsWithArranque) ? 'Arranque' : 'Ritmo sostenido';
+        } else label = 'Trote final';
+        return { lapIndex: l.idx, label, durSec: l.dur, distMi: l.distM / 1609.344, paceSecPerMi: l.pace, avgHR: Math.round(l.avgHR), maxHR: Math.round(l.maxHR), cad: l.lap.avgCadSPM ? Math.round(l.lap.avgCadSPM) : null };
+      });
+
+      return {
+        kind: 'tempo', method, startSec: start, endSec: end, workSec: Math.round(best.sum),
+        plannedWorkLoSec: plan ? plan.workLoSec : null, plannedWorkHiSec: plan ? plan.workHiSec : null,
+        lapFrom: first.idx, lapTo: last.idx, arranque, main, lapLabels
+      };
+    }
+
+    // Intervals / hills: tag as "work" exactly the laps whose duration matches the planned reps,
+    // so warm-up laps and 20-s strides are never counted as repetitions.
+    function matchPlannedReps(act, session, lthr) {
+      if (!session || act.sport === 'biking') return null;
+      const type = normalizeSessionType(session.type);
+      if (type !== 'intervals' && type !== 'hill') return null;
+      let steps;
+      try { steps = generateStructuredSteps(session, lthr); } catch (e) { return null; }
+      if (!steps || steps.planParsed !== 'exact') return null;
+      const reps = steps.filter(s => s.intensity === 'active' && s.durationType === 'time' && /^(Subida|Bajada|Repetición)/.test(s.label || ''));
+      if (!reps.length) return null;
+      const laps = lapTimeline(act);
+      const matched = [];
+      let k = 0;
+      // Walk the steps BEFORE the first rep in order (warm-up time, each stride, each free jog)
+      // so a 60-s jog after a stride is never mistaken for a 60-s rep.
+      const firstRep = steps.indexOf(reps[0]);
+      for (const s of steps.slice(0, firstRep)) {
+        if (k >= laps.length) break;
+        if (s.durationType === 'open') { k++; continue; }
+        if (s.durationType !== 'time') continue;
+        let acc = 0;
+        const need = s.durationValue - Math.max(5, s.durationValue * 0.05);
+        while (k < laps.length && acc < need) { acc += laps[k].dur; k++; }
+      }
+      for (const r of reps) {
+        const tol = Math.max(4, r.durationValue * 0.08);
+        while (k < laps.length && Math.abs(laps[k].dur - r.durationValue) > tol) k++;
+        if (k >= laps.length) break;
+        matched.push({ lapIdx: laps[k].idx, label: r.label });
+        k++;
+      }
+      if (matched.length < Math.ceil(reps.length / 2)) return null;
+      const workIdx = new Set(matched.map(m => m.lapIdx));
+      const recIdx = new Set();
+      matched.forEach((m, n) => { if (n < matched.length - 1) { const nx = m.lapIdx + 1; if (!workIdx.has(nx) && act.laps[nx]) recIdx.add(nx); } });
+      act.laps.forEach((l, i) => { l.repType = workIdx.has(i) ? 'work' : recIdx.has(i) ? 'recovery' : null; });
+      const agg = set => {
+        const ls = act.laps.filter((l, i) => set.has(i));
+        const dM = ls.reduce((a, l) => a + l.distanceMeters, 0), dS = ls.reduce((a, l) => a + l.totalTimeSec, 0);
+        return dM > 0 ? dS / (dM / 1609.344) : null;
+      };
+      act.workPaceSecPerMi = agg(workIdx);
+      act.recoveryPaceSecPerMi = recIdx.size ? agg(recIdx) : null;
+      act.workLapsCount = workIdx.size;
+      act.recoveryLapsCount = recIdx.size;
+      const zs = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+      act.laps.forEach((l, i) => { if (workIdx.has(i)) Object.keys(l.hrZoneSecs || {}).forEach(z => { zs[z] += l.hrZoneSecs[z] || 0; }); });
+      const tot = Object.values(zs).reduce((a, b) => a + b, 0) || 1;
+      const p = z => Math.round(zs[z] / tot * 100);
+      return {
+        kind: 'reps', planned: reps.length, matched: matched.length, labels: matched.map(m => m.label),
+        timeInZones: { seconds: zs, pct: { z1: p(1), z2: p(2), z3: p(3), z4: p(4), z5: p(5) }, totalSec: tot }
+      };
+    }
+
+    // Planned total duration from the workout steps (open steps such as the free jog after each
+    // stride are counted as ~60 s) — instead of "planned miles × a generic tempo pace".
+    function plannedDurationFromSteps(session, lthr) {
+      let steps;
+      try { steps = generateStructuredSteps(session, lthr); } catch (e) { return null; }
+      if (!steps || steps.planParsed !== 'exact') return null;
+      let sec = 0, open = 0;
+      for (const s of steps) {
+        if (s.durationType === 'time') sec += s.durationValue;
+        else if (s.durationType === 'open') { sec += 60; open++; }
+        else return null;   // distance-based step: duration unknown
+      }
+      return { sec, open };
+    }
+
+    // One set of "Planeado vs Real" rows shared by the Markdown report and the in-app card.
+    // Row: [metric, target, actual, delta, verdict]. Verdict 'Informativo' never counts as a miss.
+    function planVsActualRows(linkedSession, t) {
+      const a = t.analysis || {};
+      const lthr = state.profile?.lthr || 174;
+      const rows = [];
+      const planType = normalizeSessionType(linkedSession.type) || linkedSession.type;
+      const verdict = (deltaPct, tolPct) => Math.abs(deltaPct) <= tolPct ? 'En objetivo' : deltaPct > 0 ? 'Por encima' : 'Por debajo';
+      const linePace = parsePaceFromLine(linkedSession.notes || '');
+      const seg = a.workSegment && a.workSegment.kind === 'tempo' ? a.workSegment : null;
+      const reps = a.repMatch || null;
+      const hrGuided = /\bfc\s+\d{3}/i.test(linkedSession.notes || '') || /esfuerzo/i.test(linkedSession.notes || '');
+
+      if (linkedSession.targetDistM > 0) {
+        const tgtMi = linkedSession.targetDistM / 1609.344, d = t.totalDistMi - tgtMi, pct = tgtMi > 0 ? d / tgtMi * 100 : 0;
+        rows.push(['Distancia', `${tgtMi.toFixed(2)} mi`, `${t.totalDistMi.toFixed(2)} mi`, `${d >= 0 ? '+' : ''}${d.toFixed(2)} mi (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`, verdict(pct, 10)]);
+      }
+      const stepDur = plannedDurationFromSteps(linkedSession, lthr);
+      const tgtSec = stepDur ? stepDur.sec : linkedSession.targetTimeSec;
+      if (tgtSec > 0) {
+        const d = t.totalTimeSec - tgtSec, pct = d / tgtSec * 100;
+        rows.push([stepDur ? 'Duración total (según pasos)' : 'Duración', `${secToHHMMSS(tgtSec)}${stepDur && stepDur.open ? ` (con ${stepDur.open} pausa(s) libre(s) de ~1 min)` : ''}`, secToHHMMSS(t.totalTimeSec), `${d >= 0 ? '+' : ''}${Math.round(d / 60)} min (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`, verdict(pct, 15)]);
+      }
+
+      if (seg) {
+        const m = seg.main;
+        const lo = seg.plannedWorkLoSec, hi = seg.plannedWorkHiSec;
+        if (lo) {
+          const d = seg.workSec < lo ? seg.workSec - lo : seg.workSec > hi ? seg.workSec - hi : 0;
+          rows.push(['Bloque de ritmo sostenido', lo === hi ? `${Math.round(lo / 60)} min` : `${Math.round(lo / 60)}–${Math.round(hi / 60)} min`, secToMMSS(seg.workSec), `${d >= 0 ? '+' : ''}${Math.round(d)} s`, Math.abs(d) <= Math.max(60, lo * 0.1) ? 'En objetivo' : d > 0 ? 'Por encima' : 'Por debajo']);
+        }
+        if (seg.arranque && seg.arranque.targetFast) {
+          const A = seg.arranque, p = A.paceSecPerMi;
+          const v = p < A.targetFast - 5 ? 'Más rápido' : p > A.targetSlow + 5 ? 'Más lento' : 'En objetivo';
+          const d = p < A.targetFast ? p - A.targetFast : p > A.targetSlow ? p - A.targetSlow : 0;
+          rows.push([`Arranque (${Math.round(A.durSec / 60)} min)`, `${fmtPaceNoUnit(A.targetFast)}–${fmtPace(A.targetSlow)}`, fmtPace(p), `${d >= 0 ? '+' : ''}${Math.round(d)} s/mi`, v]);
+        }
+        rows.push([`FC ${m.bandLo}–${m.bandHi} en el bloque`, '≥ 70% del tiempo', `${m.bandPct}% (${secToMMSS(m.bandSec)})`, `${m.bandPct - 70 >= 0 ? '+' : ''}${m.bandPct - 70} pts`, m.bandPct >= 70 ? 'En objetivo' : 'Por debajo']);
+        rows.push([`FC > ${lthr} (regla de 60 s)`, '≤ 60 s seguidos', `racha máx. ${m.longestAboveLthrSec} s · total ${secToMMSS(m.aboveLthrSec)}`, m.longestAboveLthrSec > 60 ? `+${m.longestAboveLthrSec - 60} s` : '—', m.longestAboveLthrSec > 60 ? 'Por encima' : 'En objetivo']);
+        rows.push(['Tiempo en Z4 (bloque)', '≥ 60%', `${m.timeInZones.pct.z4}%`, `${m.timeInZones.pct.z4 - 60 >= 0 ? '+' : ''}${m.timeInZones.pct.z4 - 60} pts`, m.timeInZones.pct.z4 >= 60 ? 'En objetivo' : 'Por debajo']);
+        if (linePace > 0) {
+          const d = m.paceSecPerMi - linePace;
+          rows.push(['Ritmo del bloque', fmtPace(linePace), fmtPace(m.paceSecPerMi), `${d >= 0 ? '+' : ''}${Math.round(d)} s/mi`, Math.abs(d) <= linePace * 0.04 ? 'En objetivo' : d < 0 ? 'Más rápido' : 'Más lento']);
+        } else {
+          rows.push(['Ritmo del bloque', 'guiado por FC', fmtPace(m.paceSecPerMi), '—', 'Informativo']);
+        }
+        return rows;
+      }
+
+      if (reps) {
+        rows.push(['Repeticiones', `${reps.planned}`, `${reps.matched}`, `${reps.matched - reps.planned}`, reps.matched >= reps.planned ? 'En objetivo' : 'Por debajo']);
+        if (t.workPaceSecPerMi) rows.push(['Ritmo de las repeticiones', linePace > 0 ? fmtPace(linePace) : 'por esfuerzo', fmtPace(t.workPaceSecPerMi), '—', 'Informativo']);
+        const hard = (reps.timeInZones.pct.z4 || 0) + (reps.timeInZones.pct.z5 || 0);
+        rows.push(['Tiempo en Z4–Z5 (repeticiones)', '≥ 50%', `${hard}%`, `${hard - 50 >= 0 ? '+' : ''}${hard - 50} pts`, hard >= 50 ? 'En objetivo' : 'Por debajo']);
+        return rows;
+      }
+
+      // Pace row only when the plan line actually prescribes a pace. HR-guided days ("FC 130 a
+      // 148") never get compared against a generic pace from the settings table.
+      const pacePlan = linePace > 0 ? linePace : (hrGuided ? 0 : linkedSession.pacePerMi);
+      if (pacePlan > 0 && t.avgPaceSecPerMi > 0) {
+        const d = t.avgPaceSecPerMi - pacePlan, pct = d / pacePlan * 100;
+        rows.push(['Pace', fmtPace(pacePlan), fmtPace(t.avgPaceSecPerMi), `${d >= 0 ? '+' : ''}${Math.round(d)} s/mi`, Math.abs(pct) <= 4 ? 'En objetivo' : d < 0 ? 'Más rápido' : 'Más lento']);
+      }
+      const zp = a.timeInZones?.pct;
+      if (zp) {
+        const intent = ZONE_INTENT[planType] || 'aerobic';
+        const hardPct = (zp.z4 || 0) + (zp.z5 || 0);
+        if (intent === 'aerobic') {
+          rows.push(['Tiempo sobre umbral', '< 10%', `${hardPct}%`, `${hardPct - 10 >= 0 ? '+' : ''}${hardPct - 10} pts`, hardPct < 10 ? 'En objetivo' : 'Por encima']);
+        } else if (intent === 'threshold') {
+          rows.push(['Tiempo en Z4 (sesión completa)', '—', `${zp.z4 || 0}%`, '—', 'Informativo']);
+        } else {
+          rows.push(['Tiempo en Z4-Z5 (sesión completa)', '—', `${hardPct}%`, '—', 'Informativo']);
+        }
+      }
+      return rows;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -3322,13 +3687,7 @@
       //   • fatigue from racing without a taper (handled separately by TSB on the day)
       const bootPenalty = profile.raceInBoots === false ? 0 : flatPredSec * 0.04;
       const heatPenalty = flatPredSec * raceHeatPenaltyPct(profile.raceDateISO);
-      // 2026.10.28-2: prefer the best REAL hard effort of the last 90 days (strap HR, not boots),
-      // scaled with Riegel. Those efforts already include PR heat and hills, so no extra penalty.
-      // Easy hilly runs give a meaningless VDOT on this terrain (they projected 78–84 min).
-      const best = bestRealEffort(raceM);
-      const realisticSec = best
-        ? best.sec + (profile.raceInBoots === false ? 0 : best.sec * 0.04)
-        : flatPredSec + bootPenalty + heatPenalty;
+      const realisticSec = flatPredSec + bootPenalty + heatPenalty;
 
       // Honest range: ±3.5% band around the realistic estimate.
       const lowSec = realisticSec * 0.965;
@@ -3338,7 +3697,7 @@
       let band, color, verdict;
       if (highSec <= goalSec) { band='green'; color='var(--olive-bright)'; verdict = es?'Vas encaminado a tu meta. Mantén la consistencia.':'On track for your goal. Keep consistency.'; }
       else if (lowSec <= goalSec) { band='amber'; color='var(--signal-amber)'; verdict = es?'Meta alcanzable pero ajustada. Cada sesión de calidad cuenta.':'Goal reachable but tight. Every quality session counts.'; }
-      else { band='red'; color='var(--rust-bright)'; const gapMin = Math.round((lowSec - goalSec) / 60); verdict = es?`Tu proyección de hoy está ~${gapMin} min por encima de la meta. Sigue el plan: la base aeróbica es lo que más baja este número.`:`Today's projection is ~${gapMin} min above the goal. Stick to the plan: aerobic base moves this number most.`; }
+      else { band='red'; color='var(--rust-bright)'; verdict = es?'Proyección por encima de la meta. Necesitas mejorar ritmo/base o ajustar expectativa.':'Projection above goal. You need to improve pace/base or adjust the target.'; }
 
       const daysLeft = daysUntil(profile.raceDateISO);
       return {
@@ -3349,24 +3708,8 @@
         goalSec, band, color, verdict, daysLeft,
         raceMeters: raceM, raceLabel: raceDistanceLabel(profile),
         heatPenaltyPct: raceHeatPenaltyPct(profile.raceDateISO),
-        hasVdot: !!vd, vdotCount: vd?.count || 0,
-        effortISO: best?.dateISO || null, effortDistMi: best?.distMi || null
+        hasVdot: !!vd, vdotCount: vd?.count || 0
       };
-    }
-
-    function bestRealEffort(raceM) {
-      const lthr = state.profile?.lthr || 174;
-      const cutoff = addDaysISO(todayISO(), -90);
-      let best = null;
-      (state.tcxSessions || []).forEach(s => {
-        if (s.sport === 'biking' || (s.dateISO || '') < cutoff) return;
-        if (s.manualFields?.hrSource === 'optical') return;
-        if (gearById(s.manualFields?.gearId)?.kind === 'boot') return;
-        if (!(s.avgHR >= lthr * 0.95) || !(s.totalTimeSec >= 1200) || !(s.totalDistMi >= 2.5)) return;
-        const sec = s.totalTimeSec * Math.pow(raceM / (s.totalDistMi * 1609.344), 1.06);
-        if (!best || sec < best.sec) best = { sec: Math.round(sec), dateISO: s.dateISO, distMi: s.totalDistMi };
-      });
-      return best;
     }
 
     // ── Detect a meaningful fitness change → suggest pace recalculation ──
@@ -3720,8 +4063,14 @@
           const avgSpd = spdCt > 0 ? sumSpd / spdCt : distM / Math.max(totalTimeSec, 1);
           const avgPaceSecPerMi = avgSpd > 0 ? 1609.344 / avgSpd : 0;
 
+          // Lap start relative to the first trackpoint. Needed to place each lap on the session
+          // timeline (pauses make a running sum of TotalTimeSeconds drift).
+          const lapStartMs = Date.parse(lap.getAttribute('StartTime') || '');
+          const t0ms = allPoints.length && allPoints[0].time != null ? allPoints[0].time : null;
+          const startOffsetSec = (!isNaN(lapStartMs) && t0ms != null) ? Math.max(0, Math.round((lapStartMs - t0ms) / 1000)) : null;
+
           return {
-            lapIndex: i, totalTimeSec, distanceMeters: distM, avgPaceSecPerMi,
+            lapIndex: i, startOffsetSec, totalTimeSec, distanceMeters: distM, avgPaceSecPerMi,
             avgHR: hrCt > 0 ? sumHR / hrCt : avgHR, maxHR, minHR: minHR === 999 ? 0 : minHR,
             firstHR, lastHR,
             avgWatts: wattsCt > 0 ? Math.round(sumWatts / wattsCt) : null, maxWatts: wattsCt > 0 ? Math.round(maxWatts) : null,
@@ -4013,7 +4362,10 @@
             sessionScore: score, sessionGrade: grade, keyFindings: findings,
             realSplitsMi, realSplitsKm, cardiacDrift, cadenceSegments,
             powerStats, runWalk, slowSegments, advanced, timeInZones, pacingConsistency, hrvProxy,
-            hrDataQuality, categoryGrades
+            hrDataQuality, categoryGrades,
+            // Compact 5-s trace (HR, distance, cadence, altitude) so the work block of a structured
+            // session can be analysed once the plan day is known (~6 KB per session).
+            trace5: buildTrace5(points, sharedAltMap)
           }
         };
       } catch (e) {
@@ -4263,7 +4615,7 @@
       stats_charts: { en: '📊 Charts', es: '📊 Gráficas' },
       stats_injuries: { en: '🩹 Injuries', es: '🩹 Lesiones' },
       stats_reports: { en: '📋 Reports', es: '📋 Reportes' },
-      stats_context: { en: '🤖 Context', es: '🤖 Contexto' },
+      stats_context: { en: '🤖 Context', es: '🤖 Context' },
       stats_pace_trend: { en: 'Pace Trend', es: 'Tendencia de Pace' },
       stats_hr_trend: { en: 'Heart Rate Trend', es: 'Tendencia FC' },
       stats_vdot_trend: { en: 'VDOT & 5K Prediction', es: 'VDOT y Predicción 5K' },
@@ -4839,40 +5191,12 @@
     // instruction, e.g. "Intervals 4x2min hill repeats..."). Auto-generated plan sessions never
     // set `notes`, so this only kicks in for imported ones — the generic library title
     // ("Intervals 4×400m") was masking custom instructions entirely before this fix.
-    // Full plan line (what the athlete pasted), without the day prefix. Used for the instruction block.
-    function sessionInstruction(session) {
+    function sessionTitle(session) {
       if (session.notes) {
         const stripped = session.notes.replace(/^\s*[A-Za-zÀ-ÿ]+\s*:\s*/, '').trim();
         return stripped || tr(SESSION_TITLES[session.type]) || session.type;
       }
       return tr(SESSION_TITLES[session.type]) || session.type;
-    }
-    // Short, scannable title built from the plan line (2026.10.28-2). The full line stays in
-    // sessionInstruction(); lists and the "today" card show only this.
-    function sessionTitle(session) {
-      const s = session;
-      if (!s) return '—';
-      const es = getLang() === 'es';
-      const txt = String(s.notes || '').toLowerCase();
-      if (!txt) return tr(SESSION_TITLES[s.type]) || s.type;
-      const T = (typeof planLineTargets === 'function' ? planLineTargets(s) : null) || {};
-      const mi = T.distMi ? ` · ${T.distMi} mi` : '';
-      if (s.type === 'rest') return es ? 'Descanso' : 'Rest';
-      if (/recorrido de la carrera/.test(txt)) return (es ? 'Recorrido de la carrera' : 'Race course') + mi;
-      if (s.type === 'cross_training') {
-        if (/chaleco|caminata/.test(txt)) { const lb = /(\d+)\s*lb/.exec(txt); return (es ? 'Marcha con chaleco' : 'Vest ruck') + (lb ? ` ${lb[1]} lb` : '') + mi; }
-        if (/fuerza|sesión\s+[ab]\b/.test(txt)) { const k = /(?:fuerza|sesión)\s+([ab])\b/.exec(txt); return (es ? 'Fuerza' : 'Strength') + (k ? ' ' + k[1].toUpperCase() : ''); }
-        return es ? 'Entrenamiento cruzado' : 'Cross-training';
-      }
-      const reps = T.repsText ? ' ' + T.repsText.replace(' × ', '×').replace(/ s$/, '″').replace(/ min$/, '′') : '';
-      if (s.type === 'tempo') {
-        const m = /(\d+)(?:\s*a\s*(\d+))?\s*min\s+a\s+fc/.exec(txt);
-        return (es ? (/calibraci/.test(txt) ? 'Ritmo sostenido (calibración)' : 'Ritmo sostenido') : 'Tempo') + (m ? ` ${m[1]}${m[2] ? '–' + m[2] : ''}′` : '') + mi;
-      }
-      if (s.type === 'intervals') return (/cuesta/.test(txt) ? (es ? 'Cuestas' : 'Hills') : (es ? 'Intervalos' : 'Intervals')) + reps + mi;
-      if (s.type === 'long') return (es ? 'Larga' : 'Long run') + mi;
-      if (s.type === 'easy') return (es ? 'Fácil' : 'Easy') + mi + (/fuerza\s+[ab]\b/.test(txt) ? (es ? ' + fuerza' : ' + strength') : '');
-      return tr(SESSION_TITLES[s.type]) || s.type;
     }
     function sessionPhaseLabel(session) { return `${t('phase_word')} ${session.phase}`; }
 
@@ -5017,14 +5341,14 @@
               ${dot('red')}${dot('amber')}${dot('green')}
             </div>
             <div style="flex:1;">
-              <div style="font-size:10px; color:var(--paper-dim);">${pred.effortISO ? (es?`Proyección con tu mejor esfuerzo real (${pred.effortISO}, ${pred.effortDistMi.toFixed(2)} mi)`:`Projection from your best real effort (${pred.effortISO}, ${pred.effortDistMi.toFixed(2)} mi)`) : (es?'Proyección estimada (sin esfuerzo duro reciente)':'Estimated projection (no recent hard effort)')}</div>
+              <div style="font-size:10px; color:var(--paper-dim);">${es?'Proyección día de carrera (botas + calor PR)':'Race-day projection (boots + PR heat)'}</div>
               <div style="font-size:24px; font-weight:700; color:${pred.color}; font-family:var(--font-mono);">${secToMMSS(pred.lowSec)}–${secToMMSS(pred.highSec)}</div>
-              <div style="font-size:10px; color:var(--paper-dim);">${es?'Meta':'Goal'}: ${secToMMSS(pred.goalSec)}${pred.effortISO ? '' : ' · ' + (es?'en pista plana':'flat course') + ': ' + secToMMSS(pred.flatPredSec)}</div>
+              <div style="font-size:10px; color:var(--paper-dim);">${es?'Meta':'Goal'}: ${secToMMSS(pred.goalSec)} · ${es?'en pista plana':'flat course'}: ${secToMMSS(pred.flatPredSec)}</div>
             </div>
           </div>
           <p style="font-size:12px; color:${pred.color}; line-height:1.5;">${pred.verdict}</p>
           ${!pred.hasVdot ? `<p style="font-size:10px; color:var(--paper-dim); margin-top:6px;">${es?'Sube y vincula sesiones TCX para una proyección basada en tu VDOT real.':'Upload and link TCX sessions for a projection based on your real VDOT.'}</p>`
-            : `<p style="font-size:10px; color:var(--paper-dim); margin-top:6px;">${pred.effortISO ? (es?'Basado en tus esfuerzos duros con banda de los últimos 90 días (carrera, simulación o prueba). Rango honesto ±3.5%, no una garantía.':'Based on your strap-HR hard efforts of the last 90 days (race, sim or test). Honest ±3.5% range, not a guarantee.') : (es?`Basado en tus mejores ${pred.vdotCount} sesiones recientes. Rango honesto, no una garantía.`:`Based on your best ${pred.vdotCount} recent sessions. Honest range, not a guarantee.`)}</p>`}
+            : `<p style="font-size:10px; color:var(--paper-dim); margin-top:6px;">${es?`Basado en tus mejores ${pred.vdotCount} sesiones recientes. Es un rango honesto, no una garantía — el calor y las botas cuentan.`:`Based on your best ${pred.vdotCount} recent sessions. It's an honest range, not a guarantee — heat and boots count.`}</p>`}
         </div>`;
     }
 
@@ -5036,7 +5360,7 @@
       const pct = Math.min(100, (acwr.ratio / 2) * 100);
       return `
         <div class="card">
-          <div class="card-title">${es?'CARGA AGUDA:CRÓNICA':'ACUTE:CHRONIC LOAD (ACWR)'}</div>
+          <div class="card-title">${es?'CARGA AGUDA:CRÓNICA (ACWR)':'ACUTE:CHRONIC LOAD (ACWR)'}</div>
           <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:8px;">
             <span style="font-size:28px; font-weight:700; color:${acwr.color}; font-family:var(--font-mono);">${acwr.ratio}</span>
             <span style="font-size:12px; color:${acwr.color}; font-weight:600;">${acwr.band}</span>
@@ -5139,303 +5463,6 @@
       return { big: s.paceGuide, label: t('target_pace_label'), small: miTxt, mono: true };
     }
 
-
-    // ═══════════════════════════════════════════════════════════════════════
-    // VISUAL PACK 2026.10.28-2 — status chips, "¿salgo hoy?", GRIT ring, heatmap,
-    // quality ladder, activity verdict, offline SVG charts, milestone celebration.
-    // ═══════════════════════════════════════════════════════════════════════
-    function sessionHasActivity(s) {
-      return !!s.linkedActivityId || (state.tcxSessions || []).some(a => a.dateISO === s.dateISO && a.sport !== 'biking')
-        || (state.manualSessions || []).some(m => m.dateISO === s.dateISO);
-    }
-    function sessionStatus(s) {
-      const es = getLang() === 'es', today = todayISO();
-      if (s.type === 'rest') return { key: 'rest', txt: es ? 'Descanso' : 'Rest', color: 'var(--paper-dim)' };
-      if (s.completed || s.linkedActivityId) return { key: 'done', txt: es ? '✓ Hecha' : '✓ Done', color: 'var(--olive-bright)' };
-      if (sessionHasActivity(s)) return { key: 'done', txt: es ? '✓ Hecha' : '✓ Done', color: 'var(--olive-bright)' };
-      if (s.dateISO === today) return { key: 'today', txt: es ? 'Hoy' : 'Today', color: 'var(--coyote)' };
-      if (s.dateISO > today) return { key: 'pending', txt: es ? 'Pendiente' : 'Pending', color: 'var(--paper-dim)' };
-      return { key: 'missed', txt: es ? 'Perdida' : 'Missed', color: 'var(--rust-bright)' };
-    }
-    const statusChip = (s) => { const st = sessionStatus(s); return `<span class="status-chip" style="color:${st.color}; border-color:${st.color};">${st.txt}</span>`; };
-
-    // ── "¿Salgo hoy?" readiness check, using the plan's cancel rules ──
-    function readinessVerdict(r, sess) {
-      const es = getLang() === 'es';
-      const reasons = [];
-      let level = 'green';
-      const amber = () => { if (level !== 'red') level = 'amber'; };
-      if (r.pain) { level = 'red'; reasons.push(es ? 'dolor articular u óseo' : 'joint/bone pain'); }
-      if (r.sick) { level = 'red'; reasons.push(es ? 'enfermedad' : 'illness'); }
-      const sl = parseFloat(r.sleep), hrv = parseFloat(r.hrv), rhr = parseFloat(r.rhr), heat = parseFloat(r.heat);
-      if (!isNaN(sl) && sl < 6) { amber(); reasons.push(es ? `sueño de ${sl} h` : `sleep ${sl} h`); }
-      if (!isNaN(hrv) && hrv <= 34) { amber(); reasons.push(es ? `variabilidad cardíaca de ${hrv} ms` : `HRV ${hrv} ms`); }
-      if (!isNaN(rhr) && rhr >= 60) { amber(); reasons.push(es ? `pulso en reposo de ${rhr}` : `resting HR ${rhr}`); }
-      if (!isNaN(heat) && heat > 90) { amber(); reasons.push(es ? `sensación térmica de ${heat} °F` : `feels-like ${heat} °F`); }
-      const filled = ['sleep', 'hrv', 'rhr'].some(k => r[k] !== undefined && r[k] !== '');
-      const txt = String(sess?.notes || '').toLowerCase();
-      const quality = sess && (['tempo', 'intervals', 'long', 'race_sim'].includes(sess.type) || /recorrido/.test(txt));
-      let msg;
-      if (!filled && level === 'green') msg = es ? 'Anota sueño, variabilidad cardíaca y pulso en reposo para ver el semáforo.' : 'Enter sleep, HRV and resting HR to see the light.';
-      else if (level === 'green') msg = es ? 'Verde: haz la sesión como está planificada.' : 'Green: do the session as planned.';
-      else if (level === 'amber') msg = quality ? (es ? 'Ámbar: cambia la sesión por 2–3 mi en Z2 (130–148). Si es por calor, muévela al amanecer.' : 'Amber: swap for 2–3 mi in Z2 (130–148). If it is heat, move it to dawn.')
-                                               : (es ? 'Ámbar: hazla suave y más corta.' : 'Amber: keep it easy and shorter.');
-      else msg = es ? 'Rojo: descanso hoy. Con dolor articular no se corre.' : 'Red: rest today. No running with joint pain.';
-      return { level: filled || level !== 'green' ? level : 'none', reasons, msg };
-    }
-    function saveReadiness(field, value) {
-      if (!state.readiness) state.readiness = {};
-      const d = todayISO();
-      state.readiness[d] = { ...(state.readiness[d] || {}), [field]: value };
-      saveState(); render();
-    }
-    function renderReadinessCard() {
-      const today = todayISO();
-      const sess = state.plan.find(s => s.dateISO === today);
-      if (!sess || sess.type === 'rest') return '';
-      const es = getLang() === 'es';
-      const r = (state.readiness || {})[today] || {};
-      const v = readinessVerdict(r, sess);
-      const C = { green: 'var(--olive-bright)', amber: 'var(--signal-amber)', red: 'var(--rust-bright)', none: 'var(--paper-dim)' };
-      const dot = (k) => `<span class="ready-dot" style="background:${v.level === k ? C[k] : 'var(--field-line)'}; ${v.level === k ? 'box-shadow:0 0 10px ' + C[k] + ';' : ''}"></span>`;
-      const inp = (k, ph, lbl) => `<label class="ready-field"><span>${lbl}</span><input type="text" inputmode="decimal" value="${esc(r[k] ?? '')}" placeholder="${ph}" onchange="saveReadiness('${k}', this.value)" /></label>`;
-      return `
-        <div class="card" style="border-left:3px solid ${C[v.level]};">
-          <div class="card-title">${es ? '¿SALGO HOY?' : 'GO TODAY?'}</div>
-          <div style="display:flex; gap:14px; align-items:center;">
-            <div style="display:flex; flex-direction:column; gap:6px; padding:8px; background:var(--field-surface); border-radius:6px;">${dot('red')}${dot('amber')}${dot('green')}</div>
-            <div style="flex:1;">
-              <p style="font-size:13px; color:${C[v.level]}; font-weight:600; line-height:1.4;">${v.msg}</p>
-              ${v.reasons.length ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:4px;">${es ? 'Por' : 'Because of'}: ${v.reasons.join(', ')}</p>` : ''}
-            </div>
-          </div>
-          <div class="ready-grid">
-            ${inp('sleep', '7.5', es ? 'Sueño (h)' : 'Sleep (h)')}
-            ${inp('hrv', '42', es ? 'VFC noche' : 'Night HRV')}
-            ${inp('rhr', '54', es ? 'Pulso reposo' : 'Resting HR')}
-            ${inp('heat', '—', es ? 'Sensación °F' : 'Feels °F')}
-          </div>
-          <div style="display:flex; gap:14px; margin-top:8px; flex-wrap:wrap;">
-            <label class="checkbox-item" style="margin:0;"><input type="checkbox" ${r.pain ? 'checked' : ''} onchange="saveReadiness('pain', this.checked)" /><span style="font-size:12px;">${es ? 'Dolor articular u óseo' : 'Joint/bone pain'}</span></label>
-            <label class="checkbox-item" style="margin:0;"><input type="checkbox" ${r.sick ? 'checked' : ''} onchange="saveReadiness('sick', this.checked)" /><span style="font-size:12px;">${es ? 'Enfermo' : 'Sick'}</span></label>
-          </div>
-        </div>`;
-    }
-
-    // ── GRIT helpers: daily bars, ETA, streak ──
-    function plannedMiFor(s) {
-      if (!s || s.type === 'rest') return 0;
-      const T = planLineTargets(s) || {};
-      if (T.distMi) return T.distMi;
-      const m = /([\d.]+)\s*mi/.exec(String(s.dist || ''));
-      return m ? parseFloat(m[1]) : 0;
-    }
-    function renderGritWeekBars(fromISO) {
-      const es = getLang() === 'es';
-      const L = es ? ['D', 'L', 'M', 'M', 'J', 'V', 'S'] : ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-      const days = [];
-      for (let i = 0; i < 7; i++) {
-        const d = addDaysISO(fromISO, i);
-        const m = gritMilesBetween(d, d);
-        const plan = plannedMiFor(state.plan.find(s => s.dateISO === d));
-        days.push({ d, run: m.run, ruck: m.ruck, plan, dow: parseISODateLocal(d).getDay() });
-      }
-      const max = Math.max(6, ...days.map(x => Math.max(x.run + x.ruck, x.plan)));
-      const H = 56;
-      return `<div class="grit-bars">${days.map(x => {
-        const hRun = x.run / max * H, hRuck = x.ruck / max * H, hPlan = x.plan / max * H;
-        const isToday = x.d === todayISO();
-        return `<div class="grit-bar-col" title="${x.d}: ${(x.run + x.ruck).toFixed(1)} / ${x.plan} mi">
-          <div class="grit-bar-wrap" style="height:${H}px;">
-            ${x.plan ? `<div class="grit-bar-plan" style="height:${hPlan}px;"></div>` : ''}
-            <div class="grit-bar-fill" style="height:${hRun}px; background:var(--olive-bright); bottom:${hRuck}px;"></div>
-            <div class="grit-bar-fill" style="height:${hRuck}px; background:#8a6d3b; bottom:0;"></div>
-          </div>
-          <div class="grit-bar-lbl" style="${isToday ? 'color:var(--coyote);' : ''}">${L[x.dow]}</div>
-        </div>`; }).join('')}</div>
-        <div style="display:flex; gap:10px; font-size:10px; color:var(--paper-dim); margin-top:2px;">
-          <span><span class="lg-sw" style="background:var(--olive-bright);"></span>${es ? 'corriendo' : 'run'}</span>
-          <span><span class="lg-sw" style="background:#8a6d3b;"></span>${es ? 'marcha' : 'ruck'}</span>
-          <span><span class="lg-sw" style="background:transparent; border:1px dashed var(--paper-dim);"></span>${es ? 'plan' : 'plan'}</span>
-        </div>`;
-    }
-    function planStreak() {
-      const today = todayISO();
-      const past = state.plan.filter(s => s.type !== 'rest' && s.dateISO < today).sort((a, b) => b.dateISO.localeCompare(a.dateISO));
-      let n = 0;
-      for (const s of past) { if (sessionStatus(s).key === 'done') n++; else break; }
-      return n;
-    }
-    function renderGritRing(pct, total, color) {
-      const R = 44, C = 2 * Math.PI * R, len = Math.max(0, Math.min(100, pct)) / 100 * C;
-      return `<svg class="grit-ring" viewBox="0 0 110 110" width="110" height="110" role="img" aria-label="GRIT ${Math.round(pct)}%">
-        <circle cx="55" cy="55" r="${R}" fill="none" stroke="var(--field-surface)" stroke-width="10"/>
-        <circle cx="55" cy="55" r="${R}" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round"
-          stroke-dasharray="${len.toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 55 55)" class="grit-ring-arc"/>
-        <text x="55" y="53" text-anchor="middle" font-size="22" font-weight="700" fill="var(--paper)" font-family="var(--font-mono)">${(Math.round(total * 10) / 10).toFixed(1)}</text>
-        <text x="55" y="70" text-anchor="middle" font-size="10" fill="var(--paper-dim)" font-family="var(--font-mono)">/ ${GRIT.target} mi</text>
-      </svg>`;
-    }
-    // Cumulative milestones from the ramp (22, 46, 72, 100).
-    function gritMilestones() { let c = 0; return GRIT.ramp.filter(b => b.mi > 0).map(b => (c += b.mi)); }
-    function checkGritMilestones(beforeTotal) {
-      const after = gritMilesBetween(GRIT.start, GRIT.end).total;
-      const crossed = gritMilestones().filter(m => beforeTotal < m && after >= m);
-      if (!crossed.length) return;
-      const m = crossed[crossed.length - 1];
-      const es = getLang() === 'es';
-      celebrate(m >= GRIT.target ? '🏆' : '🎖️', m >= GRIT.target ? (es ? '¡GRIT 100 COMPLETADO!' : 'GRIT 100 COMPLETE!') : (es ? `¡${m} millas! Bloque cumplido` : `${m} miles! Block done`));
-    }
-    function celebrate(icon, text) {
-      try {
-        const o = document.createElement('div');
-        o.className = 'celebrate';
-        o.setAttribute('role', 'status');
-        o.innerHTML = `<div class="celebrate-box"><div class="celebrate-icon">${icon}</div><div class="celebrate-text">${esc(text)}</div></div>`;
-        o.onclick = () => o.remove();
-        document.body.appendChild(o);
-        setTimeout(() => o.remove(), 2800);
-      } catch (_) {}
-    }
-
-    // ── Quality ladder (A / B / C) ──
-    const QUALITY_LADDERS = [
-      { key: 'A', es: 'Ritmo sostenido', en: 'Tempo', steps: ['20′', '25–30′', '30–35′', '25–30′ continuo'],
-        match: (s, t) => s.type === 'tempo' && !/calibraci|recorrido/.test(t) },
-      { key: 'B', es: 'Intervalos', en: 'Intervals', steps: ['5×3′', '6×3′', '5×4′', '4×5′'],
-        match: (s, t) => s.type === 'intervals' && !/cuesta/.test(t) },
-      { key: 'C', es: 'Cuestas', en: 'Hills', steps: ['8×60″', '10×60″', '8×90″'],
-        match: (s, t) => s.type === 'intervals' && /cuesta/.test(t) }
-    ];
-    function renderQualityLadderCard() {
-      const es = getLang() === 'es';
-      const today = todayISO();
-      const rows = QUALITY_LADDERS.map(Lr => {
-        const sessions = state.plan.filter(s => Lr.match(s, String(s.notes || '').toLowerCase()));
-        if (!sessions.length) return '';
-        const done = sessions.filter(s => s.dateISO <= today && sessionStatus(s).key === 'done').length;
-        const cur = Math.min(done, Lr.steps.length - 1);
-        const next = sessions.filter(s => s.dateISO >= today && sessionStatus(s).key !== 'done').sort((a, b) => a.dateISO.localeCompare(b.dateISO))[0];
-        return `<div style="margin-bottom:10px;">
-          <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--paper-dim); margin-bottom:4px;">
-            <span><strong style="color:var(--coyote);">${Lr.key}</strong> · ${Lr[es ? 'es' : 'en']}</span>
-            <span>${next ? (es ? 'Próxima: ' : 'Next: ') + next.dateISO.slice(5) : ''}</span>
-          </div>
-          <div class="ladder">${Lr.steps.map((st, i) => `<span class="ladder-step ${i < done ? 'ok' : i === cur ? 'cur' : ''}">${i < done ? '✓ ' : ''}${st}</span>`).join('')}</div>
-        </div>`;
-      }).join('');
-      if (!rows.trim()) return '';
-      return `<div class="card">
-        <div class="card-title">${es ? 'ESCALERA DE CALIDAD' : 'QUALITY LADDER'}</div>
-        ${rows}
-        <p style="font-size:10px; color:var(--paper-dim); line-height:1.4;">${es ? 'Se marca con las sesiones hechas. Si una no cumplió su criterio, se repite; dos fallos seguidos bajan un nivel.' : 'Marked from completed sessions. A session that misses its criterion is repeated; two misses in a row drop a level.'}</p>
-      </div>`;
-    }
-
-    // ── Month heatmap (calendar view) ──
-    function renderMonthHeatmap() {
-      const es = getLang() === 'es';
-      const today = todayISO();
-      const base = today >= '2026-11-01' && today <= '2026-11-30' ? today : (today < '2026-11-01' ? '2026-11-01' : today);
-      const d0 = parseISODateLocal(base); const y = d0.getFullYear(), mo = d0.getMonth();
-      const first = new Date(y, mo, 1), nDays = new Date(y, mo + 1, 0).getDate();
-      const lthr = state.profile?.lthr || 174;
-      const cells = [];
-      for (let i = 0; i < first.getDay(); i++) cells.push('<div class="hm-cell hm-empty"></div>');
-      let monthMi = 0;
-      for (let dnum = 1; dnum <= nDays; dnum++) {
-        const iso = isoFromDate(new Date(y, mo, dnum));
-        const acts = (state.tcxSessions || []).filter(a => a.dateISO === iso && a.sport !== 'biking');
-        const mi = gritMilesBetween(iso, iso).total; monthMi += mi;
-        const plan = state.plan.find(s => s.dateISO === iso);
-        let bg = 'var(--field-dark)', border = '1px solid var(--field-line)';
-        if (acts.length) {
-          if (acts.some(a => gearById(a.manualFields?.gearId)?.kind === 'boot') && acts.every(a => gearById(a.manualFields?.gearId)?.kind === 'boot')) bg = '#8a6d3b';
-          else { const z = Math.max(...acts.map(a => a.avgHR ? hrZoneFromBpm(a.avgHR, lthr) : 1)); bg = ZONE_COLORS[z]; }
-        } else if (plan && plan.type !== 'rest') {
-          border = iso < today ? '1px solid var(--rust-bright)' : '1px dashed var(--paper-dim)';
-        }
-        const isToday = iso === today;
-        cells.push(`<div class="hm-cell" style="background:${bg}; border:${isToday ? '2px solid var(--coyote)' : border};" ${plan ? `onclick="openSessionDetail(${plan.day})"` : ''} title="${iso}${mi ? ' · ' + mi.toFixed(1) + ' mi' : ''}">
-          <span class="hm-day">${dnum}</span>${mi ? `<span class="hm-mi">${mi.toFixed(1)}</span>` : ''}</div>`);
-      }
-      const monthName = first.toLocaleDateString(es ? 'es-PR' : 'en-US', { month: 'long', year: 'numeric' });
-      const hdr = (es ? ['D', 'L', 'M', 'M', 'J', 'V', 'S'] : ['S', 'M', 'T', 'W', 'T', 'F', 'S']).map(x => `<div class="hm-hdr">${x}</div>`).join('');
-      const sw = (c, t, b) => `<span><span class="lg-sw" style="background:${c}; ${b || ''}"></span>${t}</span>`;
-      return `<div class="card">
-        <div class="card-title">${monthName.toUpperCase()} · ${monthMi.toFixed(1)} MI</div>
-        <div class="hm-grid">${hdr}${cells.join('')}</div>
-        <div style="display:flex; flex-wrap:wrap; gap:8px; font-size:10px; color:var(--paper-dim); margin-top:8px;">
-          ${sw(ZONE_COLORS[2], 'Z2')}${sw(ZONE_COLORS[3], es ? 'gris' : 'grey')}${sw(ZONE_COLORS[4], 'Z4')}${sw(ZONE_COLORS[5], 'Z5')}${sw('#8a6d3b', es ? 'marcha' : 'ruck')}
-          ${sw('transparent', es ? 'plan' : 'plan', 'border:1px dashed var(--paper-dim);')}${sw('transparent', es ? 'perdida' : 'missed', 'border:1px solid var(--rust-bright);')}
-        </div>
-        <p style="font-size:10px; color:var(--paper-dim); margin-top:6px;">${es ? 'El color es la zona de la FC media del día. Meta: que domine el verde.' : 'Color = zone of the day\'s average HR. Goal: mostly green.'}</p>
-      </div>`;
-    }
-
-    // ── Activity verdict (top of activity detail) ──
-    function renderActivityVerdictCard(act) {
-      const es = getLang() === 'es';
-      const a = act.analysis || {};
-      const z = a.timeInZones?.seconds || null;
-      const linked = act.linkedPlanDay ? state.plan.find(s => s.day === act.linkedPlanDay) : null;
-      const plan = linked || state.plan.find(s => s.dateISO === act.dateISO) || null;
-      const txt = String(plan?.notes || '').toLowerCase();
-      const isBoot = gearById(act.manualFields?.gearId)?.kind === 'boot';
-      const inGrit = act.dateISO >= GRIT.start && act.dateISO <= GRIT.end && act.sport !== 'biking';
-      let verdict = null, vColor = 'var(--paper-dim)';
-      const tot = z ? Object.values(z).reduce((x, y) => x + y, 0) : 0;
-      const m = (k) => z ? (z[k] || 0) / 60 : 0;
-      if (isOpticalHR(act)) verdict = es ? 'FC óptica: sin veredicto.' : 'Optical HR: no verdict.';
-      else if (!plan || !z || !tot) verdict = es ? 'Vincula la actividad a un día del plan para ver el veredicto.' : 'Link to a plan day to see the verdict.';
-      else if (plan.type === 'easy' || plan.type === 'long') {
-        const easy = (m(1) + m(2)) / (tot / 60) * 100;
-        const ok = easy >= 80;
-        verdict = ok ? (es ? `✓ Fácil de verdad: ${Math.round(easy)}% del tiempo en Z1–Z2.` : `✓ Truly easy: ${Math.round(easy)}% in Z1–Z2.`)
-                     : (es ? `✕ Se fue a zona gris: solo ${Math.round(easy)}% en Z1–Z2 (meta ≥80%).` : `✕ Drifted grey: only ${Math.round(easy)}% in Z1–Z2 (goal ≥80%).`);
-        vColor = ok ? 'var(--olive-bright)' : 'var(--signal-amber)';
-      } else if (plan.type === 'tempo' && !/recorrido/.test(txt)) {
-        const tm = /(\d+)(?:\s*a\s*(\d+))?\s*min\s+a\s+fc/.exec(txt);
-        const target = tm ? +tm[1] : 20;
-        const ok = m(4) >= target && m(5) <= 1;
-        verdict = ok ? (es ? `✓ Cumplió: ${Math.round(m(4))} min en Z4 (meta ${target}), ${Math.round(m(5))} min sobre 174.` : `✓ Met: ${Math.round(m(4))} min Z4 (goal ${target}).`)
-                     : (es ? `✕ Revisar: ${Math.round(m(4))} min en Z4 (meta ${target}) y ${Math.round(m(5))} min sobre 174.` : `✕ Review: ${Math.round(m(4))} min Z4 (goal ${target}), ${Math.round(m(5))} min above 174.`);
-        vColor = ok ? 'var(--olive-bright)' : 'var(--signal-amber)';
-      } else if (plan.type === 'intervals') {
-        verdict = es ? `${/cuesta/.test(txt) ? 'Cuestas' : 'Intervalos'}: revisa que la última repetición fuera igual o más rápida que la primera (parciales abajo).` : 'Intervals: check last rep ≥ first (splits below).';
-      } else verdict = es ? 'Sesión específica: compárala con la referencia de 64:16.' : 'Specific session: compare with the 64:16 reference.';
-      const bar = z && tot ? `<div class="zone-bar">${[1, 2, 3, 4, 5].map(k => (z[k] || 0) > 0 ? `<div style="width:${((z[k] || 0) / tot * 100).toFixed(1)}%; background:${ZONE_COLORS[k]};" title="Z${k}: ${Math.round((z[k] || 0) / 60)} min"></div>` : '').join('')}</div>
-        <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--paper-dim); margin-top:3px;">${[1, 2, 3, 4, 5].map(k => `<span style="color:${ZONE_COLORS[k]};">Z${k} ${Math.round((z[k] || 0) / 60)}′</span>`).join('')}</div>` : '';
-      return `<div class="card" style="border-left:3px solid ${vColor};">
-        <div class="card-title">${es ? 'VEREDICTO' : 'VERDICT'}${plan ? ' · ' + esc(sessionTitle(plan)) : ''}</div>
-        <p style="font-size:13px; color:${vColor}; font-weight:600; line-height:1.4;">${verdict}</p>
-        ${bar ? `<div style="margin-top:10px;">${bar}</div>` : ''}
-        ${inGrit ? `<p style="font-size:12px; color:var(--paper); margin-top:10px;">GRIT: <strong>${(act.totalDistMi || 0).toFixed(2)} mi</strong> ${isBoot ? (es ? 'de marcha' : 'ruck') : (es ? 'corriendo' : 'run')}</p>` : ''}
-      </div>`;
-    }
-
-    // ── Offline SVG trend chart (no external library) ──
-    function svgTrendChart(pts, o = {}) {
-      if (!pts || pts.length < 2) return '';
-      const W = 340, H = 150, P = { l: 42, r: 10, t: 10, b: 22 };
-      const ys = pts.map(p => p.y);
-      let mn = Math.min(...ys), mx = Math.max(...ys);
-      if (mn === mx) { mn -= 1; mx += 1; }
-      const pad = (mx - mn) * 0.12; mn -= pad; mx += pad;
-      const x = i => P.l + (i / (pts.length - 1)) * (W - P.l - P.r);
-      const y = v => { const f = (v - mn) / (mx - mn); return o.invert ? P.t + f * (H - P.t - P.b) : H - P.b - f * (H - P.t - P.b); };
-      const color = o.color || '#c9a961', fy = o.fmtY || (v => Math.round(v));
-      const path = pts.map((p, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ' ' + y(p.y).toFixed(1)).join(' ');
-      const ticks = [mn + pad, (mn + mx) / 2, mx - pad];
-      return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(o.label || '')}" style="display:block;">
-        ${ticks.map(v => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="rgba(255,255,255,0.07)"/><text x="${P.l - 4}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#9a9888" font-family="monospace">${fy(v)}</text>`).join('')}
-        <path d="${path}" fill="none" stroke="${color}" stroke-width="2"/>
-        ${pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.y).toFixed(1)}" r="3.5" fill="${p.color || color}"><title>${esc(p.tip || '')}</title></circle>`).join('')}
-        <text x="${P.l}" y="${H - 6}" font-size="9" fill="#9a9888" font-family="monospace">${esc(pts[0].label)}</text>
-        <text x="${W - P.r}" y="${H - 6}" text-anchor="end" font-size="9" fill="#9a9888" font-family="monospace">${esc(pts[pts.length - 1].label)}</text>
-      </svg>`;
-    }
-
     function renderTodayHero() {
       const today = todayISO();
       const todaySess = state.plan.find(s => s.dateISO === today);
@@ -5456,7 +5483,7 @@
             <span style="font-size:10px; letter-spacing:1px; color:var(--paper-dim);">${es?'HOY · QUÉ TOCA':'TODAY · WHAT IS ON'}</span>
             ${todaySess.completed ? `<span class="badge">${t('badge_done')}</span>` : `<span class="session-tag">${sessionTag(todaySess)}</span>`}
           </div>
-          <div style="font-size:22px; font-weight:700; color:var(--paper); margin-bottom:2px;">${sessionTitle(todaySess).replace(/ · [\d.]+ mi$/, '')}</div>
+          <div style="font-size:22px; font-weight:700; color:var(--paper); margin-bottom:2px;">${sessionTitle(todaySess)}</div>
           ${(() => { const h = sessionHeadline(todaySess); return `
           <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
             <span style="font-size:28px; font-weight:700; color:var(--coyote); font-family:var(--font-mono);">${h.big}</span>
@@ -5585,12 +5612,10 @@
       return `
         <div class="card" style="border-left:3px solid var(--coyote);">
           <div class="card-title">GRIT 100 · ${es ? 'NOVIEMBRE' : 'NOVEMBER'}</div>
-          <div style="display:flex; gap:12px; align-items:center; margin-bottom:8px;">
-            ${renderGritRing(pct, g.started ? g.all.total : 0, color)}
-            <div style="flex:1; min-width:0;">${renderGritWeekBars(g.block ? g.block.from : (g.started ? addDaysISO(g.today, -((parseISODateLocal(g.today).getDay()))) : GRIT.start))}</div>
-          </div>
           <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">${boxes}</div>
-          ${(() => { const st = planStreak(); const exp = g.started && !g.finished ? g.expected : null; return (exp != null || st) ? `<p style="font-size:11px; color:var(--paper); margin:6px 0 2px;">${exp != null ? (es ? `Plan a hoy: <strong>${f1(exp)} mi</strong>` : `Plan to date: <strong>${f1(exp)} mi</strong>`) : ''}${exp != null && st ? ' · ' : ''}${st ? (es ? `🔥 Racha: ${st} sesiones cumplidas` : `🔥 Streak: ${st} sessions`) : ''}</p>` : ''; })()}
+          <div style="height:10px; background:var(--field-surface); border-radius:5px; overflow:hidden; margin:2px 0 8px;" role="img" aria-label="GRIT 100 ${Math.round(pct)}%">
+            <div style="height:100%; width:${pct.toFixed(0)}%; background:${color};"></div>
+          </div>
           <p style="font-size:11px; color:var(--paper-dim);">${line1}</p>
           ${line2 ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:2px;">${line2}</p>` : ''}
           <p style="font-size:11px; color:${color}; margin-top:4px; font-weight:600;">${status}</p>
@@ -5896,11 +5921,9 @@
           ${renderRacesStrip()}
           ${renderRecalcBanner()}
           ${renderTaperCard()}
-          ${renderReadinessCard()}
           ${renderTodayHero()}
           ${(() => { const ts = state.plan.find(s => s.dateISO === todayISO()); return ts ? renderStrengthRecCard(ts) : ''; })()}
           ${renderGritCard()}
-          ${renderQualityLadderCard()}
           ${renderRacePredictionCard()}
           ${renderACWRCard()}
 
@@ -5911,9 +5934,9 @@
             <div class="card" style="cursor:pointer;" onclick="switchView('calendar')">
               <div class="card-title">${getLang()==='es' ? 'CARGA DE ENTRENAMIENTO' : 'TRAINING LOAD'}</div>
               <div class="stat-grid">
-                <div class="stat-box"><div class="value">${load.ctl}</div><div class="label">${getLang()==='es'?'Condición':'CTL · Fitness'}</div></div>
-                <div class="stat-box"><div class="value">${load.atl}</div><div class="label">${getLang()==='es'?'Fatiga':'ATL · Fatigue'}</div></div>
-                <div class="stat-box"><div class="value" style="color:${load.formColor};">${load.tsb > 0 ? '+' : ''}${load.tsb}</div><div class="label">${getLang()==='es'?'Forma':'TSB · Form'}</div></div>
+                <div class="stat-box"><div class="value">${load.ctl}</div><div class="label">CTL · ${getLang()==='es'?'Fitness':'Fitness'}</div></div>
+                <div class="stat-box"><div class="value">${load.atl}</div><div class="label">ATL · ${getLang()==='es'?'Fatiga':'Fatigue'}</div></div>
+                <div class="stat-box"><div class="value" style="color:${load.formColor};">${load.tsb > 0 ? '+' : ''}${load.tsb}</div><div class="label">TSB · ${getLang()==='es'?'Forma':'Form'}</div></div>
               </div>
               <p style="font-size:11px; color:${load.formColor}; margin-top:8px;">${load.formLabel}</p>
             </div>
@@ -5931,7 +5954,7 @@
                     <p>${s.dateISO}</p>
                   </div>
                 </div>
-                ${statusChip(s)}
+                <div class="badge day">D${s.day}</div>
               </div>
             </div>
           `).join('')}
@@ -5948,7 +5971,7 @@
                       <p>${s.dateISO}${s.linkedActivityId ? ' · ' + t('linked_suffix') : ''}</p>
                     </div>
                   </div>
-                  ${statusChip(s)}
+                  ${s.completed ? `<div class="badge">${t('badge_done')}</div>` : `<div class="badge day">D${s.day}</div>`}
                 </div>
               </div>
             `).join('')}
@@ -6641,7 +6664,7 @@
             <button class="detail-back" onclick="closeDetail()">←</button>
             <div class="detail-header-title">${getLang() === 'es' ? 'ACTIVIDAD' : 'ACTIVITY'} · ${act.dateISO}</div>
             <div style="display:flex; gap:6px;">
-              <button class="btn-small" onclick="exportAppMarkdown('${esc(act.id)}')">${getLang()==='es'?'MD CORTO':'MD APP'}</button>
+              <button class="btn-small" onclick="exportAppMarkdown('${esc(act.id)}')">MD APP</button>
               <button class="btn-small" onclick="exportActivityMarkdown('${esc(act.id)}')">${t('export_md')}</button>
             </div>
           </div>
@@ -6656,8 +6679,6 @@
                 <div class="tcx-grade grade-${gradeClass}">${a.sessionGrade || '—'}</div>
               </div>
             </div>
-
-            ${renderActivityVerdictCard(act)}
 
             ${renderGearHrCard(act)}
             ${renderFollowupMissing(act)}
@@ -6685,7 +6706,8 @@
               <div class="stat-box"><div class="value">${act.totalDistMi.toFixed(2)} mi</div><div class="label">${t('stat_distance')}</div></div>
               <div class="stat-box"><div class="value">${secToMMSS(act.totalTimeSec)}</div><div class="label">${t('stat_time')}</div></div>
               <div class="stat-box"><div class="value">${act.sport === 'biking' ? (act.avgSpeedMph||0).toFixed(1)+' mph' : fmtPace(act.avgPaceSecPerMi)}</div><div class="label">${act.sport === 'biking' ? (getLang()==='es'?'VELOCIDAD':'SPEED') : t('stat_avg_pace')}</div></div>
-              ${act.workPaceSecPerMi ? `<div class="stat-box"><div class="value">${fmtPace(act.workPaceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'PACE REPETICIONES' : 'REPS PACE'}</div></div>` : ''}
+              ${a.workSegment?.main ? `<div class="stat-box"><div class="value">${fmtPace(a.workSegment.main.paceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'RITMO DEL BLOQUE' : 'WORK BLOCK PACE'}</div></div>`
+                : act.workPaceSecPerMi ? `<div class="stat-box"><div class="value">${fmtPace(act.workPaceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'PACE REPETICIONES' : 'REPS PACE'}</div></div>` : ''}
               <div class="stat-box"><div class="value">${act.avgHR} bpm</div><div class="label">${t('stat_avg_hr')}</div></div>
               <div class="stat-box"><div class="value">${act.maxHR} bpm</div><div class="label">${t('stat_max_hr')}</div></div>
               <div class="stat-box"><div class="value">${act.avgCadSPM} spm</div><div class="label">${t('stat_avg_cad')}</div></div>
@@ -6789,9 +6811,6 @@
               </div>
             </div>
 
-            ${(() => { if (_mfDetailsFor !== act.id) { _mfDetailsFor = act.id; _mfDetailsOpen = !mf.sleepHours; } return ''; })()}
-            <details class="fc-details mf-details" ${_mfDetailsOpen ? 'open' : ''} ontoggle="_mfDetailsOpen = this.open">
-            <summary class="sitrep-label" style="cursor:pointer;">${getLang() === 'es' ? 'DATOS MANUALES · sueño, clima, Garmin' : 'MANUAL DATA · sleep, weather, Garmin'} ${_mfDetailsOpen ? '▴' : '▾'}</summary>
             <div class="sitrep-label">${getLang() === 'es' ? 'ESTADO PRE-SESIÓN' : 'PRE-SESSION STATE'}</div>
             <div class="card">
               <div class="manual-field-row">
@@ -6879,7 +6898,6 @@
                 <input type="text" id="mf-trainingLoad-${act.id}" value="${mf.trainingLoad}" placeholder="e.g. 84" onblur="saveManualField('${act.id}', 'trainingLoad', this.value)" enterkeyhint="done" onkeydown="handleEnterNext(event, null)" />
               </div>
             </div>
-            </details>
 
             <div class="sitrep-label">RPE</div>
             <div class="card">
@@ -7052,6 +7070,28 @@
     }
 
     function renderPlanVsActualBlock(plannedSession, activity) {
+      // Same rows as the Markdown report (planVsActualRows), so the card and the export agree.
+      if (normalizeSessionType(plannedSession.type) !== 'rest') {
+        let rows = [];
+        try { rows = planVsActualRows(plannedSession, activity); } catch (e) { console.warn(e); }
+        if (rows.length) {
+          const cls = v => v === 'En objetivo' ? 'delta-good' : v === 'Informativo' ? 'delta-neutral' : 'delta-bad';
+          const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+          return `
+        <div class="sitrep-label">${t('planned_vs_actual_label')}</div>
+        <div class="card">
+          ${rows.map(r => `
+          <div class="compare-row">
+            <div class="compare-label">${esc(r[0])}</div>
+            <div class="compare-planned">${esc(r[1])}</div>
+            <div class="compare-arrow">→</div>
+            <div class="compare-actual">${esc(r[2])}</div>
+            <div class="compare-delta ${cls(r[4])}">${esc(r[4])}${r[3] && r[3] !== '—' ? ' · ' + esc(r[3]) : ''}</div>
+          </div>`).join('')}
+          ${activity.analysis?.workSegment ? `<p style="font-size:10px;color:var(--paper-dim);margin-top:6px;">${getLang()==='es' ? 'Ritmo, FC y zonas: bloque de trabajo. Distancia y duración: sesión completa.' : 'Pace, HR and zones: work block. Distance and duration: whole session.'}</p>` : ''}
+        </div>`;
+        }
+      }
       const targetPace = plannedSession.pacePerMi;
       const actualPace = activity.avgPaceSecPerMi;
       const paceDelta = actualPace - targetPace;
@@ -7124,7 +7164,7 @@
             ${s.notes ? `
             <div class="sitrep-label">${getLang() === 'es' ? 'INSTRUCCIÓN DEL PLAN' : 'PLAN INSTRUCTION'}</div>
             <div class="card" style="border-left: 3px solid var(--coyote);">
-              <p style="font-size:13px; color: var(--paper); line-height:1.6;">${sessionInstruction(s)}</p>
+              <p style="font-size:13px; color: var(--paper); line-height:1.6;">${sessionTitle(s)}</p>
             </div>
             ` : ''}
 
@@ -7446,9 +7486,9 @@
         <div class="card">
           ${load ? `
             <div class="stat-grid" style="margin-bottom:14px;">
-              <div class="stat-box"><div class="value" style="color:var(--olive-bright);">${load.ctl}</div><div class="label">${getLang()==='es'?'Condición (42 d)':'CTL · Fitness (42d)'}</div></div>
-              <div class="stat-box"><div class="value" style="color:var(--rust-bright);">${load.atl}</div><div class="label">${getLang()==='es'?'Fatiga (7 d)':'ATL · Fatigue (7d)'}</div></div>
-              <div class="stat-box"><div class="value" style="color:${load.formColor};">${load.tsb > 0 ? '+' : ''}${load.tsb}</div><div class="label">${getLang()==='es'?'Forma':'TSB · Form'}</div></div>
+              <div class="stat-box"><div class="value" style="color:var(--olive-bright);">${load.ctl}</div><div class="label">CTL · ${getLang()==='es'?'Fitness (42d)':'Fitness (42d)'}</div></div>
+              <div class="stat-box"><div class="value" style="color:var(--rust-bright);">${load.atl}</div><div class="label">ATL · ${getLang()==='es'?'Fatiga (7d)':'Fatigue (7d)'}</div></div>
+              <div class="stat-box"><div class="value" style="color:${load.formColor};">${load.tsb > 0 ? '+' : ''}${load.tsb}</div><div class="label">TSB · ${getLang()==='es'?'Forma':'Form'}</div></div>
             </div>
             <p style="font-size:12px; color:${load.formColor}; margin-bottom:14px;">${load.formLabel}</p>
             ${renderLoadChart(load.curve)}
@@ -7678,8 +7718,6 @@
       return `
         <div class="view-container">
 
-          ${renderMonthHeatmap()}
-
           ${renderTrainingLoadSection()}
 
           ${renderClaudeImportCard()}
@@ -7767,7 +7805,7 @@
 
       return `
         <div class="view-container">
-          <div class="sitrep-label">${getLang()==='es'?'ESTADÍSTICAS':'STATS & ANALYTICS'}</div>
+          <div class="sitrep-label">STATS & ANALYTICS</div>
           
           <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; margin-bottom:16px;">
             ${tabs.map(tab => `
@@ -7801,13 +7839,9 @@
         </div>`;
       }
 
-      // 2026.10.28-2: trends only compare like with like. Easy = avg HR 128–150 on gentle terrain;
-      // hard = ≥95% LTHR for ≥20 min. Optical-HR sessions and biking are excluded.
-      const lthrS = state.profile?.lthr || 174;
-      const okHR = t => t.sport !== 'biking' && t.manualFields?.hrSource !== 'optical';
-      const paceData = sorted.filter(t => okHR(t) && t.avgPaceSecPerMi > 0 && t.avgHR >= 128 && t.avgHR <= 150 && (t.totalDistMi || 0) >= 2 && (t.analysis?.elevGainPerMi ?? 999) < 60).slice(-15);
-      const hrData = sorted.filter(t => okHR(t) && t.avgHR >= lthrS * 0.95 && (t.totalTimeSec || 0) >= 1200 && t.avgPaceSecPerMi > 0).slice(-10);
-      const vdotData = hrData.filter(t => t.analysis?.vdot);
+      const paceData = sorted.filter(t => t.avgPaceSecPerMi > 0).slice(-15);
+      const hrData = sorted.filter(t => t.avgHR > 0).slice(-15);
+      const vdotData = sorted.filter(t => t.analysis?.vdot).slice(-10);
       const lang = getLang();
 
       // ── Dynamic insight helpers: compare first half vs second half of the window ──
@@ -7837,15 +7871,15 @@
       };
 
       const paceInsight = insight(paceData, x=>x.avgPaceSecPerMi, {
-        lowerIsBetter:true, name: lang==='es'?'Ritmo en fáciles':'Easy pace', unit:'/mi',
+        lowerIsBetter:true, name: lang==='es'?'Pace':'Pace', unit:'/mi',
         fmt: v=>secToMMSS(v),
         goodMsg: lang==='es'?'Tu ritmo promedio está bajando — señal de mejor forma. Mantén el volumen fácil.':'Your average pace is dropping — a sign of improving fitness. Keep the easy volume.',
         badMsg: lang==='es'?'Tu ritmo promedio está subiendo. Puede ser fatiga acumulada o calor — revisa descanso e hidratación.':'Your average pace is creeping up. Could be accumulated fatigue or heat — check rest and hydration.'
       });
-      const hrInsight = insight(hrData, x=>x.avgPaceSecPerMi, {
-        lowerIsBetter:true, name: lang==='es'?'Ritmo en esfuerzos duros':'Hard-effort pace', unit:'/mi', fmt: v=>secToMMSS(v),
-        goodMsg: lang==='es'?'Tus esfuerzos duros son más rápidos: la calidad está funcionando.':'Hard efforts are getting faster: quality work is paying off.',
-        badMsg: lang==='es'?'Tus esfuerzos duros van más lentos. Revisa terreno, calor y descanso antes de concluir.':'Hard efforts are slower. Check terrain, heat and rest before concluding.'
+      const hrInsight = insight(hrData, x=>x.avgHR, {
+        lowerIsBetter:true, name:'HR', unit:' bpm',
+        goodMsg: lang==='es'?'FC promedio bajando a paces similares = mejor eficiencia aeróbica. Excelente.':'Average HR dropping at similar paces = better aerobic efficiency. Excellent.',
+        badMsg: lang==='es'?'FC promedio subiendo. Si el pace no bajó, vigila fatiga, calor o falta de sueño.':'Average HR rising. If pace did not drop, watch for fatigue, heat, or poor sleep.'
       });
       const vdotInsight = insight(vdotData, x=>x.analysis.vdot, {
         lowerIsBetter:false, name:'VDOT',
@@ -7857,18 +7891,16 @@
         <div style="space-y:3;">
           ${paceData.length >= 2 ? `
             <div class="card" style="margin-bottom:16px;">
-              <div class="card-title">${lang==='es'?'RITMO EN FÁCILES COMPARABLES':'COMPARABLE EASY PACE'}</div>
-              <p style="font-size:10px; color:var(--paper-dim); margin-bottom:6px;">${lang==='es'?'FC media 128–150, terreno suave. Más arriba = más rápido.':'Avg HR 128–150, gentle terrain. Higher = faster.'}</p>
-              ${svgTrendChart(paceData.map(t => ({ label: t.dateISO.slice(5), y: t.avgPaceSecPerMi, tip: `${t.dateISO} · ${secToMMSS(t.avgPaceSecPerMi)}/mi · ${t.avgHR} lpm` })), { invert: true, fmtY: v => secToMMSS(v), color: '#5a8530', label: 'Ritmo en fáciles' })}
+              <div class="card-title">${t('stats_pace_trend')}</div>
+              <canvas id="paceChart" style="max-height:200px;"></canvas>
               ${paceInsight}
             </div>
           ` : ''}
           
           ${hrData.length >= 2 ? `
             <div class="card" style="margin-bottom:16px;">
-              <div class="card-title">${lang==='es'?'RITMO EN ESFUERZOS DUROS':'HARD-EFFORT PACE'}</div>
-              <p style="font-size:10px; color:var(--paper-dim); margin-bottom:6px;">${lang==='es'?'FC media ≥95% del umbral durante 20 min o más (carreras, simulaciones, ritmo sostenido).':'Avg HR ≥95% LTHR for 20+ min.'}</p>
-              ${svgTrendChart(hrData.map(t => ({ label: t.dateISO.slice(5), y: t.avgPaceSecPerMi, tip: `${t.dateISO} · ${secToMMSS(t.avgPaceSecPerMi)}/mi · ${t.avgHR} lpm · ${t.totalDistMi.toFixed(2)} mi` })), { invert: true, fmtY: v => secToMMSS(v), color: '#c9a961', label: 'Esfuerzos duros' })}
+              <div class="card-title">${t('stats_hr_trend')}</div>
+              <canvas id="hrChart" style="max-height:200px;"></canvas>
               ${hrInsight}
             </div>
           ` : ''}
@@ -7876,7 +7908,7 @@
           ${vdotData.length >= 2 ? `
             <div class="card" style="margin-bottom:16px;">
               <div class="card-title">${t('stats_vdot_trend')}</div>
-              ${svgTrendChart(vdotData.map(t => ({ label: t.dateISO.slice(5), y: t.analysis.vdot, tip: `${t.dateISO} · VDOT ${t.analysis.vdot.toFixed(1)}` })), { fmtY: v => v.toFixed(1), color: '#3d6b8a', label: 'VDOT' })}
+              <canvas id="vdotChart" style="max-height:200px;"></canvas>
               ${vdotInsight}
             </div>
           ` : ''}
@@ -8888,10 +8920,6 @@
               <input type="checkbox" ${getLang() === 'es' ? 'checked' : ''} onchange="toggleLang()" />
               <span style="font-size: 14px;">${t('language_label')}: ${getLang() === 'es' ? 'Español' : 'English'}</span>
             </label>
-            <label class="checkbox-item">
-              <input type="checkbox" ${state.settings.highContrast ? 'checked' : ''} onchange="state.settings.highContrast = this.checked; saveState(); render();" />
-              <span style="font-size: 14px;">${getLang() === 'es' ? 'Alto contraste y letra grande (para usar al sol)' : 'High contrast & larger text (sunlight)'}</span>
-            </label>
             <button class="btn btn-secondary" style="width: 100%; margin-top: 14px;" onclick="resetApp();">${t('full_reset_btn')}</button>
           </div>
           <div class="card">
@@ -8964,7 +8992,7 @@
             <span class="nav-icon">⚙</span><span>${t('nav_more')}</span>
           </button>
           <button class="${currentView === 'stats' ? 'active' : ''}" onclick="switchView('stats')">
-            <span class="nav-icon">📊</span><span>${getLang()==='es'?'DATOS':'STATS'}</span>
+            <span class="nav-icon">📊</span><span>STATS</span>
           </button>
         </nav>
         ${overlayHtml}
@@ -9109,36 +9137,101 @@
       const a = activity?.analysis;
       if (!a) return false;
       const before = a.sessionGrade;
+      const lthr = state.profile?.lthr || 174;
+      const sessionType = resolveSessionType(activity);
+      const typeKey = normalizeSessionType(sessionType);
+      const intent = ZONE_INTENT[typeKey] || null;
+      const linked = activity.linkedPlanDay ? state.plan.find(p => p.day === activity.linkedPlanDay) : null;
+      const sport = activity.sport || 'running';
+
+      // ── Work block / planned reps (2026.10.29) ──
+      a.workSegment = null; a.repMatch = null;
+      try {
+        if (typeKey === 'tempo') a.workSegment = detectWorkSegment(activity, linked, lthr);
+        else if (typeKey === 'intervals' || typeKey === 'hill') a.repMatch = matchPlannedReps(activity, linked, lthr);
+      } catch (e) { console.warn('structured analysis failed', e); }
+
+      // ── Whole-session decoupling and drift: only meaningful for a continuous, steady run ──
+      if (Array.isArray(a.realSplitsMi)) {
+        const dec = calcAerobicDecoupling(a.realSplitsMi);
+        const walkSec = (a.runWalk?.walkSegments || []).filter(w => w.durationSec >= 15).reduce((s, w) => s + w.durationSec, 0);
+        const walkPct = activity.totalTimeSec ? walkSec / activity.totalTimeSec * 100 : 0;
+        const structured = intent === 'threshold' || intent === 'maximal';
+        let why = null;
+        if (structured) why = 'sesión estructurada (calentamiento, aceleraciones o repeticiones): se evalúa el bloque de trabajo';
+        else if (walkPct >= 5) why = `incluye caminatas (${Math.round(walkPct)} % del tiempo)`;
+        if (why && dec.value != null) { dec.valid = false; dec.reasonEs = why; dec.reasonEn = why; }
+        a.decouplingInfo = dec;
+        a.aerobicDecouplingPct = dec.value;
+        a.decouplingValid = dec.valid;
+        a.decouplingRating = !dec.valid ? null : dec.value < 5 ? 'excellent' : dec.value < 7.5 ? 'good' : dec.value < 10 ? 'fair' : 'poor';
+        a.cardiacDriftValid = !why;
+        a.cardiacDriftInvalidReasonEs = why;
+      }
+
+      // Inputs for scoring: the work block for a tempo, the matched reps for intervals.
+      const seg = a.workSegment && a.workSegment.main;
+      const segDecValid = !!(seg && seg.decoupling && seg.decoupling.valid);
+      const inp = seg ? {
+        decoupling: seg.decoupling ? seg.decoupling.value : null, decouplingValid: segDecValid,
+        cardiacDrift: seg.drift ? { driftPct: seg.drift.pct } : null,
+        timeInZones: seg.timeInZones, pacingConsistency: seg.cvPct != null ? { cvPct: seg.cvPct } : null,
+        cadenceBySegment: seg.splits, splits: seg.splits,
+        runWalk: { runPct: seg.runPct, walkSegments: [], runTimeSec: seg.durSec - seg.walkSec, walkTimeSec: seg.walkSec }
+      } : {
+        decoupling: a.aerobicDecouplingPct, decouplingValid: a.decouplingValid,
+        cardiacDrift: a.cardiacDriftValid === false ? null : a.cardiacDrift,
+        timeInZones: a.repMatch ? a.repMatch.timeInZones : a.timeInZones,
+        pacingConsistency: a.pacingConsistency,
+        cadenceBySegment: a.cadenceSegments, splits: a.realSplitsMi,
+        // Walking during planned recoveries is part of an interval session, not a lapse.
+        runWalk: intent === 'maximal' ? null : a.runWalk
+      };
+
       const scored = scoreSession({
-        sport: activity.sport || 'running',
-        sessionType: resolveSessionType(activity),
-        decoupling: a.aerobicDecouplingPct,
-        decouplingValid: a.decouplingValid,
-        cardiacDrift: a.cardiacDrift,
-        timeInZones: a.timeInZones,
-        pacingConsistency: a.pacingConsistency
+        sport, sessionType,
+        decoupling: inp.decoupling, decouplingValid: inp.decouplingValid,
+        cardiacDrift: inp.cardiacDrift, timeInZones: inp.timeInZones, pacingConsistency: inp.pacingConsistency
       });
       a.sessionScore = scored.score;
       a.sessionGrade = scored.grade;
+      a.scoredOn = seg ? 'work_block' : a.repMatch ? 'reps' : 'session';
 
-      // Only the 5K-value category depends on session type; the other seven were already final
-      // at parse time. Recompute the whole set rather than one field so calcCategoryGrades stays
-      // the single place that assembles it — cheap, and avoids two code paths drifting apart.
       if (a.categoryGrades) {
         a.categoryGrades = calcCategoryGrades({
-          sport: activity.sport || 'running',
-          sessionType: resolveSessionType(activity),
-          pacingConsistency: a.pacingConsistency,
-          cadenceBySegment: a.cadenceSegments,
-          runWalk: a.runWalk,
-          splits: a.realSplitsMi,
-          decouplingValid: a.decouplingValid,
-          decouplingPct: a.aerobicDecouplingPct,
-          cardiacDrift: a.cardiacDrift,
-          timeInZones: a.timeInZones,
+          sport, sessionType,
+          pacingConsistency: inp.pacingConsistency,
+          cadenceBySegment: inp.cadenceBySegment,
+          runWalk: inp.runWalk,
+          splits: inp.splits,
+          decouplingValid: inp.decouplingValid,
+          decouplingPct: inp.decoupling,
+          cardiacDrift: inp.cardiacDrift,
+          timeInZones: inp.timeInZones,
           hrDataQuality: a.hrDataQuality,
           totalTimeSec: activity.totalTimeSec
         });
+      }
+
+      // Refresh the findings that depend on decoupling/drift so they match the new verdicts.
+      if (Array.isArray(a.keyFindings)) {
+        a.keyFindings = a.keyFindings.filter(f => !/^(Decoupling|Cardiac drift|Eficiencia mejoró|Bloque de trabajo)/.test(f.text || ''));
+        if (seg) {
+          const d = seg.decoupling;
+          a.keyFindings.push({ type: seg.longestAboveLthrSec > 60 ? 'crit' : seg.bandPct >= 70 ? 'pos' : 'warn',
+            text: `Bloque de trabajo: ${secToMMSS(a.workSegment.workSec)} · ${fmtPace(seg.paceSecPerMi)} · FC ${seg.avgHR} · ${seg.bandPct}% en ${seg.bandLo}–${seg.bandHi} · racha máx. sobre ${lthr}: ${seg.longestAboveLthrSec} s${d && d.valid ? ` · desacople ${d.value}%` : ''}` });
+        } else if (a.decouplingValid && a.aerobicDecouplingPct != null) {
+          const v = a.aerobicDecouplingPct;
+          a.keyFindings.push(v < 0 ? { type: 'pos', text: `Eficiencia mejoró ${Math.abs(v).toFixed(1)}% en la segunda mitad` }
+            : v > 10 ? { type: 'crit', text: `Decoupling ${v.toFixed(1)}% — baja la intensidad hasta quedar bajo 7.5%` }
+            : v > 7.5 ? { type: 'warn', text: `Decoupling ${v.toFixed(1)}% — aceptable, apunta a menos de 7.5%` }
+            : { type: 'pos', text: `Decoupling ${v.toFixed(1)}% — base aeróbica sólida` });
+        } else if (a.decouplingInfo && a.decouplingInfo.value != null) {
+          a.keyFindings.push({ type: 'warn', text: `Decoupling no válido — ${a.decouplingInfo.reasonEs}.` });
+        }
+        if (!seg && a.cardiacDriftValid !== false && a.cardiacDrift && a.cardiacDrift.driftPct > 5) {
+          a.keyFindings.push({ type: 'warn', text: `Cardiac drift +${a.cardiacDrift.driftPct}% (${a.cardiacDrift.avgHRFirstHalf}→${a.cardiacDrift.avgHRSecondHalf} bpm) — check hydration/heat` });
+        }
       }
 
       return before !== scored.grade;
@@ -9450,7 +9543,6 @@
       showToast(isBulk ? `${t('toast_parsing')} (0/${files.length})` : t('toast_parsing'));
 
       let loaded = 0, duplicates = 0, errors = 0, reprocessed = 0;
-      const _gritBefore = gritMilesBetween(GRIT.start, GRIT.end).total;
       let lastParsed = null;
 
       for (let i = 0; i < files.length; i++) {
@@ -9473,6 +9565,8 @@
             const preservedManualFields = existing.manualFields;
             const preservedLinkedPlanDay = existing.linkedPlanDay;
             Object.assign(existing, parsed, { id: existing.id, manualFields: preservedManualFields, linkedPlanDay: preservedLinkedPlanDay });
+            // The fresh parse carries a type-less provisional grade; re-apply the linked plan day.
+            rescoreSession(existing);
             reprocessed++;
             lastParsed = existing;
             continue;
@@ -9493,7 +9587,6 @@
         saveState();
       }
       render();
-      if (loaded > 0) setTimeout(() => checkGritMilestones(_gritBefore), 400);
 
       if (isBulk) {
         showToast(t('toast_bulk_summary').replace('{n}', loaded).replace('{dup}', duplicates).replace('{err}', errors) + (reprocessed ? ` · ${reprocessed} ${getLang()==='es'?'actualizados':'updated'}` : ''));
@@ -9539,14 +9632,20 @@
         totalTimeSec: t.totalTimeSec,
         sessionType: vdotSessionType
       });
-      const vdotOK = !!a.vdot && vdotRecheck.valid;
-      const vdotWhy = vdotRecheck.reasonEs || a.vdotInvalidReasonEs || null;
+      // A structured quality session is never a race effort; say so instead of quoting the
+      // whole-session average HR (diluted by warm-up and walks) as the reason.
+      const structuredVdot = !!a.workSegment || !!a.repMatch;
+      const vdotOK = !!a.vdot && vdotRecheck.valid && !structuredVdot;
+      const vdotWhy = structuredVdot ? 'sesión estructurada (calentamiento + bloque de trabajo): el VDOT solo se calcula con carreras o pruebas continuas'
+        : (vdotRecheck.reasonEs || a.vdotInvalidReasonEs || null);
 
       // Auto-evaluation
       const { history, sameTypeOnly: fatigueSameTypeOnly } = buildFatigueHistory(t);
       const fatigue = calcFatigueIndex({ avgHR: t.avgHR, avgPaceSecPerMi: t.avgPaceSecPerMi }, history);
       fatigue.sameTypeOnly = fatigueSameTypeOnly;
-      const autoEval = calcAutoEvaluation(a, fatigue);
+      const autoEval = calcAutoEvaluation(a, fatigue, vdotSessionType);
+      const seg = a.workSegment && a.workSegment.kind === 'tempo' ? a.workSegment : null;
+      const lthrR = state.profile?.lthr || 174;
 
       // Zone time in MM:SS helper
       const zSec = a.timeInZones?.seconds || {};
@@ -9579,8 +9678,11 @@
       }
       let tss = estimateTSS(t.totalDistMi, t.totalTimeSec, t.avgHR, state.profile?.lthr || 174).toFixed(1);
       lines.push(`TSS: ${tss}`);
-      if (a.decouplingValid && a.aerobicDecouplingPct != null) lines.push(`Aerobic Decoupling: ${a.aerobicDecouplingPct.toFixed(1)}%`);
-      lines.push(`Session Grade: ${a.sessionGrade || ND}`);
+      if (seg) {
+        lines.push(`Work Block: ${secToMMSS(seg.workSec)} @ ${fmtPace(seg.main.paceSecPerMi)}, HR ${seg.main.avgHR} (laps ${seg.lapFrom + 1}-${seg.lapTo + 1}, ${seg.method === 'plan' ? 'matched to plan' : 'auto-detected'})`);
+        if (seg.main.decoupling && seg.main.decoupling.valid) lines.push(`Aerobic Decoupling (work block): ${seg.main.decoupling.value.toFixed(1)}%`);
+      } else if (a.decouplingValid && a.aerobicDecouplingPct != null) lines.push(`Aerobic Decoupling: ${a.aerobicDecouplingPct.toFixed(1)}%`);
+      lines.push(`Session Grade: ${a.sessionGrade || ND}${a.scoredOn === 'work_block' ? ' (work block)' : a.scoredOn === 'reps' ? ' (reps)' : ''}`);
       lines.push('```');
       lines.push('');
       
@@ -9674,8 +9776,11 @@
       if (isBike) {
         lines.push(`**Velocidad Promedio:** ${(t.avgSpeedMph || 0).toFixed(1)} mph (${((t.avgSpeedMph||0)*1.60934).toFixed(1)} km/h)`);
       } else {
-        lines.push(`**Pace Promedio:** ${fmtPace(t.avgPaceSecPerMi)}`);
-        if (t.workPaceSecPerMi) {
+        lines.push(`**Pace Promedio:** ${fmtPace(t.avgPaceSecPerMi)}${seg ? ' — sesión completa, incluye calentamiento, pausas y trote final' : ''}`);
+        if (seg) {
+          lines.push(`**Ritmo del bloque sostenido:** ${fmtPace(seg.main.paceSecPerMi)} — ${secToMMSS(seg.main.durSec)}, ${seg.main.distMi.toFixed(2)} mi, FC ${seg.main.avgHR}/${seg.main.maxHR}`);
+          if (seg.arranque) lines.push(`**Arranque (${Math.round(seg.arranque.durSec / 60)} min):** ${fmtPace(seg.arranque.paceSecPerMi)} — FC ${seg.arranque.hrStart}→${seg.arranque.hrEnd}`);
+        } else if (t.workPaceSecPerMi) {
           lines.push(`**Pace de Repeticiones (solo esfuerzo):** ${fmtPace(t.workPaceSecPerMi)} — ${t.workLapsCount} tramo(s) de esfuerzo detectados`);
           lines.push(`**Pace de Recuperación:** ${fmtPace(t.recoveryPaceSecPerMi)} — ${t.recoveryLapsCount} tramo(s) de recuperación excluidos del promedio de arriba`);
         }
@@ -9696,7 +9801,9 @@
       lines.push('');
       lines.push(`**Cadencia Promedio:** ${t.avgCadSPM || ND} ${t.avgCadSPM ? (isBike ? 'rpm' : 'spm') : ''}`.trim());
       lines.push(`**Cadencia Máxima:** ${t.maxCadSPM || ND} ${isBike ? 'rpm' : 'spm'}`);
-      if (!isBike && Array.isArray(t.laps) && t.workLapsCount >= 1) {
+      if (seg && seg.main.avgCad) {
+        lines.push(`**Cadencia Promedio (bloque sostenido):** ${seg.main.avgCad} spm`);
+      } else if (!isBike && Array.isArray(t.laps) && t.workLapsCount >= 1) {
         // The line above blends effort strides with near-zero-cadence walk recoveries, which
         // silently drags a real ~168 spm effort cadence down to a misleading ~136 spm average.
         // This isolates cadence to work laps only — see "Splits por Repetición" for the per-rep detail.
@@ -9760,13 +9867,54 @@
         lines.push(`| Z${z} | ${zoneTimeFmt(z)} | ${zonePct(z)}% |`);
       });
       lines.push('');
+      if (seg) lines.push('> Sesión completa (incluye calentamiento, aceleraciones, pausas y trote final). La evaluación usa el bloque de trabajo de abajo.', '');
+
+      // ── BLOQUE DE TRABAJO (ritmo sostenido) ─────────────────────────────
+      if (seg) {
+        const m = seg.main, tz = m.timeInZones;
+        const mmss = s => secToMMSS(Math.round(s || 0));
+        lines.push('---', '', '## Bloque de Trabajo — Ritmo Sostenido', '');
+        lines.push(`**Detección:** ${seg.method === 'plan' ? `vueltas ${seg.lapFrom + 1}–${seg.lapTo + 1} del reloj, emparejadas con los pasos del plan` : `vueltas ${seg.lapFrom + 1}–${seg.lapTo + 1} con FC ≥ 90% del umbral (sin plan vinculado)`} · resolución ${m.sampleStepSec} s`);
+        lines.push(`**Duración del bloque:** ${mmss(seg.workSec)}${seg.plannedWorkLoSec ? ` (plan: ${Math.round(seg.plannedWorkLoSec / 60)}${seg.plannedWorkHiSec !== seg.plannedWorkLoSec ? '–' + Math.round(seg.plannedWorkHiSec / 60) : ''} min)` : ''}`);
+        if (seg.arranque) {
+          const A = seg.arranque;
+          lines.push(`**Arranque:** ${mmss(A.durSec)} a ${fmtPace(A.paceSecPerMi)}${A.targetFast ? ` (objetivo ${fmtPaceNoUnit(A.targetFast)}–${fmtPace(A.targetSlow)})` : ''} · FC ${A.hrStart}→${A.hrEnd}`);
+        }
+        lines.push(`**Parte sostenida:** ${mmss(m.durSec)} · ${m.distMi.toFixed(2)} mi · ${fmtPace(m.paceSecPerMi)} · FC ${m.avgHR}/${m.maxHR} · cadencia ${m.avgCad || ND} spm`);
+        lines.push(`**FC en la franja ${m.bandLo}–${m.bandHi}:** ${mmss(m.bandSec)} (${m.bandPct}%)`);
+        lines.push(`**FC sobre ${lthrR}:** ${mmss(m.aboveLthrSec)} en total · racha más larga ${m.longestAboveLthrSec} s (bajadas de menos de ${m.sampleStepSec} s no la cortan) ${m.longestAboveLthrSec > 60 ? '— **pasó la regla de 60 s**' : '(regla: bajar si pasa de 60 s seguidos)'}`);
+        lines.push(`**Zonas del bloque:** Z1 ${tz.pct.z1}% · Z2 ${tz.pct.z2}% · Z3 ${tz.pct.z3}% · Z4 ${tz.pct.z4}% · Z5 ${tz.pct.z5}%`);
+        if (m.drift) lines.push(`**Deriva en el bloque:** ${m.drift.bpm >= 0 ? '+' : ''}${m.drift.bpm} bpm (${m.drift.pct >= 0 ? '+' : ''}${m.drift.pct}%)`);
+        if (m.decoupling) {
+          const d = m.decoupling;
+          lines.push(d.valid
+            ? `**Desacople del bloque:** ${d.value.toFixed(1)}% (1ª mitad ${fmtPace(d.pace1)} · FC ${d.hr1} → 2ª mitad ${fmtPace(d.pace2)} · FC ${d.hr2}) — ${d.value < 5 ? 'excelente' : d.value < 7.5 ? 'aceptable' : d.value < 10 ? 'alto, revisa calor o ritmo de salida' : 'muy alto'}`
+            : `**Desacople del bloque:** ${ND} — no válido (${d.reasonEs})`);
+        }
+        if (m.cvPct != null) lines.push(`**Consistencia del ritmo (bloques de 2 min):** CV ${m.cvPct}%`);
+        lines.push('');
+        if (m.splits.length) {
+          lines.push('| Min | Ritmo | FC Prom | FC Máx | Cadencia |');
+          lines.push('|-----|-------|---------|--------|----------|');
+          m.splits.forEach(s => lines.push(`| ${s.fromMin}–${s.toMin}${s.partial ? '*' : ''} | ${fmtPace(s.paceSecPerUnit)} | ${s.avgHR ?? ND} | ${s.maxHR ?? ND} | ${s.avgCadence ?? ND} |`));
+          lines.push('');
+        }
+        lines.push('### Pasos de la Sesión (por vuelta)', '');
+        lines.push('| Vuelta | Paso | Duración | Dist. | Ritmo | FC Prom/Máx | Cadencia |');
+        lines.push('|---|---|---|---|---|---|---|');
+        seg.lapLabels.forEach(l => lines.push(`| ${l.lapIndex + 1} | ${l.label} | ${mmss(l.durSec)} | ${l.distMi.toFixed(2)} mi | ${l.paceSecPerMi > 0 && l.paceSecPerMi < 3600 ? fmtPace(l.paceSecPerMi) : ND} | ${l.avgHR}/${l.maxHR} | ${l.cad ? l.cad + ' spm' : ND} |`));
+        lines.push('');
+      }
 
       // ── DERIVA CARDÍACA ──────────────────────────────────────────────────
       lines.push('---');
       lines.push('');
       lines.push('## Deriva Cardíaca');
       lines.push('');
-      if (a.cardiacDrift) {
+      if (a.cardiacDrift && a.cardiacDriftValid === false) {
+        lines.push(`**Deriva de la sesión completa:** ${ND} — no válida: ${a.cardiacDriftInvalidReasonEs}.`);
+        if (seg && seg.main.drift) lines.push(`**Deriva en el bloque de trabajo:** ${seg.main.drift.bpm >= 0 ? '+' : ''}${seg.main.drift.bpm} bpm (${seg.main.drift.pct >= 0 ? '+' : ''}${seg.main.drift.pct}%) — ver sección anterior.`);
+      } else if (a.cardiacDrift) {
         lines.push(`**FC Primera Mitad:** ${a.cardiacDrift.avgHRFirstHalf} bpm`);
         lines.push(`**FC Segunda Mitad:** ${a.cardiacDrift.avgHRSecondHalf} bpm`);
         const driftPctSign = a.cardiacDrift.driftPct >= 0 ? '+' : '';
@@ -9809,7 +9957,7 @@
       // already drives workPaceSecPerMi — this just exposes each individual rep instead of only
       // the blended average, which is what actually shows fatigue progression (or its absence)
       // across a set.
-      if (!isBike && Array.isArray(t.laps) && t.workLapsCount >= 2) {
+      if (!isBike && !seg && Array.isArray(t.laps) && t.workLapsCount >= 2) {
         const workReps = t.laps.filter(l => l.repType === 'work').sort((x, y) => x.lapIndex - y.lapIndex);
         const recoveryReps = t.laps.filter(l => l.repType === 'recovery').sort((x, y) => x.lapIndex - y.lapIndex);
 
@@ -9817,6 +9965,10 @@
         lines.push('');
         lines.push('## Splits por Repetición (Intervalos)');
         lines.push('');
+        if (a.repMatch) {
+          lines.push(`> Repeticiones emparejadas con el plan: ${a.repMatch.matched} de ${a.repMatch.planned} (por duración de vuelta; calentamiento y aceleraciones excluidos).`);
+          lines.push('');
+        }
         lines.push('| Rep | Pace | FC Prom/Máx | Cadencia | Potencia | Elev+ |');
         lines.push('|---|------|------|----------|----------|-------|');
         workReps.forEach((l, idx) => {
@@ -9874,9 +10026,12 @@
         lines.push(`**Primera Mitad:** ${dec.avgHRFirst} bpm avg, ${fmtPace(dec.avgPaceFirst)} pace`);
         lines.push(`**Segunda Mitad:** ${dec.avgHRSecond} bpm avg, ${fmtPace(dec.avgPaceSecond)} pace`);
 
+        if (dec.excludedFirstMile) lines.push('*Calculado sin la milla 1 (calentamiento).*');
         if (!dec.valid) {
           lines.push(`**Decoupling:** ${ND} — no válido`);
-          lines.push(`**Motivo:** ${dec.reasonEs.charAt(0).toUpperCase() + dec.reasonEs.slice(1)}. El cambio de ritmo lo explica la pendiente, no la fatiga.`);
+          const why = dec.reasonEs || 'datos insuficientes';
+          lines.push(`**Motivo:** ${why.charAt(0).toUpperCase() + why.slice(1)}.${/elevaci/.test(why) ? ' El cambio de ritmo lo explica la pendiente, no la fatiga.' : ''}`);
+          if (seg && seg.main.decoupling && seg.main.decoupling.valid) lines.push(`**Desacople del bloque de trabajo:** ${seg.main.decoupling.value.toFixed(1)}% — ver "Bloque de Trabajo".`);
         } else {
           lines.push(`**Decoupling:** ${dec.value.toFixed(1)}%`);
           if (dec.value < 0) {
@@ -10153,77 +10308,18 @@
           lines.push(`> El día ${linkedSession.day} del plan no tiene objetivos configurados, así que no hay comparación posible. Edita el día en la pestaña PLAN o vuelve a importar el plan con pace/distancia.`);
           lines.push('');
         } else {
-          const rows = [];
-          const verdict = (deltaPct, tolPct) =>
-            Math.abs(deltaPct) <= tolPct ? 'En objetivo'
-            : deltaPct > 0 ? 'Por encima' : 'Por debajo';
-
-          if (hasDistTarget) {
-            const tgtMi = linkedSession.targetDistM / 1609.344;
-            const d = t.totalDistMi - tgtMi;
-            const pct = tgtMi > 0 ? (d / tgtMi) * 100 : 0;
-            rows.push([
-              'Distancia',
-              `${tgtMi.toFixed(2)} mi`,
-              `${t.totalDistMi.toFixed(2)} mi`,
-              `${d >= 0 ? '+' : ''}${d.toFixed(2)} mi (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`,
-              verdict(pct, 10)
-            ]);
-          }
-          if (hasTimeTarget) {
-            const d = t.totalTimeSec - linkedSession.targetTimeSec;
-            const pct = (d / linkedSession.targetTimeSec) * 100;
-            rows.push([
-              'Duración',
-              secToHHMMSS(linkedSession.targetTimeSec),
-              secToHHMMSS(t.totalTimeSec),
-              `${d >= 0 ? '+' : ''}${Math.round(d / 60)} min (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`,
-              verdict(pct, 15)
-            ]);
-          }
-          if (hasPaceTarget && t.avgPaceSecPerMi > 0) {
-            // Faster than target is a NEGATIVE delta in sec/mi, so the verdict flips: running
-            // 30s/mi quicker than prescribed is "por encima" of the intended effort.
-            const d = t.avgPaceSecPerMi - linkedSession.pacePerMi;
-            const pct = (d / linkedSession.pacePerMi) * 100;
-            rows.push([
-              'Pace',
-              `${fmtPace(linkedSession.pacePerMi)}`,
-              `${fmtPace(t.avgPaceSecPerMi)}`,
-              `${d >= 0 ? '+' : ''}${Math.round(d)} s/mi`,
-              Math.abs(pct) <= 4 ? 'En objetivo' : (d < 0 ? 'Más rápido' : 'Más lento')
-            ]);
-          }
-
-          // Zone adherence — did the session live where its type says it should?
-          const zp = a.timeInZones?.pct;
-          if (zp) {
-            const intent = ZONE_INTENT[planType] || 'aerobic';
-            const hardPct = (zp.z4 || 0) + (zp.z5 || 0);
-            if (intent === 'aerobic') {
-              rows.push(['Tiempo sobre umbral', '< 10%', `${hardPct}%`,
-                `${hardPct - 10 >= 0 ? '+' : ''}${hardPct - 10} pts`,
-                hardPct < 10 ? 'En objetivo' : 'Por encima']);
-            } else if (intent === 'threshold') {
-              rows.push(['Tiempo en Z4', '≥ 60%', `${zp.z4 || 0}%`,
-                `${(zp.z4 || 0) - 60 >= 0 ? '+' : ''}${(zp.z4 || 0) - 60} pts`,
-                (zp.z4 || 0) >= 60 ? 'En objetivo' : 'Por debajo']);
-            } else {
-              rows.push(['Tiempo en Z4-Z5', '≥ 50%', `${hardPct}%`,
-                `${hardPct - 50 >= 0 ? '+' : ''}${hardPct - 50} pts`,
-                hardPct >= 50 ? 'En objetivo' : 'Por debajo']);
-            }
-          }
-
+          const rows = planVsActualRows(linkedSession, t);
           if (rows.length) {
             lines.push('| Métrica | Objetivo | Real | Diferencia | Evaluación |');
             lines.push('|---------|----------|------|------------|------------|');
             rows.forEach(r => lines.push(`| ${r.join(' | ')} |`));
             lines.push('');
-            const offTarget = rows.filter(r => r[4] !== 'En objetivo').length;
+            const judged = rows.filter(r => r[4] !== 'Informativo');
+            const offTarget = judged.filter(r => r[4] !== 'En objetivo').length;
             lines.push(offTarget === 0
               ? '**Adherencia:** sesión ejecutada según lo planificado.'
-              : `**Adherencia:** ${rows.length - offTarget}/${rows.length} métricas en objetivo.`);
+              : `**Adherencia:** ${judged.length - offTarget}/${judged.length} métricas en objetivo.`);
+            if (a.workSegment) lines.push('', '*Ritmo, FC y zonas se miden en el bloque de trabajo; distancia y duración, en la sesión completa.*');
             lines.push('');
           }
         }
@@ -11300,7 +11396,6 @@
     });
 
     function render() {
-      try { document.body.classList.toggle('hc', !!state.settings?.highContrast); } catch (_) {}
       const mainEl = document.querySelector('main');
       const detailEl = document.querySelector('.detail-body');
       const savedMain = mainEl ? mainEl.scrollTop : 0;
@@ -11336,7 +11431,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.10.28-2';
+    const APP_BUILD = '2026.10.28-1';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
