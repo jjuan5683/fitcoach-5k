@@ -531,13 +531,30 @@
       flex-shrink: 0;
     }
 
-    .session-info h3 {
+    .session-info h3, .session-info .h3 {
       font-family: var(--font-display);
       font-weight: 500;
       font-size: 15px;
       color: var(--paper);
       margin-bottom: 2px;
     }
+    /* 2026.11.02-2: plan line as heading + bullets */
+    .plan-head { display: block; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; }
+    .plan-list { margin: 4px 0 0; padding-left: 18px; list-style: disc; text-transform: uppercase; font-size: 13px; line-height: 1.5; font-weight: 500; }
+    .plan-list li { margin: 1px 0; }
+    .plan-list li::marker { color: var(--coyote); }
+    .plan-list.compact { font-size: 11.5px; line-height: 1.4; color: var(--paper-dim); }
+    .hero-title .plan-head { font-size: 20px; }
+    .hero-title .plan-list { font-size: 13px; }
+    /* 2026.11.02-2: dashboard edit mode */
+    .dash-w[hidden] { display: none; }
+    .dash-bar { display: flex; align-items: center; gap: 6px; margin: 10px 0 4px; padding: 6px 8px; border: 1px dashed var(--coyote); border-radius: 2px; background: var(--field-surface2); }
+    .dash-bar .dash-name { flex: 1; font: 600 11px/1.3 var(--font-mono); letter-spacing: 1px; text-transform: uppercase; color: var(--coyote); }
+    .dash-bar .dash-name small { display: block; color: var(--paper-dim); font-weight: 400; letter-spacing: 0; text-transform: none; }
+    .dash-bar button { min-width: 44px; min-height: 44px; background: transparent; color: var(--paper); border: 1px solid var(--field-line); border-radius: 2px; font-size: 16px; cursor: pointer; }
+    .dash-bar button:disabled { opacity: .35; cursor: default; }
+    .dash-w.is-off > :not(.dash-bar) { opacity: .35; }
+    .dash-tools { display: flex; gap: 8px; flex-wrap: wrap; margin: 16px 0 8px; }
 
     .session-info p {
       font-family: var(--font-mono);
@@ -2168,7 +2185,7 @@
     // Scores one session out of 100. Components with no data drop out and the remainder is
     // renormalized, so a session missing HR is not silently penalised for it.
     //   Aerobic efficiency 45 | Time in target zone 35 | Pacing consistency 20
-    function scoreSession({ sport, sessionType, decoupling, decouplingValid, cardiacDrift, timeInZones, pacingConsistency }) {
+    function scoreSession({ sport, sessionType, decoupling, decouplingValid, cardiacDrift, timeInZones, pacingConsistency, repConsistency }) {
       let score = 0, weightUsed = 0;
       const add = (pts, weight) => { score += pts; weightUsed += weight; };
 
@@ -2206,7 +2223,11 @@
           add(hardPct >= 50 ? 35 : hardPct >= 30 ? 28 : hardPct >= 15 ? 19 : 9, 35);
         } else {
           // Aerobic: any meaningful time above threshold is a miss.
-          add(hardPct < 10 ? 35 : hardPct < 25 ? 28 : hardPct < 45 ? 19 : 9, 35);
+          let pts = hardPct < 10 ? 35 : hardPct < 25 ? 28 : hardPct < 45 ? 19 : 9;
+          // 2026.11.02-2: Z3 is the grey zone the plan avoids on easy and long days.
+          const grey = pct.z3 || 0;
+          if (grey >= 10) pts = Math.min(pts, grey < 20 ? 30 : grey < 35 ? 24 : 17);
+          add(pts, 35);
         }
       }
 
@@ -2216,6 +2237,10 @@
       if (sport === 'running' && knownIntent !== 'maximal' && pacingConsistency && pacingConsistency.cvPct != null) {
         const cv = pacingConsistency.cvPct;
         add(cv < 3 ? 20 : cv < 6 ? 16 : cv < 10 ? 11 : 5, 20);
+      } else if (sport === 'running' && repConsistency && repConsistency.cvPct != null) {
+        // 2026.11.02-2: reps sessions — how evenly the repetitions were run (watch laps).
+        const cv = repConsistency.cvPct;
+        add(cv < 3 ? 20 : cv < 5 ? 16 : cv < 8 ? 11 : 5, 20);
       }
 
       const normalized = weightUsed > 0 ? Math.round((score / weightUsed) * 100) : 70;
@@ -2351,9 +2376,11 @@
     // purpose.
     function grade5KValue(timeInZones, decouplingValid, decouplingPct, sessionType) {
       if (!timeInZones || !timeInZones.pct) return null;
+      const intent = ZONE_INTENT[normalizeSessionType(sessionType)] || null;
+      // 2026.11.02-2: an easy or long day is not meant to carry intensity; an "F" there is noise.
+      if (intent === 'aerobic') return null;
       const hardPct = (timeInZones.pct.z4 || 0) + (timeInZones.pct.z5 || 0);
       let score = hardPct >= 50 ? 90 : hardPct >= 30 ? 80 : hardPct >= 15 ? 65 : hardPct >= 5 ? 50 : 35;
-      const intent = ZONE_INTENT[normalizeSessionType(sessionType)] || null;
       if (intent !== 'threshold' && intent !== 'maximal') {
         if (decouplingValid && decouplingPct != null && decouplingPct > 7.5) score -= 15;
       }
@@ -3310,13 +3337,17 @@
       // Walk the steps BEFORE the first rep in order (warm-up time, each stride, each free jog)
       // so a 60-s jog after a stride is never mistaken for a 60-s rep.
       const firstRep = steps.indexOf(reps[0]);
+      // 2026.11.02-2: remember which laps were warm-up, strides and free jogs, to check how
+      // the preparation was executed and to use the real length of the free steps.
+      const warmLaps = [], strideLaps = [], openLaps = [];
       for (const s of steps.slice(0, firstRep)) {
         if (k >= laps.length) break;
-        if (s.durationType === 'open') { k++; continue; }
+        if (s.durationType === 'open') { openLaps.push(laps[k]); k++; continue; }
         if (s.durationType !== 'time') continue;
         let acc = 0;
         const need = s.durationValue - Math.max(5, s.durationValue * 0.05);
-        while (k < laps.length && acc < need) { acc += laps[k].dur; k++; }
+        const bucket = /^Aceleraci/.test(s.label || '') ? strideLaps : s.intensity === 'warmup' ? warmLaps : null;
+        while (k < laps.length && acc < need) { acc += laps[k].dur; if (bucket) bucket.push(laps[k]); k++; }
       }
       for (const r of reps) {
         const tol = Math.max(4, r.durationValue * 0.08);
@@ -3343,10 +3374,88 @@
       act.laps.forEach((l, i) => { if (workIdx.has(i)) Object.keys(l.hrZoneSecs || {}).forEach(z => { zs[z] += l.hrZoneSecs[z] || 0; }); });
       const tot = Object.values(zs).reduce((a, b) => a + b, 0) || 1;
       const p = z => Math.round(zs[z] / tot * 100);
+      // Per-rep detail straight from the watch laps (lap time / lap distance).
+      const repLaps = laps.filter(l => workIdx.has(l.idx));
+      const repPaces = repLaps.map(l => l.pace).filter(x => x > 0);
+      let repCvPct = null;
+      if (repPaces.length >= 3) {
+        const mean = repPaces.reduce((a, b) => a + b, 0) / repPaces.length;
+        repCvPct = Math.round(Math.sqrt(repPaces.reduce((a, x) => a + (x - mean) ** 2, 0) / repPaces.length) / mean * 1000) / 10;
+      }
+      // Preparation (everything before the first rep): share of time above the Z2 ceiling.
+      // Strides themselves are fast by design, so they are left out: warm-up laps + the free jogs.
+      const f = zoneFloors(lthr);
+      const easyPrep = warmLaps.concat(openLaps);
+      let prepSec = 0, prepAbove = 0, prepHrW = 0;
+      easyPrep.forEach(l => {
+        const z = l.lap.hrZoneSecs || {};
+        const s = Object.values(z).reduce((a, b) => a + (b || 0), 0);
+        prepSec += s; prepAbove += (z[3] || 0) + (z[4] || 0) + (z[5] || 0); prepHrW += (l.avgHR || 0) * (l.dur || 0);
+      });
+      const prepDur = easyPrep.reduce((a, l) => a + l.dur, 0);
+      const jogDur = openLaps.reduce((a, l) => a + l.dur, 0);
+      const jogHR = jogDur ? Math.round(openLaps.reduce((a, l) => a + (l.avgHR || 0) * l.dur, 0) / jogDur) : null;
+      // Cool-down: laps after the last rep.
+      const lastRepIdx = matched[matched.length - 1].lapIdx;
+      const coolLaps = laps.filter(l => l.idx > lastRepIdx && l.dur >= 30);
+      const coolDur = coolLaps.reduce((a, l) => a + l.dur, 0), coolDist = coolLaps.reduce((a, l) => a + l.distM, 0);
+      const recLaps = laps.filter(l => recIdx.has(l.idx));
       return {
         kind: 'reps', planned: reps.length, matched: matched.length, labels: matched.map(m => m.label),
-        timeInZones: { seconds: zs, pct: { z1: p(1), z2: p(2), z3: p(3), z4: p(4), z5: p(5) }, totalSec: tot }
+        timeInZones: { seconds: zs, pct: { z1: p(1), z2: p(2), z3: p(3), z4: p(4), z5: p(5) }, totalSec: tot },
+        reps: repLaps.map(l => ({ lapIdx: l.idx, durSec: l.dur, distM: Math.round(l.distM), paceSecPerMi: l.pace, avgHR: Math.round(l.avgHR), maxHR: Math.round(l.maxHR) })),
+        repCvPct,
+        strides: strideLaps.map(l => ({ durSec: l.dur, paceSecPerMi: l.pace, avgHR: Math.round(l.avgHR) })),
+        warmup: prepDur ? { durSec: Math.round(prepDur), avgHR: Math.round(prepHrW / prepDur), abovePct: prepSec ? Math.round(prepAbove / prepSec * 100) : null, jogHR, ceiling: f.z3 - 1 } : null,
+        cooldown: coolDur ? { durSec: Math.round(coolDur), paceSecPerMi: coolDist > 0 ? coolDur / (coolDist / 1609.344) : null } : null,
+        // Real length of the free steps (jog after each stride + recovery between reps).
+        openActualSec: Math.round(openLaps.reduce((a, l) => a + l.dur, 0) + recLaps.reduce((a, l) => a + l.dur, 0)),
+        openActualCount: openLaps.length + recLaps.length
       };
+    }
+
+    // 2026.11.02-2: how the session was executed, beyond the work itself — preparation, strides,
+    // cool-down and perceived effort against the plan line. Shown as alerts; never changes the grade.
+    function executionAlerts(act, session) {
+      const a = act?.analysis || {}, out = [];
+      const rm = a.repMatch, seg = a.workSegment;
+      const notes = String(session?.notes || '').toLowerCase();
+      // Strides: should be quicker than the work (reps or sustained block).
+      let strides = [], refPace = null, refName = '';
+      if (rm && Array.isArray(rm.strides)) { strides = rm.strides; refPace = act.workPaceSecPerMi; refName = 'las repeticiones'; }
+      else if (seg && Array.isArray(seg.lapLabels)) {
+        strides = seg.lapLabels.filter(l => /^Aceleraci/.test(l.label)).map(l => ({ paceSecPerMi: l.paceSecPerMi, avgHR: l.avgHR }));
+        refPace = seg.main && seg.main.paceSecPerMi; refName = 'el bloque de ritmo sostenido';
+      }
+      if (strides.length && refPace > 0) {
+        const slow = strides.filter(s => s.paceSecPerMi > refPace * 1.05);
+        if (slow.length) out.push({ type: 'warn', key: 'strides',
+          text: `Aceleraciones lentas: ${slow.length} de ${strides.length} más lentas que ${refName} (${strides.map(s => fmtPaceNoUnit(s.paceSecPerMi)).join(', ')} vs ${fmtPace(refPace)}). Deben ser rápidas y sueltas, con la pausa caminando.` });
+      }
+      // Warm-up above the Z2 ceiling.
+      const w = rm && rm.warmup;
+      if (w && ((w.abovePct != null && w.abovePct > 25) || (w.jogHR && w.jogHR > w.ceiling))) {
+        out.push({ type: 'warn', key: 'warmup',
+          text: `Calentamiento por encima de Z2: ${w.abovePct != null ? w.abovePct + ' % del tiempo sobre ' + w.ceiling : ''}${w.jogHR ? (w.abovePct != null ? ' · ' : '') + 'FC media de los trotes entre aceleraciones ' + w.jogHR : ''}. Debe quedarse en ≤${w.ceiling}, aunque el ritmo sea lento.` });
+      }
+      // First rep clearly faster than the rest.
+      if (rm && Array.isArray(rm.reps) && rm.reps.length >= 4) {
+        const rest = rm.reps.slice(1).map(r => r.paceSecPerMi), mean = rest.reduce((x, y) => x + y, 0) / rest.length;
+        const r1 = rm.reps[0].paceSecPerMi;
+        if (r1 > 0 && r1 < mean * 0.97) out.push({ type: 'info', key: 'rep1',
+          text: `Primera repetición ${Math.round(mean - r1)} s/mi más rápida que el promedio de las demás (${fmtPaceNoUnit(r1)} vs ${fmtPace(mean)}). Arranca la 1 a esfuerzo 7.` });
+      }
+      // Cool-down walked instead of jogged.
+      if (rm && rm.cooldown && /trote\s+final/.test(notes) && rm.cooldown.paceSecPerMi > 17 * 60) {
+        out.push({ type: 'info', key: 'cooldown', text: `Trote final caminado (${secToMMSS(rm.cooldown.durSec)} a ${fmtPace(rm.cooldown.paceSecPerMi)}).` });
+      }
+      // Perceived effort above what the plan line asks for.
+      const eff = /esfuerzo\s+(?:de\s+)?(\d+)\s*a\s*(\d+)/.exec(notes);
+      const rpe = parseFloat(act?.manualFields?.rpe);
+      if (eff && !isNaN(rpe) && rpe > +eff[2]) {
+        out.push({ type: 'warn', key: 'rpe', text: `Esfuerzo percibido ${rpe}/10, por encima del plan (${eff[1]}–${eff[2]}). Revisa calor, hidratación, comida previa y la carga de los días anteriores.` });
+      }
+      return out;
     }
 
     // Planned total duration from the workout steps (open steps such as the free jog after each
@@ -3382,10 +3491,14 @@
         rows.push(['Distancia', `${tgtMi.toFixed(2)} mi`, `${t.totalDistMi.toFixed(2)} mi`, `${d >= 0 ? '+' : ''}${d.toFixed(2)} mi (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`, verdict(pct, 10)]);
       }
       const stepDur = plannedDurationFromSteps(linkedSession, lthr);
-      const tgtSec = stepDur ? stepDur.sec : linkedSession.targetTimeSec;
+      // 2026.11.02-2: free steps (jog after a stride, the walk/jog down a hill) have no planned
+      // length — use what they really took instead of assuming ~1 min each.
+      const useRealOpen = !!(stepDur && stepDur.open && reps && reps.openActualSec > 0 && reps.openActualCount >= stepDur.open - 1);
+      const tgtSec = stepDur ? (useRealOpen ? stepDur.sec - stepDur.open * 60 + reps.openActualSec : stepDur.sec) : linkedSession.targetTimeSec;
       if (tgtSec > 0) {
         const d = t.totalTimeSec - tgtSec, pct = d / tgtSec * 100;
-        rows.push([stepDur ? 'Duración total (según pasos)' : 'Duración', `${secToHHMMSS(tgtSec)}${stepDur && stepDur.open ? ` (con ${stepDur.open} pausa(s) libre(s) de ~1 min)` : ''}`, secToHHMMSS(t.totalTimeSec), `${d >= 0 ? '+' : ''}${Math.round(d / 60)} min (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`, verdict(pct, 15)]);
+        const note = !stepDur || !stepDur.open ? '' : useRealOpen ? ` (${stepDur.open} pasos libres con su duración real: ${secToMMSS(reps.openActualSec)})` : ` (con ${stepDur.open} pausa(s) libre(s) de ~1 min)`;
+        rows.push([stepDur ? 'Duración total (según pasos)' : 'Duración', `${secToHHMMSS(tgtSec)}${note}`, secToHHMMSS(t.totalTimeSec), `${d >= 0 ? '+' : ''}${Math.round(d / 60)} min (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`, verdict(pct, 15)]);
       }
 
       if (seg) {
@@ -3416,6 +3529,7 @@
       if (reps) {
         rows.push(['Repeticiones', `${reps.planned}`, `${reps.matched}`, `${reps.matched - reps.planned}`, reps.matched >= reps.planned ? 'En objetivo' : 'Por debajo']);
         if (t.workPaceSecPerMi) rows.push(['Ritmo de las repeticiones', linePace > 0 ? fmtPace(linePace) : 'por esfuerzo', fmtPace(t.workPaceSecPerMi), '—', 'Informativo']);
+        if (reps.repCvPct != null) rows.push(['Consistencia entre repeticiones', 'CV ≤ 5%', `CV ${reps.repCvPct}%`, '—', reps.repCvPct <= 5 ? 'En objetivo' : 'Por encima']);
         const hard = (reps.timeInZones.pct.z4 || 0) + (reps.timeInZones.pct.z5 || 0);
         rows.push(['Tiempo en Z4–Z5 (repeticiones)', '≥ 50%', `${hard}%`, `${hard - 50 >= 0 ? '+' : ''}${hard - 50} pts`, hard >= 50 ? 'En objetivo' : 'Por debajo']);
         return rows;
@@ -3434,6 +3548,8 @@
         const hardPct = (zp.z4 || 0) + (zp.z5 || 0);
         if (intent === 'aerobic') {
           rows.push(['Tiempo sobre umbral', '< 10%', `${hardPct}%`, `${hardPct - 10 >= 0 ? '+' : ''}${hardPct - 10} pts`, hardPct < 10 ? 'En objetivo' : 'Por encima']);
+          const grey = zp.z3 || 0;   // 2026.11.02-2: the plan avoids Z3 on easy/long days
+          rows.push(['Tiempo en Z3 (zona gris)', '< 10%', `${grey}%`, `${grey - 10 >= 0 ? '+' : ''}${grey - 10} pts`, grey < 10 ? 'En objetivo' : 'Por encima']);
         } else if (intent === 'threshold') {
           rows.push(['Tiempo en Z4 (sesión completa)', '—', `${zp.z4 || 0}%`, '—', 'Informativo']);
         } else {
@@ -4070,7 +4186,9 @@
           }
 
           const avgSpd = spdCt > 0 ? sumSpd / spdCt : distM / Math.max(totalTimeSec, 1);
-          const avgPaceSecPerMi = avgSpd > 0 ? 1609.344 / avgSpd : 0;
+          // 2026.11.02-2: lap pace = lap time / lap distance (what the watch shows). The mean of
+          // instantaneous speeds read up to 59 s/mi slow on 60-s hill reps.
+          const avgPaceSecPerMi = (distM > 20 && totalTimeSec > 0) ? totalTimeSec / (distM / 1609.344) : (avgSpd > 0 ? 1609.344 / avgSpd : 0);
 
           // Lap start relative to the first trackpoint. Needed to place each lap on the session
           // timeline (pauses make a running sum of TotalTimeSeconds drift).
@@ -4283,7 +4401,7 @@
             const dLon = (p2.lon - p1.lon) * Math.PI / 180;
             const a = Math.sin(dLat/2)**2 + Math.cos(p1.lat*Math.PI/180)*Math.cos(p2.lat*Math.PI/180)*Math.sin(dLon/2)**2;
             const horizM = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            if (horizM < 5) continue; // avoid division by near-zero
+            if (horizM < 30) continue; // 2026.11.02-2: <30 m of track turns GPS/altitude noise into +40 % "grades"
             const grade = (alt2 - alt1) / horizM * 100;
             if (grade > maxGradeUp) maxGradeUp = grade;
             if (grade < maxGradeDown) maxGradeDown = grade;
@@ -5209,6 +5327,45 @@
     }
     function sessionPhaseLabel(session) { return `${t('phase_word')} ${session.phase}`; }
 
+    // 2026.11.02-2: the plan line shown as a heading + one bullet per step, instead of one
+    // long paragraph. Splits on top-level commas, semicolons and ". " (never inside parentheses
+    // or decimals such as "3.5 miles"). The stored text is untouched.
+    function planNoteParts(session) {
+      const raw = String(session?.notes || '').replace(/^\s*[A-Za-zÀ-ÿ]+\s*:\s*/, '').trim();
+      if (!raw) return null;
+      const items = [];
+      let depth = 0, cur = '';
+      for (let i = 0; i < raw.length; i++) {
+        const ch = raw[i];
+        if (ch === '(') depth++;
+        if (ch === ')') depth = Math.max(0, depth - 1);
+        const cut = depth === 0 && (ch === ',' || ch === ';' || (ch === '.' && /\s/.test(raw[i + 1] || '') && !/\d/.test(raw[i + 1] || '')));
+        if (cut) { items.push(cur); cur = ''; continue; }
+        cur += ch;
+      }
+      items.push(cur);
+      let parts = items.map(x => x.trim().replace(/\.$/, '')).filter(Boolean);
+      let head = '';
+      // First colon that is not a clock time ("16:00").
+      const c = parts.length ? parts[0].search(/:(?!\d)|(?<!\d):/) : -1;
+      if (c > 0 && c < 100) {
+        head = parts[0].slice(0, c).trim();
+        const rest = parts[0].slice(c + 1).trim();
+        parts = (rest ? [rest] : []).concat(parts.slice(1));
+      } else if (parts.length > 1) {
+        head = parts.shift();
+      }
+      parts = parts.map(x => x.charAt(0).toUpperCase() + x.slice(1));
+      return { head: head || (parts.length === 1 ? parts.shift() : ''), items: parts };
+    }
+    function sessionTitleHtml(session, compact) {
+      const P = session && session.notes ? planNoteParts(session) : null;
+      if (!P || (!P.items.length && !P.head)) return esc(sessionTitle(session));
+      const head = P.head ? `<span class="plan-head">${esc(P.head)}${P.items.length ? ':' : ''}</span>` : '';
+      const list = P.items.length ? `<ul class="plan-list${compact ? ' compact' : ''}">${P.items.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : '';
+      return head + list;
+    }
+
     function buildProfile(formData) {
       const best5KSec = (parseInt(formData.currentBest5KMin) || 30) * 60 + (parseInt(formData.currentBest5KSec) || 0);
       const goalSec = (parseInt(formData.goalFiveKMin) || 30) * 60 + (parseInt(formData.goalFiveKSec) || 0);
@@ -5492,7 +5649,7 @@
             <span style="font-size:10px; letter-spacing:1px; color:var(--paper-dim);">${es?'HOY · QUÉ TOCA':'TODAY · WHAT IS ON'}</span>
             ${todaySess.completed ? `<span class="badge">${t('badge_done')}</span>` : `<span class="session-tag">${sessionTag(todaySess)}</span>`}
           </div>
-          <div style="font-size:22px; font-weight:700; color:var(--paper); margin-bottom:2px;">${sessionTitle(todaySess)}</div>
+          <div class="hero-title" style="font-size:22px; font-weight:700; color:var(--paper); margin-bottom:2px;">${sessionTitleHtml(todaySess)}</div>
           ${(() => { const h = sessionHeadline(todaySess); return `
           <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
             <span style="font-size:28px; font-weight:700; color:var(--coyote); font-family:var(--font-mono);">${h.big}</span>
@@ -5884,6 +6041,142 @@
         </table>`;
     }
 
+
+    // ═══ DASHBOARD WIDGETS — order and visibility chosen by the athlete (2026.11.02-2) ═══
+    // Each widget renders exactly as before; only its place on the page changes. Stored in
+    // state.settings.dashOrder / dashHidden (localStorage, travels with the backup).
+    const DASH_WIDGETS = [
+      ['route',      'Ruta de la carrera', 'Race route'],
+      ['races',      'Carreras', 'Races'],
+      ['taper',      'Reducción de volumen', 'Taper'],
+      ['today',      'Hoy · qué toca', 'Today'],
+      ['strength',   'Fuerza de hoy', "Today's strength"],
+      ['grit',       'GRIT 100', 'GRIT 100'],
+      ['prediction', 'Predicción de carrera', 'Race prediction'],
+      ['acwr',       'Carga aguda / crónica', 'Acute / chronic load'],
+      ['load',       'Carga de entrenamiento', 'Training load'],
+      ['upcoming',   'Próximas sesiones', 'Upcoming sessions'],
+      ['recent',     'Recientes', 'Recent']
+    ];
+    let dashEdit = false;
+    function dashOrder() {
+      const known = DASH_WIDGETS.map(w => w[0]);
+      const saved = Array.isArray(state.settings?.dashOrder) ? state.settings.dashOrder.filter(k => known.includes(k)) : [];
+      const out = saved.slice();
+      known.forEach((k, i) => { if (!out.includes(k)) { const prev = known.slice(0, i).reverse().find(x => out.includes(x)); out.splice(prev ? out.indexOf(prev) + 1 : 0, 0, k); } });
+      return out;
+    }
+    function dashHidden() { return new Set(Array.isArray(state.settings?.dashHidden) ? state.settings.dashHidden : []); }
+    function dashWidgetHtml(key, today, recentPast) {
+      switch (key) {
+        case 'route': return '<div id="fc-route-slot"></div>';
+        case 'races': return renderRacesStrip();
+        case 'taper': return renderTaperCard();
+        case 'today': return renderTodayHero();
+        case 'strength': { const ts = state.plan.find(s => s.dateISO === todayISO()); return ts ? renderStrengthRecCard(ts) : ''; }
+        case 'grit': return renderGritCard();
+        case 'prediction': return renderRacePredictionCard();
+        case 'acwr': return renderACWRCard();
+        case 'load': {
+          const load = getCurrentLoadStatus();
+          if (!load) return '';
+          return `
+            <div class="card" style="cursor:pointer;" onclick="switchView('calendar')">
+              <div class="card-title">${getLang()==='es' ? 'CARGA DE ENTRENAMIENTO' : 'TRAINING LOAD'}</div>
+              <div class="stat-grid">
+                <div class="stat-box"><div class="value">${load.ctl}</div><div class="label">CTL · ${getLang()==='es'?'Fitness':'Fitness'}</div></div>
+                <div class="stat-box"><div class="value">${load.atl}</div><div class="label">ATL · ${getLang()==='es'?'Fatiga':'Fatigue'}</div></div>
+                <div class="stat-box"><div class="value" style="color:${load.formColor};">${load.tsb > 0 ? '+' : ''}${load.tsb}</div><div class="label">TSB · ${getLang()==='es'?'Forma':'Form'}</div></div>
+              </div>
+              <p style="font-size:11px; color:${load.formColor}; margin-top:8px;">${load.formLabel}</p>
+            </div>`;
+        }
+        case 'upcoming': {
+          const up = state.plan.filter(s => s.dateISO > today && s.type !== 'rest').slice(0, 4);
+          if (!up.length) return '';
+          return `
+          <div class="sitrep-label">${t('upcoming_label')}</div>
+          ${up.map(s => `
+            <div class="session-card" onclick="openSessionDetail(${s.day})">
+              <div class="session-header">
+                <div class="session-left">
+                  <span class="session-tag">${sessionTag(s)}</span>
+                  <div class="session-info">
+                    <div class="h3">${sessionTitleHtml(s, true)}</div>
+                    <p>${s.dateISO}</p>
+                  </div>
+                </div>
+                <div class="badge day">D${s.day}</div>
+              </div>
+            </div>
+          `).join('')}`;
+        }
+        case 'recent': {
+          if (!recentPast.length) return '';
+          return `
+            <div class="sitrep-label">${t('recent_label')}</div>
+            ${recentPast.map(s => `
+              <div class="session-card ${s.completed ? 'completed' : ''}" onclick="openSessionDetail(${s.day})">
+                <div class="session-header">
+                  <div class="session-left">
+                    <span class="session-tag">${sessionTag(s)}</span>
+                    <div class="session-info">
+                      <div class="h3">${sessionTitleHtml(s, true)}</div>
+                      <p>${s.dateISO}${s.linkedActivityId ? ' · ' + t('linked_suffix') : ''}</p>
+                    </div>
+                  </div>
+                  ${s.completed ? `<div class="badge">${t('badge_done')}</div>` : `<div class="badge day">D${s.day}</div>`}
+                </div>
+              </div>
+            `).join('')}`;
+        }
+      }
+      return '';
+    }
+    function renderDashWidgets(today, recentPast) {
+      const es = getLang() === 'es';
+      const order = dashOrder(), hidden = dashHidden();
+      const name = k => { const w = DASH_WIDGETS.find(x => x[0] === k); return w ? (es ? w[1] : w[2]) : k; };
+      const parts = order.map((k, i) => {
+        const off = hidden.has(k);
+        if (off && !dashEdit) return '';
+        let html = '';
+        try { html = dashWidgetHtml(k, today, recentPast) || ''; } catch (e) { console.warn('widget', k, e); }
+        const empty = k !== 'route' && !String(html).trim();
+        if (!dashEdit) return empty ? '' : `<div class="dash-w" data-w="${k}">${html}</div>`;
+        const bar = `
+          <div class="dash-bar">
+            <span class="dash-name">${esc(name(k))}${off ? ` <small>${es ? 'Oculto' : 'Hidden'}</small>` : empty ? ` <small>${es ? 'No aparece ahora (sin datos o no aplica hoy)' : 'Not showing now (no data or not today)'}</small>` : ''}</span>
+            <button type="button" onclick="dashMove('${k}', -1)" ${i === 0 ? 'disabled' : ''} aria-label="${es ? 'Subir' : 'Move up'} ${esc(name(k))}">▲</button>
+            <button type="button" onclick="dashMove('${k}', 1)" ${i === order.length - 1 ? 'disabled' : ''} aria-label="${es ? 'Bajar' : 'Move down'} ${esc(name(k))}">▼</button>
+            <button type="button" onclick="dashToggle('${k}')" aria-label="${off ? (es ? 'Mostrar' : 'Show') : (es ? 'Ocultar' : 'Hide')} ${esc(name(k))}" title="${off ? (es ? 'Mostrar' : 'Show') : (es ? 'Ocultar' : 'Hide')}">${off ? '👁' : '✕'}</button>
+          </div>`;
+        return `<div class="dash-w${off ? ' is-off' : ''}" data-w="${k}">${bar}${off ? '' : html}</div>`;
+      }).join('');
+      const tools = `
+        <div class="dash-tools">
+          <button type="button" class="btn btn-secondary" style="flex:1;" onclick="toggleDashEdit()">${dashEdit ? (es ? '✓ LISTO' : '✓ DONE') : (es ? '✎ ORGANIZAR TABLERO' : '✎ ARRANGE DASHBOARD')}</button>
+          ${dashEdit ? `<button type="button" class="btn btn-secondary" onclick="dashReset()">${es ? 'RESTABLECER' : 'RESET'}</button>` : ''}
+        </div>`;
+      return (dashEdit ? tools : '') + parts + tools;
+    }
+    function toggleDashEdit() { dashEdit = !dashEdit; render(); }
+    function dashMove(key, dir) {
+      const order = dashOrder(), i = order.indexOf(key), j = i + dir;
+      if (i < 0 || j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]];
+      state.settings.dashOrder = order; saveState(); render();
+      requestAnimationFrame(() => { const el = document.querySelector(`.dash-w[data-w="${key}"]`); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); });
+    }
+    function dashToggle(key) {
+      const h = dashHidden();
+      if (h.has(key)) h.delete(key); else h.add(key);
+      state.settings.dashHidden = [...h]; saveState(); render();
+    }
+    function dashReset() {
+      delete state.settings.dashOrder; delete state.settings.dashHidden; saveState(); render();
+    }
+
     function renderDashboard() {
       if (!state.profile) return renderOnboarding();
 
@@ -5897,7 +6190,7 @@
       const recentPast = state.plan.filter(s => s.dateISO < today && s.type !== 'rest').slice(-4).reverse();
 
       return `
-        <div class="view-container">
+        <div class="view-container" data-dash="1">
           <div class="mission-clock">
             <div class="clock-top">
               <span class="clock-label">${t('clock_label').replace('5K', raceLabelByKey(profile.raceDistanceKey || '5k'))}</span>
@@ -5927,64 +6220,8 @@
             </div>
           </div>
 
-          ${renderRacesStrip()}
           ${renderRecalcBanner()}
-          ${renderTaperCard()}
-          ${renderTodayHero()}
-          ${(() => { const ts = state.plan.find(s => s.dateISO === todayISO()); return ts ? renderStrengthRecCard(ts) : ''; })()}
-          ${renderGritCard()}
-          ${renderRacePredictionCard()}
-          ${renderACWRCard()}
-
-          ${(() => {
-            const load = getCurrentLoadStatus();
-            if (!load) return '';
-            return `
-            <div class="card" style="cursor:pointer;" onclick="switchView('calendar')">
-              <div class="card-title">${getLang()==='es' ? 'CARGA DE ENTRENAMIENTO' : 'TRAINING LOAD'}</div>
-              <div class="stat-grid">
-                <div class="stat-box"><div class="value">${load.ctl}</div><div class="label">CTL · ${getLang()==='es'?'Fitness':'Fitness'}</div></div>
-                <div class="stat-box"><div class="value">${load.atl}</div><div class="label">ATL · ${getLang()==='es'?'Fatiga':'Fatigue'}</div></div>
-                <div class="stat-box"><div class="value" style="color:${load.formColor};">${load.tsb > 0 ? '+' : ''}${load.tsb}</div><div class="label">TSB · ${getLang()==='es'?'Forma':'Form'}</div></div>
-              </div>
-              <p style="font-size:11px; color:${load.formColor}; margin-top:8px;">${load.formLabel}</p>
-            </div>
-            `;
-          })()}
-
-          <div class="sitrep-label">${t('upcoming_label')}</div>
-          ${state.plan.filter(s => s.dateISO > today && s.type !== 'rest').slice(0, 4).map(s => `
-            <div class="session-card" onclick="openSessionDetail(${s.day})">
-              <div class="session-header">
-                <div class="session-left">
-                  <span class="session-tag">${sessionTag(s)}</span>
-                  <div class="session-info">
-                    <h3>${sessionTitle(s)}</h3>
-                    <p>${s.dateISO}</p>
-                  </div>
-                </div>
-                <div class="badge day">D${s.day}</div>
-              </div>
-            </div>
-          `).join('')}
-
-          ${recentPast.length > 0 ? `
-            <div class="sitrep-label">${t('recent_label')}</div>
-            ${recentPast.map(s => `
-              <div class="session-card ${s.completed ? 'completed' : ''}" onclick="openSessionDetail(${s.day})">
-                <div class="session-header">
-                  <div class="session-left">
-                    <span class="session-tag">${sessionTag(s)}</span>
-                    <div class="session-info">
-                      <h3>${sessionTitle(s)}</h3>
-                      <p>${s.dateISO}${s.linkedActivityId ? ' · ' + t('linked_suffix') : ''}</p>
-                    </div>
-                  </div>
-                  ${s.completed ? `<div class="badge">${t('badge_done')}</div>` : `<div class="badge day">D${s.day}</div>`}
-                </div>
-              </div>
-            `).join('')}
-          ` : ''}
+          ${renderDashWidgets(today, recentPast)}
         </div>`;
     }
 
@@ -7156,7 +7393,7 @@
           <div class="detail-body">
 
             <div class="card">
-              <div class="card-title">${sessionTitle(s)}</div>
+              <div class="card-title">${esc((s.notes && planNoteParts(s)?.head) || sessionTitle(s))}</div>
               <div class="date-picker-row">
                 <label class="form-label" style="margin:0;">${t('date_label')}</label>
                 <input type="date" value="${s.dateISO}" onchange="updateSessionDate(${s.day}, this.value)" />
@@ -7173,7 +7410,7 @@
             ${s.notes ? `
             <div class="sitrep-label">${getLang() === 'es' ? 'INSTRUCCIÓN DEL PLAN' : 'PLAN INSTRUCTION'}</div>
             <div class="card" style="border-left: 3px solid var(--coyote);">
-              <p style="font-size:13px; color: var(--paper); line-height:1.6;">${sessionTitle(s)}</p>
+              <div style="font-size:13px; color: var(--paper); line-height:1.6;">${sessionTitleHtml(s)}</div>
             </div>
             ` : ''}
 
@@ -7766,7 +8003,7 @@
                     <div class="session-left">
                       <span class="session-tag">${sessionTag(d.session)}</span>
                       <div class="session-info">
-                        <h3>${sessionTitle(d.session)}</h3>
+                        <div class="h3">${sessionTitleHtml(d.session, true)}</div>
                         <p>${(() => { const h = sessionHeadline(d.session); return [h.big, h.small].filter(x => x && x !== '—').join(' · ') || '—'; })()}</p>
                       </div>
                     </div>
@@ -9153,6 +9390,35 @@
       const linked = activity.linkedPlanDay ? state.plan.find(p => p.day === activity.linkedPlanDay) : null;
       const sport = activity.sport || 'running';
 
+      // ── 2026.11.02-2: stored laps carried a pace from the mean of instantaneous speeds;
+      // the watch shows lap time / lap distance. Repair on every rescore (idempotent).
+      (activity.laps || []).forEach(l => {
+        if (l.distanceMeters > 20 && l.totalTimeSec > 0) l.avgPaceSecPerMi = l.totalTimeSec / (l.distanceMeters / 1609.344);
+      });
+      if (Array.isArray(activity.laps)) {
+        const wl = activity.laps.filter(l => l.repType === 'work'), rl = activity.laps.filter(l => l.repType === 'recovery');
+        const agg = ls => { const dM = ls.reduce((s, l) => s + (l.distanceMeters || 0), 0), dS = ls.reduce((s, l) => s + (l.totalTimeSec || 0), 0); return dM > 0 ? dS / (dM / 1609.344) : null; };
+        if (wl.length >= 2) activity.workPaceSecPerMi = agg(wl);
+        if (rl.length) activity.recoveryPaceSecPerMi = agg(rl);
+      }
+      // Steepest grade over ≥ 50 m of track from the 5-s trace (the old 10-point window read
+      // GPS/altitude noise as +43 %).
+      const tr5 = a.trace5;
+      if (tr5 && Array.isArray(tr5.d) && Array.isArray(tr5.alt) && tr5.d.length > 20) {
+        let up = 0, dn = 0, j = 0;
+        for (let i = 0; i < tr5.d.length; i++) {
+          if (tr5.alt[i] == null) continue;
+          if (j < i) j = i;
+          while (j < tr5.d.length - 1 && tr5.d[j] - tr5.d[i] < 50) j++;
+          const dd = tr5.d[j] - tr5.d[i];
+          if (dd < 50 || dd > 120 || tr5.alt[j] == null) continue;
+          const g = (tr5.alt[j] - tr5.alt[i]) / dd * 100;
+          if (g > up) up = g; if (g < dn) dn = g;
+        }
+        activity.maxGradeUp = up > 0 ? Math.round(up * 10) / 10 : null;
+        activity.maxGradeDown = dn < 0 ? Math.round(dn * 10) / 10 : null;
+      }
+
       // ── Work block / planned reps (2026.10.29) ──
       a.workSegment = null; a.repMatch = null;
       try {
@@ -9196,11 +9462,33 @@
         // Walking during planned recoveries is part of an interval session, not a lapse.
         runWalk: intent === 'maximal' ? null : a.runWalk
       };
+      // 2026.11.02-2: reps sessions are graded on the reps themselves — pacing = how even the reps
+      // were, cadence and durability from the rep laps — not on a blend with the walks down.
+      const rm = a.repMatch;
+      if (!seg && rm && Array.isArray(rm.reps) && rm.reps.length >= 2) {
+        inp.pacingConsistency = null;
+        inp.repConsistency = rm.repCvPct != null ? { cvPct: rm.repCvPct } : null;
+        const repLapObjs = rm.reps.map(r => activity.laps[r.lapIdx]).filter(Boolean);
+        inp.cadenceBySegment = repLapObjs.map(l => ({ avgCadence: Math.round(l.avgCadSPM || 0) }));
+        inp.splits = rm.reps.map(r => ({ paceSecPerUnit: r.paceSecPerMi, partial: false }));
+        inp.runWalk = null;
+      }
+      // Hilly aerobic run: pace is set by the slope, so pace consistency and "durability"
+      // (pace fade) say nothing about the athlete there.
+      a.terrainGated = null;
+      if (!seg && !rm && intent === 'aerobic' && activity.totalDistMi > 1) {
+        const mPerMi = ((activity.elevGainM || 0) + (activity.elevLossM || 0)) / activity.totalDistMi;
+        if (mPerMi > 45) {
+          a.terrainGated = { mPerMi: Math.round(mPerMi) };
+          inp.pacingConsistency = null; inp.splits = null;
+        }
+      }
 
       const scored = scoreSession({
         sport, sessionType,
         decoupling: inp.decoupling, decouplingValid: inp.decouplingValid,
-        cardiacDrift: inp.cardiacDrift, timeInZones: inp.timeInZones, pacingConsistency: inp.pacingConsistency
+        cardiacDrift: inp.cardiacDrift, timeInZones: inp.timeInZones, pacingConsistency: inp.pacingConsistency,
+        repConsistency: inp.repConsistency
       });
       a.sessionScore = scored.score;
       a.sessionGrade = scored.grade;
@@ -9220,11 +9508,17 @@
           hrDataQuality: a.hrDataQuality,
           totalTimeSec: activity.totalTimeSec
         });
+        if (inp.repConsistency) {
+          const sc = gradePacing(inp.repConsistency.cvPct);
+          a.categoryGrades.pacing = sc == null ? null : { score: sc, letter: scoreToLetter(sc), flagged: false };
+        }
       }
+      try { a.execAlerts = executionAlerts(activity, linked); } catch (e) { a.execAlerts = []; }
 
       // Refresh the findings that depend on decoupling/drift so they match the new verdicts.
       if (Array.isArray(a.keyFindings)) {
-        a.keyFindings = a.keyFindings.filter(f => !/^(Decoupling|Cardiac drift|Eficiencia mejoró|Bloque de trabajo)/.test(f.text || ''));
+        a.keyFindings = a.keyFindings.filter(f => !/^(Decoupling|Cardiac drift|Eficiencia mejoró|Bloque de trabajo|Ejecución)/.test(f.text || ''));
+        (a.execAlerts || []).forEach(x => a.keyFindings.push({ type: 'warn', text: 'Ejecución: ' + x.text }));
         if (seg) {
           const d = seg.decoupling;
           a.keyFindings.push({ type: seg.longestAboveLthrSec > 60 ? 'crit' : seg.bandPct >= 70 ? 'pos' : 'warn',
@@ -9324,6 +9618,17 @@
       // The training-type tag is the other input to the grade, so a change here has to
       // propagate the same way a plan link does.
       if (field === 'trainingType') rescoreSession(act);
+      // 2026.11.02-2: RPE feeds the execution alerts — refresh them without a full rescore.
+      if (field === 'rpe' && act.analysis) {
+        const linked = act.linkedPlanDay ? state.plan.find(p => p.day === act.linkedPlanDay) : null;
+        try {
+          act.analysis.execAlerts = executionAlerts(act, linked);
+          if (Array.isArray(act.analysis.keyFindings)) {
+            act.analysis.keyFindings = act.analysis.keyFindings.filter(f => !/^Ejecución/.test(f.text || ''));
+            act.analysis.execAlerts.forEach(x => act.analysis.keyFindings.push({ type: 'warn', text: 'Ejecución: ' + x.text }));
+          }
+        } catch (e) { console.warn('execAlerts', e); }
+      }
       saveState();
       // Re-render so selection highlights (RPE, surface, training type) update immediately.
       // Scroll position is preserved by render(), so this no longer bounces to the top.
@@ -10010,11 +10315,22 @@
           const paceDeltaSec = Math.round(last.avgPaceSecPerMi - first.avgPaceSecPerMi);
           const paceStable = Math.abs(paceDeltaSec) <= 15; // within ~15 sec/mi counts as held pace
           lines.push(`**Deriva HR entre reps:** ${hrDelta >= 0 ? '+' : ''}${hrDelta} bpm de la rep 1 a la rep ${workReps.length} (${fmtPace(first.avgPaceSecPerMi)} → ${fmtPace(last.avgPaceSecPerMi)})`);
+          // 2026.11.02-2: consistency of the set from the watch laps; rep 1 shown apart when it ran hot.
+          const rmx = a.repMatch;
+          if (rmx && rmx.repCvPct != null) {
+            const ps = workReps.slice(1).map(l => l.avgPaceSecPerMi).filter(x => x > 0);
+            const rng = ps.length >= 2 ? ` · reps 2–${workReps.length}: ${fmtPaceNoUnit(Math.min(...ps))}–${fmtPace(Math.max(...ps))}` : '';
+            lines.push(`**Consistencia entre repeticiones:** CV ${rmx.repCvPct}%${rng}`);
+          }
           lines.push('');
           if (paceStable && hrDelta > 10) {
-            lines.push(`**Interpretación:** Pace estable con FC subiendo ${hrDelta} bpm — costo cardiovascular/térmico creciente, no pérdida de potencia muscular. Revisa potencia por rep arriba para confirmar.`);
+            lines.push(`**Interpretación:** Ritmo estable con FC subiendo ${hrDelta} lpm — costo cardiovascular o térmico creciente, no pérdida de potencia muscular.`);
+          } else if (!paceStable && paceDeltaSec > 0 && hrDelta >= 3) {
+            lines.push(`**Interpretación:** El ritmo bajó ${paceDeltaSec} s/mi y la FC subió ${hrDelta} lpm de la primera a la última — fatiga muscular sumándose a la cardiovascular.`);
           } else if (!paceStable && paceDeltaSec > 0) {
-            lines.push(`**Interpretación:** El pace se degradó ${paceDeltaSec}s/mi de la primera a la última rep junto con el cambio de FC — posible fatiga muscular sumándose a la cardiovascular.`);
+            lines.push(`**Interpretación:** El ritmo bajó ${paceDeltaSec} s/mi con la FC prácticamente igual (${hrDelta >= 0 ? '+' : ''}${hrDelta} lpm) — menos velocidad al mismo costo cardíaco: fatiga muscular, calor o una primera repetición demasiado rápida.`);
+          } else {
+            lines.push('**Interpretación:** Ritmo y FC estables de la primera a la última — repeticiones bien dosificadas.');
           }
           lines.push('');
         }
@@ -10060,11 +10376,19 @@
         lines.push('## Run / Walk');
         lines.push('');
         if (a.runWalk) {
-          lines.push(`**Tiempo corriendo:** ${secToHHMMSS(a.runWalk.runTimeSec)} (${a.runWalk.runPct}%)`);
-          lines.push(`**Tiempo caminando:** ${secToHHMMSS(a.runWalk.walkTimeSec)} (${100-a.runWalk.runPct}%)`);
-          lines.push(`**Pausas detectadas:** ${a.runWalk.walkSegments?.length || 0}`);
-          if (a.slowSegments && a.slowSegments.totalSec > (a.runWalk.walkTimeSec || 0) + 10) {
-            lines.push(`**Tramos lentos/caminata por cadencia:** ${a.slowSegments.segments.length} tramo(s), ${secToHHMMSS(a.slowSegments.totalSec)} (velocidad < 2.3 m/s y cadencia < 140 spm) — detalle en Análisis Avanzado`);
+          // 2026.11.02-2: speed alone (< 1.4 m/s) misses brisk walking (1.5–2.3 m/s at < 140 spm).
+          // Use the larger of the two so "0 % walking" never sits next to 7 min of walking.
+          const rwTot = (a.runWalk.runTimeSec || 0) + (a.runWalk.walkTimeSec || 0);
+          const slowSec = a.slowSegments ? a.slowSegments.totalSec || 0 : 0;
+          const useSlow = slowSec > (a.runWalk.walkTimeSec || 0) + 10;
+          const walkSec = useSlow ? Math.min(slowSec, rwTot) : (a.runWalk.walkTimeSec || 0);
+          const walkPct = rwTot ? Math.round(walkSec / rwTot * 100) : 100 - a.runWalk.runPct;
+          const isReps = !!(a.repMatch || (t.workLapsCount >= 2));
+          lines.push(`**Tiempo corriendo:** ${secToHHMMSS(Math.max(0, rwTot - walkSec))} (${100 - walkPct}%)`);
+          lines.push(`**Tiempo caminando:** ${secToHHMMSS(walkSec)} (${walkPct}%)${useSlow ? ' — incluye caminata rápida (cadencia < 140 spm)' : ''}${isReps ? ' — incluye las recuperaciones del plan' : ''}`);
+          lines.push(`**Tramos de caminata o detenido:** ${useSlow ? a.slowSegments.segments.length : (a.runWalk.walkSegments?.length || 0)}`);
+          if (useSlow) {
+            lines.push(`*Detalle de cada tramo en "Análisis Avanzado" (velocidad < 2.3 m/s y cadencia < 140 spm). La tabla de abajo solo lista los tramos casi detenidos (< 1.4 m/s).*`);
           }
           if (a.runWalk.walkSegments?.length) {
             lines.push('');
@@ -10250,7 +10574,7 @@
             pacing: 'Pacing', cadence: 'Cadencia', continuity: 'Continuidad',
             durability: 'Durabilidad', cvControl: 'Control cardiovascular',
             hrDataQuality: 'Calidad de datos FC',
-            value5K: 'Valor para preparación 5K', valueEndurance: 'Valor para evaluar resistencia'
+            value5K: 'Valor de intensidad (5K/10K)', valueEndurance: 'Valor para evaluar resistencia'
           };
           const order = ['pacing', 'cadence', 'continuity', 'durability', 'cvControl',
             'hrDataQuality', 'value5K', 'valueEndurance'];
@@ -10267,8 +10591,18 @@
               if (c.flagged) anyFlagged = true;
               lines.push(`**${CAT_LABELS[k]}:** ${c.letter}${mark}`);
             });
+            if (a.scoredOn === 'reps') lines.push('*Ritmo, cadencia y durabilidad calculados sobre las repeticiones (vueltas del reloj), sin las bajadas ni el calentamiento.*');
+            if (a.terrainGated) lines.push(`*Ritmo y durabilidad no se evalúan: terreno con ${a.terrainGated.mPerMi} m de subida + bajada por milla; el ritmo lo marca la pendiente.*`);
             lines.push('');
-            lines.push(`**Evaluación General:** ${a.sessionGrade} (${a.sessionScore}/100)`);
+            lines.push(`**Evaluación General:** ${a.sessionGrade} (${a.sessionScore}/100)${a.scoredOn === 'reps' ? ' — sobre las repeticiones' : a.scoredOn === 'work_block' ? ' — sobre el bloque de trabajo' : ''}`);
+            if (Array.isArray(a.execAlerts) && a.execAlerts.length) {
+              lines.push('');
+              lines.push('### Alertas de ejecución');
+              lines.push('');
+              a.execAlerts.forEach(x => lines.push(`- ${x.type === 'warn' ? '⚠' : 'ℹ'} ${x.text}`));
+              lines.push('');
+              lines.push('*Las alertas no cambian la nota: señalan qué corregir en la próxima.*');
+            }
             if (anyFlagged) {
               lines.push('');
               lines.push('*Confiabilidad reducida por calidad de señal de FC.');
@@ -10291,6 +10625,11 @@
       lines.push(`**Consistencia de Ritmo:** ${autoEval.consistencyLabel}`);
       lines.push(`**Recuperación Recomendada:** ${autoEval.recovery}`);
       lines.push(`**Próxima Sesión Recomendada:** ${autoEval.nextSession}`);
+      // 2026.11.02-2: what the plan actually has next (the line above is a generic heuristic).
+      {
+        const nx = (state.plan || []).filter(p => p.dateISO > t.dateISO && p.type !== 'rest').sort((x, y) => x.dateISO.localeCompare(y.dateISO))[0];
+        if (nx) lines.push(`**Próxima sesión del plan:** ${nx.dateISO} — ${sessionTitle(nx)}`);
+      }
       lines.push('');
 
       // ── PLANEADO VS REAL ─────────────────────────────────────────────────
@@ -11440,7 +11779,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.02-1';
+    const APP_BUILD = '2026.11.02-2';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
@@ -11509,7 +11848,9 @@
     // Runs before the first render so the activity list never flashes stale grades. Guarded by a
     // schema marker so it costs nothing on subsequent loads.
     (function migrateSessionGrades() {
-      const MARKER = 'typeAwareScoring_v1';
+      // 2026.11.02-2: new marker so saved sessions are re-graded once with lap-exact rep pace,
+      // rep-based category grades, the Z3 rule and the execution alerts.
+      const MARKER = 'rescore_2026.11.02-2';
       if (state.migrations?.[MARKER]) return;
       try {
         const changed = rescoreAllSessions();
@@ -11978,8 +12319,14 @@
   function mount() {
     var anchor = document.querySelector('.mission-clock');
     if (!anchor || !anchor.parentNode) return;
+    /* 2026.11.02-2: the dashboard now places this card in its own movable slot (#fc-route-slot).
+       Dashboard without a slot = the athlete hid the widget. */
+    var slot = document.getElementById('fc-route-slot');
+    var dash = anchor.closest('[data-dash]');
+    if (dash && !slot) { if (host && host.parentNode) host.parentNode.removeChild(host); return; }
     if (!host || !document.contains(host)) { host = document.createElement('section'); host.className = 'fc-route'; host.id = 'fc-route'; host.setAttribute('aria-label', tx('t')); host.setAttribute('data-l', ''); }
-    if (anchor.nextSibling !== host) anchor.parentNode.insertBefore(host, anchor.nextSibling);
+    if (slot) { if (host.parentNode !== slot) slot.appendChild(host); }
+    else if (anchor.nextSibling !== host) anchor.parentNode.insertBefore(host, anchor.nextSibling);
     var L = lang(); if (host.getAttribute('data-l') !== L || host.getAttribute('data-dirty') === '1') draw();
   }
   function draw() {
