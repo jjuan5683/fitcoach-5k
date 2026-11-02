@@ -2964,6 +2964,12 @@
         if (sameType.length >= 2) {
           return { history: sameType.map(act => ({ avgHR: act.avgHR, avgPaceSecPerMi: act.avgPaceSecPerMi })), sameTypeOnly: true };
         }
+        // 2026.11.02-3: intervals/tempo/race averages blend warm-up, work and recoveries — comparing
+        // them against easy or long runs says nothing about fatigue. Wait for 2 of the same type.
+        const nt = normalizeSessionType(activityType) || activityType;
+        if (nt === 'intervals' || nt === 'tempo' || nt === 'race_sim') {
+          return { history: [], sameTypeOnly: false, needSameType: true };
+        }
       }
       return { history: allPrior.map(act => ({ avgHR: act.avgHR, avgPaceSecPerMi: act.avgPaceSecPerMi })), sameTypeOnly: false };
     }
@@ -3002,6 +3008,10 @@
         aerobicDecouplingPct = seg.decoupling && seg.decoupling.valid ? seg.decoupling.value : null;
         cardiacDrift = seg.drift ? { driftPct: seg.drift.pct } : null;
         pacingConsistency = seg.cvPct != null ? { cvPct: seg.cvPct } : pacingConsistency;
+      } else if (analysis.repMatch && analysis.repMatch.repCvPct != null && Array.isArray(analysis.repMatch.reps) && analysis.repMatch.reps.length >= 2) {
+        // 2026.11.02-3: reps session — consistency is how evenly the reps were run.
+        pacingConsistency = { cvPct: analysis.repMatch.repCvPct };
+        cardiacDrift = null;
       } else if (analysis.cardiacDriftValid === false) {
         cardiacDrift = null;
       }
@@ -3458,6 +3468,46 @@
       return out;
     }
 
+    // 2026.11.02-3: a reps session (hill or flat repeats) is a structured session — the quarter-mile
+    // tables mix the climb with the walk down, so they read as "flat". These helpers let the reports
+    // describe it per watch lap instead.
+    function isRepsSession(act) {
+      const a = act?.analysis || {};
+      return !!(a.repMatch && Array.isArray(a.repMatch.reps) && a.repMatch.reps.length >= 2);
+    }
+    // Rep 1 run clearly hot (same rule as the execution alert): the rep-to-rep comparison starts at rep 2.
+    function firstRepHot(workReps) {
+      if (!Array.isArray(workReps) || workReps.length < 4) return false;
+      const rest = workReps.slice(1).map(l => l.avgPaceSecPerMi).filter(x => x > 0);
+      if (!rest.length) return false;
+      const mean = rest.reduce((x, y) => x + y, 0) / rest.length, r1 = workReps[0].avgPaceSecPerMi;
+      return r1 > 0 && r1 < mean * 0.97;
+    }
+    // Grade bands built from whole watch laps (5-s trace distance + altitude over each lap).
+    function lapGradeBands(act) {
+      const tr = act?.analysis?.trace5, laps = act?.laps;
+      if (!tr || !Array.isArray(tr.d) || !Array.isArray(tr.alt) || !Array.isArray(laps) || !laps.length) return null;
+      const step = tr.step || 5, n = tr.d.length;
+      const defs = [['Bajada fuerte (< -6%)', -Infinity, -6], ['Bajada (-6% a -2%)', -6, -2], ['Plano (-2% a +2%)', -2, 2], ['Subida (+2% a +6%)', 2, 6], ['Subida fuerte (> +6%)', 6, Infinity]];
+      const acc = defs.map(([label, lo, hi]) => ({ label, lo, hi, segs: 0, distM: 0, durSec: 0, hrSum: 0, hrT: 0 }));
+      laps.forEach(l => {
+        if (l.startOffsetSec == null || !(l.totalTimeSec > 0) || !(l.distanceMeters > 30)) return;
+        const i0 = Math.min(n - 1, Math.round(l.startOffsetSec / step));
+        const i1 = Math.min(n - 1, Math.round((l.startOffsetSec + l.totalTimeSec) / step));
+        if (i1 <= i0 || tr.alt[i0] == null || tr.alt[i1] == null) return;
+        const dd = tr.d[i1] - tr.d[i0];
+        if (dd < 30) return;
+        const g = (tr.alt[i1] - tr.alt[i0]) / dd * 100;
+        const b = acc.find(x => g >= x.lo && g < x.hi);
+        if (!b) return;
+        b.segs++; b.distM += l.distanceMeters; b.durSec += l.totalTimeSec;
+        if (l.avgHR > 0) { b.hrSum += l.avgHR * l.totalTimeSec; b.hrT += l.totalTimeSec; }
+      });
+      const out = acc.filter(b => b.segs > 0).map(b => ({ label: b.label, segs: b.segs, distMi: b.distM / 1609.344, durSec: b.durSec,
+        paceSecPerMi: b.distM > 0 ? b.durSec / (b.distM / 1609.344) : null, avgHR: b.hrT > 0 ? Math.round(b.hrSum / b.hrT) : null }));
+      return out.length ? out : null;
+    }
+
     // Planned total duration from the workout steps (open steps such as the free jog after each
     // stride are counted as ~60 s) — instead of "planned miles × a generic tempo pace".
     function plannedDurationFromSteps(session, lthr) {
@@ -3497,7 +3547,7 @@
       const tgtSec = stepDur ? (useRealOpen ? stepDur.sec - stepDur.open * 60 + reps.openActualSec : stepDur.sec) : linkedSession.targetTimeSec;
       if (tgtSec > 0) {
         const d = t.totalTimeSec - tgtSec, pct = d / tgtSec * 100;
-        const note = !stepDur || !stepDur.open ? '' : useRealOpen ? ` (${stepDur.open} pasos libres con su duración real: ${secToMMSS(reps.openActualSec)})` : ` (con ${stepDur.open} pausa(s) libre(s) de ~1 min)`;
+        const note = !stepDur || !stepDur.open ? '' : useRealOpen ? ` (${secToMMSS(stepDur.sec - stepDur.open * 60)} de pasos con tiempo fijo + ${stepDur.open} pausas y recuperaciones sin tiempo fijo, que duraron ${secToMMSS(reps.openActualSec)})` : ` (con ${stepDur.open} pausa(s) libre(s) de ~1 min)`;
         rows.push([stepDur ? 'Duración total (según pasos)' : 'Duración', `${secToHHMMSS(tgtSec)}${note}`, secToHHMMSS(t.totalTimeSec), `${d >= 0 ? '+' : ''}${Math.round(d / 60)} min (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`, verdict(pct, 15)]);
       }
 
@@ -4434,7 +4484,7 @@
           findings.push({ type: 'warn', text: `Cardiac drift +${cardiacDrift.driftPct}% (${cardiacDrift.avgHRFirstHalf}→${cardiacDrift.avgHRSecondHalf} bpm) — check hydration/heat` });
         }
         if (runWalk.walkSegments.length > 0) {
-          findings.push({ type: 'pos', text: `Run/Walk: ${runWalk.runPct}% running, ${runWalk.walkSegments.length} walk break(s) detected` });
+          findings.push({ type: 'pos', text: `Corriendo / caminando: ${runWalk.runPct}% corriendo, ${runWalk.walkSegments.length} pausa(s) de caminata` });
         }
 
         return {
@@ -4624,6 +4674,7 @@
       not_enough_splits: { en: 'Not enough splits to assess consistency.', es: 'No hay suficientes splits para evaluar consistencia.' },
       fatigue_label: { en: 'FATIGUE VS RECENT SESSIONS', es: 'FATIGA VS SESIONES RECIENTES' },
       fatigue_no_history: { en: 'No previous sessions to compare against', es: 'No hay sesiones previas para comparar' },
+      fatigue_need_same_type: { en: 'Needs at least 2 previous sessions of the same type (other types do not compare for a structured session)', es: 'Se necesitan al menos 2 sesiones previas del mismo tipo para comparar (las de otros tipos no sirven en una sesión estructurada)' },
       signal_normal: { en: 'NORMAL', es: 'NORMAL' },
       signal_fresh: { en: 'FRESH', es: 'FRESCO' },
       signal_elevated: { en: 'ELEVATED FATIGUE', es: 'FATIGA ELEVADA' },
@@ -7231,7 +7282,12 @@
 
             <div class="sitrep-label">${t('pacing_consistency_label')}</div>
             <div class="card">
-              ${a.pacingConsistency ? `
+              ${isRepsSession(act) && a.repMatch.repCvPct != null ? `
+                <div class="stat-grid">
+                  <div class="stat-box"><div class="value">${a.repMatch.repCvPct}%</div><div class="label">${getLang() === 'es' ? 'CV entre repeticiones' : 'Rep-to-rep CV'}</div></div>
+                  <div class="stat-box"><div class="value" style="font-size:13px; text-transform:uppercase;">${a.repMatch.repCvPct < 3 ? (getLang() === 'es' ? 'Excelente' : 'Very even') : a.repMatch.repCvPct < 6 ? (getLang() === 'es' ? 'Buena' : 'Even') : (getLang() === 'es' ? 'Variable' : 'Variable')}</div><div class="label">${t('stat_rating')}</div></div>
+                </div>
+              ` : a.pacingConsistency ? `
                 <div class="stat-grid">
                   <div class="stat-box"><div class="value">${a.pacingConsistency.cvPct}%</div><div class="label">${t('stat_cv')}</div></div>
                   <div class="stat-box"><div class="value" style="font-size:13px; text-transform:uppercase;">${a.pacingConsistency.rating.replace('_',' ')}</div><div class="label">${t('stat_rating')}</div></div>
@@ -7283,9 +7339,10 @@
     }
 
     function renderFatigueBlock(activity) {
-      const { history, sameTypeOnly } = buildFatigueHistory(activity);
+      const { history, sameTypeOnly, needSameType } = buildFatigueHistory(activity);
       const fatigue = calcFatigueIndex({ avgHR: activity.avgHR, avgPaceSecPerMi: activity.avgPaceSecPerMi }, history);
       fatigue.sameTypeOnly = sameTypeOnly;
+      if (needSameType && !fatigue.available) fatigue.reasonKey = 'fatigue_need_same_type';
 
       if (!fatigue.available) {
         return `<p style="font-size:12px; color: var(--paper-dim);">${t(fatigue.reasonKey)}</p>`;
@@ -8776,7 +8833,8 @@
         const tz = a.timeInZones;
         if (tz && tz.pct) out.push('- ' + L('Zonas', 'Zones') + ': Z1 ' + tz.pct.z1 + '% | Z2 ' + tz.pct.z2 + '% | Z3 ' + tz.pct.z3 + '% | Z4 ' + tz.pct.z4 + '% | Z5 ' + tz.pct.z5 + '%' + (adv ? ' | ' + L('tiempo con HR ≥ LTHR', 'time with HR ≥ LTHR') + ': ' + wpDur(adv.timeAboveLthrSec) : ''));
         if (a.cardiacDrift) out.push('- ' + L('Deriva cardíaca', 'Cardiac drift') + ': ' + a.cardiacDrift.avgHRFirstHalf + ' → ' + a.cardiacDrift.avgHRSecondHalf + ' bpm (' + (a.cardiacDrift.driftPct > 0 ? '+' : '') + a.cardiacDrift.driftPct + '%), pace ' + L('cambió', 'changed') + ': ' + (a.cardiacDrift.pacingChanged ? L('sí', 'yes') : L('no', 'no')) + (a.decouplingValid && a.aerobicDecouplingPct != null ? ' | decoupling ' + a.aerobicDecouplingPct.toFixed(1) + '%' : ' | decoupling ' + L('no válido (terreno/intervalos)', 'not valid (terrain/intervals)')));
-        if (a.pacingConsistency) out.push('- ' + L('Consistencia de pace', 'Pace consistency') + ': CV ' + a.pacingConsistency.cvPct + '% (' + a.pacingConsistency.rating + ')');
+        if (isRepsSession(s) && a.repMatch.repCvPct != null) out.push('- ' + L('Consistencia entre repeticiones', 'Rep-to-rep consistency') + ': CV ' + a.repMatch.repCvPct + '%');
+        else if (a.pacingConsistency) out.push('- ' + L('Consistencia de pace', 'Pace consistency') + ': CV ' + a.pacingConsistency.cvPct + '% (' + a.pacingConsistency.rating + ')');
         if (a.vdot && !a.vdotTerrainInvalid) out.push('- VDOT ' + a.vdot + ' | ' + L('pred. 5K', 'pred. 5K') + ' ' + (a.predicted5KSec ? secToMMSS(a.predicted5KSec) : 'N/D'));
         else if (a.vdotTerrainInvalid) out.push('- VDOT: ' + L('no válido para esta sesión (terreno/intensidad)', 'not valid for this session (terrain/intensity)'));
         if (s.avgTempF != null) out.push('- ' + L('Clima', 'Weather') + ': ' + s.avgTempF + '°F' + (mf.humidity ? ', ' + L('humedad', 'humidity') + ' ' + mf.humidity + '%' : '') + (s.heatBpmPenalty ? ', ' + L('penalización calor', 'heat penalty') + ' +' + s.heatBpmPenalty + ' bpm' : ''));
@@ -8787,9 +8845,10 @@
         const sp = a.realSplitsMi || [];
         if (sp.length) out.push('- ' + L('Splits por milla', 'Mile splits') + ': ' + sp.map(x => '#' + x.splitNum + (x.partial ? '*' : '') + ' ' + wpPace(x.paceSecPerUnit) + ' HR ' + (x.avgHR ? Math.round(x.avgHR) : 'N/D') + '/' + (x.maxHR || 'N/D') + ' cad ' + (x.avgCadence ? Math.round(x.avgCadence) : 'N/D') + ' +' + Math.round((x.elevGainM || 0) * 3.28) + '/-' + Math.round((x.elevLossM || 0) * 3.28) + 'ft').join(' | '));
         if (adv) {
-          if (adv.bands && adv.bands.length) out.push('- ' + L('Por pendiente', 'By grade') + ': ' + adv.bands.map(b => b.label + ' ' + wpNum(b.distMi, 2) + 'mi ' + wpPace(b.paceSecPerMi) + ' HR ' + (b.avgHR || 'N/D')).join(' | '));
-          if (adv.halves) out.push('- ' + L('Mitades', 'Halves') + ': ' + wpPace(adv.halves.firstPace) + ' HR ' + (adv.halves.firstHR || 'N/D') + ' → ' + wpPace(adv.halves.secondPace) + ' HR ' + (adv.halves.secondHR || 'N/D'));
-          if (adv.finish) out.push('- ' + L('Últimos 400 m', 'Last 400 m') + ': ' + wpPace(adv.finish.lastPace) + ' vs ' + wpPace(adv.finish.prevMilePace) + ' ' + L('milla previa', 'previous mile') + ' | HR ' + (adv.finish.lastHR || 'N/D'));
+          const wpBands = isRepsSession(s) ? lapGradeBands(s) : adv.bands;
+          if (wpBands && wpBands.length) out.push('- ' + L('Por pendiente', 'By grade') + (isRepsSession(s) ? L(' (por vuelta)', ' (per lap)') : '') + ': ' + wpBands.map(b => b.label + ' ' + wpNum(b.distMi, 2) + 'mi ' + wpPace(b.paceSecPerMi) + ' HR ' + (b.avgHR || 'N/D')).join(' | '));
+          if (adv.halves && !isRepsSession(s)) out.push('- ' + L('Mitades', 'Halves') + ': ' + wpPace(adv.halves.firstPace) + ' HR ' + (adv.halves.firstHR || 'N/D') + ' → ' + wpPace(adv.halves.secondPace) + ' HR ' + (adv.halves.secondHR || 'N/D'));
+          if (adv.finish && !isRepsSession(s)) out.push('- ' + L('Últimos 400 m', 'Last 400 m') + ': ' + wpPace(adv.finish.lastPace) + ' vs ' + wpPace(adv.finish.prevMilePace) + ' ' + L('milla previa', 'previous mile') + ' | HR ' + (adv.finish.lastHR || 'N/D'));
           if (adv.stride) out.push('- ' + L('Zancada (m/paso) inicio → final', 'Stride (m/step) start → end') + ': ' + adv.stride.firstQuarterAvgM + ' → ' + adv.stride.lastQuarterAvgM);
           if (adv.milestones && adv.milestones.length) out.push('- ' + L('Primera vez en % LTHR', 'First time at % LTHR') + ': ' + adv.milestones.map(m => m.label.split(' (')[0] + ' @' + secToMMSSOffset(m.tSec) + ' (mi ' + m.distMi.toFixed(2) + ')').join(' | '));
           if (wpIsKeySession(s, ty) && adv.segments && adv.segments.length) {
@@ -9518,6 +9577,8 @@
       // Refresh the findings that depend on decoupling/drift so they match the new verdicts.
       if (Array.isArray(a.keyFindings)) {
         a.keyFindings = a.keyFindings.filter(f => !/^(Decoupling|Cardiac drift|Eficiencia mejoró|Bloque de trabajo|Ejecución)/.test(f.text || ''));
+        // 2026.11.02-3: the parse-time "provisional grade" note is stale once the session has a type.
+        if (linked || activity.manualFields?.trainingType) a.keyFindings = a.keyFindings.filter(f => !/^Nota provisional/.test(f.text || ''));
         (a.execAlerts || []).forEach(x => a.keyFindings.push({ type: 'warn', text: 'Ejecución: ' + x.text }));
         if (seg) {
           const d = seg.decoupling;
@@ -9954,7 +10015,7 @@
         : (vdotRecheck.reasonEs || a.vdotInvalidReasonEs || null);
 
       // Auto-evaluation
-      const { history, sameTypeOnly: fatigueSameTypeOnly } = buildFatigueHistory(t);
+      const { history, sameTypeOnly: fatigueSameTypeOnly, needSameType: fatigueNeedSameType } = buildFatigueHistory(t);
       const fatigue = calcFatigueIndex({ avgHR: t.avgHR, avgPaceSecPerMi: t.avgPaceSecPerMi }, history);
       fatigue.sameTypeOnly = fatigueSameTypeOnly;
       const autoEval = calcAutoEvaluation(a, fatigue, vdotSessionType);
@@ -10310,11 +10371,13 @@
         // cardiac drift, which the elevation-asymmetry guard above frequently invalidates for
         // exactly this session type (short reps + long, uneven recoveries).
         if (workReps.length >= 2) {
-          const first = workReps[0], last = workReps[workReps.length - 1];
+          // 2026.11.02-3: when rep 1 ran hot, compare from rep 2 — otherwise the hot start reads as fatigue.
+          const hot1 = firstRepHot(workReps) && workReps.length >= 3;
+          const first = workReps[hot1 ? 1 : 0], last = workReps[workReps.length - 1];
           const hrDelta = Math.round(last.avgHR - first.avgHR);
           const paceDeltaSec = Math.round(last.avgPaceSecPerMi - first.avgPaceSecPerMi);
           const paceStable = Math.abs(paceDeltaSec) <= 15; // within ~15 sec/mi counts as held pace
-          lines.push(`**Deriva HR entre reps:** ${hrDelta >= 0 ? '+' : ''}${hrDelta} bpm de la rep 1 a la rep ${workReps.length} (${fmtPace(first.avgPaceSecPerMi)} → ${fmtPace(last.avgPaceSecPerMi)})`);
+          lines.push(`**Deriva HR entre reps:** ${hrDelta >= 0 ? '+' : ''}${hrDelta} bpm de la rep ${hot1 ? 2 : 1} a la rep ${workReps.length} (${fmtPace(first.avgPaceSecPerMi)} → ${fmtPace(last.avgPaceSecPerMi)})${hot1 ? ` · la rep 1 (${fmtPace(workReps[0].avgPaceSecPerMi)}) salió rápida y queda fuera de la comparación` : ''}`);
           // 2026.11.02-2: consistency of the set from the watch laps; rep 1 shown apart when it ran hot.
           const rmx = a.repMatch;
           if (rmx && rmx.repCvPct != null) {
@@ -10326,11 +10389,11 @@
           if (paceStable && hrDelta > 10) {
             lines.push(`**Interpretación:** Ritmo estable con FC subiendo ${hrDelta} lpm — costo cardiovascular o térmico creciente, no pérdida de potencia muscular.`);
           } else if (!paceStable && paceDeltaSec > 0 && hrDelta >= 3) {
-            lines.push(`**Interpretación:** El ritmo bajó ${paceDeltaSec} s/mi y la FC subió ${hrDelta} lpm de la primera a la última — fatiga muscular sumándose a la cardiovascular.`);
+            lines.push(`**Interpretación:** El ritmo bajó ${paceDeltaSec} s/mi y la FC subió ${hrDelta} lpm de ${hot1 ? 'la rep 2' : 'la primera'} a la última — fatiga muscular sumándose a la cardiovascular.`);
           } else if (!paceStable && paceDeltaSec > 0) {
-            lines.push(`**Interpretación:** El ritmo bajó ${paceDeltaSec} s/mi con la FC prácticamente igual (${hrDelta >= 0 ? '+' : ''}${hrDelta} lpm) — menos velocidad al mismo costo cardíaco: fatiga muscular, calor o una primera repetición demasiado rápida.`);
+            lines.push(`**Interpretación:** El ritmo bajó ${paceDeltaSec} s/mi con la FC prácticamente igual (${hrDelta >= 0 ? '+' : ''}${hrDelta} lpm) — menos velocidad al mismo costo cardíaco: fatiga muscular o calor${hot1 ? '' : ', o una primera repetición demasiado rápida'}.`);
           } else {
-            lines.push('**Interpretación:** Ritmo y FC estables de la primera a la última — repeticiones bien dosificadas.');
+            lines.push(`**Interpretación:** Ritmo y FC estables de ${hot1 ? 'la rep 2' : 'la primera'} a la última — repeticiones bien dosificadas.`);
           }
           lines.push('');
         }
@@ -10431,12 +10494,18 @@
         lines.push('');
         lines.push('_Zancada = metros por paso (velocidad ÷ pasos/seg). Eficiencia = m/min por latido (más alto = mejor)._');
         lines.push('');
-        if (A.bands.length) {
+        // 2026.11.02-3: reps session → grade per watch lap (a quarter mile mixes the climb and the walk down).
+        const repsSess = isRepsSession(t);
+        const lapBands = repsSess ? lapGradeBands(t) : null;
+        const bandsOut = lapBands || (repsSess ? [] : A.bands);
+        if (bandsOut.length) {
           lines.push('### Rendimiento por pendiente');
           lines.push('');
+          if (lapBands) lines.push('*Calculado por vuelta del reloj (cada repetición, recuperación y paso completo).*');
+          if (lapBands) lines.push('');
           lines.push('| Terreno | Dist. | Tiempo | Pace | FC Prom |');
           lines.push('|---------|-------|--------|------|---------|');
-          A.bands.forEach(b => lines.push(`| ${b.label} | ${b.distMi.toFixed(2)} mi | ${mm(b.durSec)} | ${fmtPace(b.paceSecPerMi)} | ${b.avgHR || ND} |`));
+          bandsOut.forEach(b => lines.push(`| ${b.label} | ${b.distMi.toFixed(2)} mi | ${mm(b.durSec)} | ${fmtPace(b.paceSecPerMi)} | ${b.avgHR || ND} |`));
           lines.push('');
         }
         lines.push('### Carga cardíaca');
@@ -10445,6 +10514,12 @@
         lines.push(`- **Tiempo con FC ≥ LTHR:** ${mm(A.timeAboveLthrSec)}`);
         A.milestones.forEach(m => lines.push(`- **Primera vez en ${m.label}:** @${mm(m.tSec)} (mi ${m.distMi.toFixed(2)})`));
         lines.push('');
+        if (repsSess) {
+          lines.push('### Mitades y cierre');
+          lines.push('');
+          lines.push('No aplica en sesiones de repeticiones: cada mitad mezcla esfuerzo y recuperación. Ver "Splits por Repetición".');
+          lines.push('');
+        } else {
         lines.push('### Mitades y cierre');
         lines.push('');
         lines.push(`- **1ª mitad:** ${fmtPace(A.halves.firstPace)} · FC ${A.halves.firstHR || ND}`);
@@ -10455,6 +10530,7 @@
         if (A.worst) lines.push(`- **Peor cuarto:** mi ${A.worst.startMi.toFixed(2)}–${A.worst.endMi.toFixed(2)} a ${fmtPace(A.worst.paceSecPerMi)} (${A.worst.gradePct != null ? A.worst.gradePct + '%' : ND})`);
         if (A.stride) lines.push(`- **Zancada 1er cuarto → último cuarto de la carrera:** ${A.stride.firstQuarterAvgM} m → ${A.stride.lastQuarterAvgM} m`);
         lines.push('');
+        }
         if (A.series && A.series.length) {
           lines.push('### Serie temporal (cada ~15 s, CSV)');
           lines.push('');
@@ -10497,7 +10573,14 @@
       lines.push('');
       lines.push('## Consistencia de Ritmo');
       lines.push('');
-      if (a.pacingConsistency) {
+      if (isRepsSession(t) && a.repMatch.repCvPct != null) {
+        // 2026.11.02-3: whole-session CV mixes reps with walks down — judge the reps only.
+        lines.push(`**Coeficiente de Variación (entre repeticiones):** ${a.repMatch.repCvPct}%`);
+        lines.push(`**Evaluación:** ${autoEval.consistencyLabel}`);
+        lines.push(`*La variación de la sesión completa (${a.pacingConsistency ? a.pacingConsistency.cvPct + '%' : ND}) no aplica: mezcla esfuerzo, recuperaciones y calentamiento.*`);
+        lines.push('');
+        lines.push('> Referencia: < 3% = Excelente | 3-6% = Buena | 6-10% = Variable | > 10% = Inconsistente');
+      } else if (a.pacingConsistency) {
         lines.push(`**Coeficiente de Variación:** ${a.pacingConsistency.cvPct}%`);
         lines.push(`**Evaluación:** ${autoEval.consistencyLabel}`);
         lines.push('');
@@ -10519,7 +10602,7 @@
         lines.push(`**Señal:** ${fatigue.signal}`);
         lines.push(fatigue.sameTypeOnly ? '*Comparado solo contra sesiones del mismo tipo.*' : '*⚠ Comparado contra sesiones de tipos mixtos — interpretar con cautela.*');
       } else {
-        lines.push('No hay sesiones previas para comparar');
+        lines.push(fatigueNeedSameType ? 'Se necesitan al menos 2 sesiones previas del mismo tipo para comparar (las de otros tipos no sirven en una sesión estructurada).' : 'No hay sesiones previas para comparar');
       }
       lines.push('');
 
@@ -10596,6 +10679,9 @@
             lines.push('');
             lines.push(`**Evaluación General:** ${a.sessionGrade} (${a.sessionScore}/100)${a.scoredOn === 'reps' ? ' — sobre las repeticiones' : a.scoredOn === 'work_block' ? ' — sobre el bloque de trabajo' : ''}`);
             if (Array.isArray(a.execAlerts) && a.execAlerts.length) {
+              // 2026.11.02-3: the grade measures the main work; say plainly that the session around it had misses.
+              const nW = a.execAlerts.filter(x => x.type === 'warn').length, nI = a.execAlerts.length - nW;
+              lines.push(`**Ejecución de la sesión:** ${a.execAlerts.length} alerta(s) — ${nW} de aviso · ${nI} informativa(s). La nota mide el trabajo principal; las alertas, la preparación y el cierre.`);
               lines.push('');
               lines.push('### Alertas de ejecución');
               lines.push('');
@@ -11779,7 +11865,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.02-2';
+    const APP_BUILD = '2026.11.02-3';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
