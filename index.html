@@ -592,7 +592,7 @@
       letter-spacing: 0.5px;
       z-index: 1000;
       animation: slideUp 0.3s ease-out;
-      white-space: nowrap;
+      white-space: normal; width: max-content; max-width: calc(100vw - 32px); text-align: center; line-height: 1.4; /* 2026.11.03: antes nowrap y se cortaba */
     }
 
     @keyframes slideUp {
@@ -749,8 +749,8 @@
       background: transparent;
       border: 1px solid var(--field-line);
       color: var(--paper-dim);
-      width: 34px;
-      height: 34px;
+      width: 44px;
+      height: 44px;
       cursor: pointer;
       font-family: var(--font-mono);
       font-size: 16px;
@@ -1140,11 +1140,23 @@
     details.fc-details > summary { list-style: none; cursor: pointer; }
     details.fc-details > summary::-webkit-details-marker { display: none; }
     .steps-table td { vertical-align: top; }
-    @media (max-width: 420px) { nav button { font-size: 8px; letter-spacing: 0.3px; } }
+    @media (max-width: 420px) { nav button { font-size: 10px; letter-spacing: 0.3px; } }
     /* 2026.10.28: example text must not look like a filled value */
     input::placeholder, textarea::placeholder { color: var(--paper-dim); opacity: .55; font-style: italic; }
     /* 2026.11.01 accesibilidad */
     .rpe-row .btn-small { padding: 10px 0; }
+
+    /* ── 2026.11.03 visual (paso 1) ── */
+    :root { --field-line: #4a5638; } /* antes #2a3320 (1.4:1); ahora 2.5:1 contra el fondo: el borde separa la tarjeta */
+    .card, .mission-clock, .session-card, .activity-list-item { box-shadow: 0 1px 0 rgba(0,0,0,.45), inset 0 1px 0 rgba(232,228,217,.035); }
+    .status-pill { transition: border-color .15s, color .15s, background-color .15s; }
+    .status-pill:hover { border-color: var(--coyote-dim); color: var(--paper); }
+    .status-pill:active { background: var(--field-surface2); border-color: var(--coyote); color: var(--coyote); }
+    .detail-back:active, .upload-zone:active { background: var(--field-surface2); border-color: var(--coyote); }
+    .upload-zone { min-height: 120px; }
+    svg.ic { display:inline-block; vertical-align:-3px; flex-shrink:0; }
+    nav .nav-icon svg.ic { width:20px; height:20px; }
+    nav button .nav-icon { width:22px; height:22px; }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
@@ -1339,7 +1351,7 @@
       const rec = recommendGear(gearUseForSession(sess));
       if (!rec) return '';
       const es = getLang() === 'es';
-      return `<p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${rec.gear.kind === 'boot' ? '🥾' : '👟'} ${es ? 'Recomendado' : 'Recommended'}: <strong style="color:var(--paper);">${esc(rec.gear.name)}</strong> — ${rec.why}</p>`;
+      return `<p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${ic(rec.gear.kind === 'boot' ? 'boot' : 'shoe', 14)} ${es ? 'Recomendado' : 'Recommended'}: <strong style="color:var(--paper);">${esc(rec.gear.name)}</strong> — ${rec.why}</p>`;
     }
 
     // Activity detail card: gear + HR source selectors, recommendation, optical warning.
@@ -1387,7 +1399,7 @@
           </div>
           ${mf.gearAuto ? `<p style="font-size:10px; color:var(--signal-amber); margin-top:4px;">${es ? 'Rellenado con lo último que usaste. Confírmalo o cámbialo.' : 'Prefilled with your last choice. Confirm or change it.'}</p>` : ''}
           ${g ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${esc(g.name)}: ${gearMiles(g)} mi${g.limitMi ? ` / ${g.limitMi} (${gearWearPct(g)}%)` : ''}</p>` : ''}
-          ${rec ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${rec.gear.kind === 'boot' ? '🥾' : '👟'} ${es ? 'Recomendado para esta sesión' : 'Recommended for this session'}: <strong style="color:var(--paper);">${esc(rec.gear.name)}</strong> — ${rec.why}</p>` : ''}
+          ${rec ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${ic(rec.gear.kind === 'boot' ? 'boot' : 'shoe', 14)} ${es ? 'Recomendado para esta sesión' : 'Recommended for this session'}: <strong style="color:var(--paper);">${esc(rec.gear.name)}</strong> — ${rec.why}</p>` : ''}
           ${isOpticalHR(act) ? `<p style="font-size:11px; color:var(--rust-text); margin-top:8px; line-height:1.4;">⚠ ${es ? 'FC del sensor óptico: no es válida para tiempo en zonas, decoupling ni cálculo de umbral. Úsala solo como referencia.' : 'Optical HR: not valid for time in zones, decoupling or threshold. Reference only.'}</p>` : ''}
         </div>`;
     }
@@ -1404,8 +1416,8 @@
               <input type="text" value="${esc(g.name)}" aria-label="${es ? 'Nombre' : 'Name'}" style="flex:1; min-width:0; font-size:12px;" onchange="updateGearField('${g.id}', 'name', this.value)" />
               <button class="btn-small" onclick="toggleGearRetired('${g.id}')">${g.retired ? (es ? 'Reactivar' : 'Reactivate') : (es ? 'Retirar' : 'Retire')}</button>
             </div>
-            <div style="font-size:11px; color:var(--paper-dim); margin:6px 0 4px;">${g.kind === 'boot' ? '🥾' : '👟'} ${mi} mi${g.limitMi ? ` / ${g.limitMi} mi (${pct}%)` : ''}</div>
-            ${g.limitMi ? `<div style="height:6px; background:var(--field-surface); border-radius:3px; overflow:hidden;"><div style="height:100%; width:${Math.min(100, pct)}%; background:${barColor};"></div></div>` : ''}
+            <div style="font-size:11px; color:var(--paper-dim); margin:6px 0 4px;">${ic(g.kind === 'boot' ? 'boot' : 'shoe', 14)} ${mi} mi${g.limitMi ? ` / ${g.limitMi} mi (${pct}%)` : ''}</div>
+            ${g.limitMi ? `<div style="height:6px; background:var(--field-surface); border-radius:2px; overflow:hidden;"><div style="height:100%; width:${Math.min(100, pct)}%; background:${barColor};"></div></div>` : ''}
             <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">
               ${Object.keys(GEAR_USES).map(u => `<button class="btn-small" style="${(g.uses || []).includes(u) ? 'border-color:var(--coyote);color:var(--coyote);' : ''}" onclick="toggleGearUse('${g.id}', '${u}')">${GEAR_USES[u][es ? 'es' : 'en']}</button>`).join('')}
             </div>
@@ -1429,7 +1441,7 @@
           ${rows}
           <div style="display:flex; gap:6px; margin-top:10px;">
             <input type="text" id="newGearName" placeholder="${es ? 'Nombre del nuevo par' : 'New pair name'}" style="flex:1; min-width:0; font-size:12px;" />
-            <select id="newGearKind" style="font-size:12px;"><option value="shoe">👟</option><option value="boot">🥾</option></select>
+            <select id="newGearKind" style="font-size:12px;"><option value="shoe">${getLang()==='es'?'Zapato':'Shoe'}</option><option value="boot">${getLang()==='es'?'Bota':'Boot'}</option></select>
             <button class="btn-small" onclick="addGear()">${es ? 'Añadir' : 'Add'}</button>
           </div>
         </div>`;
@@ -1570,6 +1582,31 @@
     const metersToMiles = (m) => m / 1609.344;
     const celsiusToF = (c) => c * 9 / 5 + 32;
 
+
+    // ═══ Íconos (2026.11.03): SVG de trazo uniforme en lugar de emojis/Unicode, se ven igual en iOS y Android ═══
+    const IC_PATHS = {
+      home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
+      week: '<rect x="3" y="5" width="18" height="16"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M7 14h2M11 14h2M15 14h2M7 17h2M11 17h2"/>',
+      upload: '<path d="M12 16V4"/><path d="M7 9l5-5 5 5"/><path d="M4 16v4h16v-4"/>',
+      progress: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>',
+      more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
+      shoe: '<path d="M3 16v-4l4-1 3 3 4 1 6 1a2 2 0 0 1 1 2v1H3z"/><path d="M7 11V7"/>',
+      boot: '<path d="M7 3h5v9l7 3a2 2 0 0 1 1 2v2H6V3z"/><path d="M6 15h14"/>',
+      dumbbell: '<path d="M6 8v8M3 10v4M18 8v8M21 10v4M6 12h12"/>',
+      chart: '<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+      moon: '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>',
+      eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+      cloud: '<path d="M7 18h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.5 3.5 0 0 0 7 18z"/>',
+      file: '<path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/>',
+      trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
+      ruler: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
+      flag: '<path d="M5 21V4h11l-2 4 2 4H5"/>',
+      target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>'
+    };
+    function ic(name, size) {
+      const sz = size || 16;
+      return `<svg class="ic" width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${IC_PATHS[name] || ''}</svg>`;
+    }
     const SESSION_TAGS = {
       easy: 'EZ', tempo: 'TMP', intervals: 'INT',
       long: 'LNG', race_sim: 'SIM', rest: 'REST', cross_training: 'CRUZ'
@@ -1852,7 +1889,7 @@
         const past = r.dateISO && r.dateISO < today;
         const isActive = r.id === p.activeRaceId && !past;
         const id = esc(r.id);
-        return `<div style="border:1px solid ${isActive ? 'var(--olive-bright)' : 'var(--field-line)'}; border-radius:6px; padding:10px; margin-bottom:10px; ${past ? 'opacity:.7;' : ''}">
+        return `<div style="border:1px solid ${isActive ? 'var(--olive-bright)' : 'var(--field-line)'}; border-radius:2px; padding:10px; margin-bottom:10px; ${past ? 'opacity:.7;' : ''}">
           <div style="font-size:10px; letter-spacing:.08em; color:${isActive ? 'var(--olive-bright)' : 'var(--paper-dim)'}; margin-bottom:6px;">
             ${isActive ? (es ? '▶ CARRERA ACTIVA (próxima)' : '▶ ACTIVE RACE (next)') : (past ? (es ? 'COMPLETADA' : 'COMPLETED') : (es ? 'PROGRAMADA' : 'SCHEDULED'))}</div>
           <div class="manual-field-row"><label for="rn-${id}">${es ? 'Nombre' : 'Name'}</label>
@@ -3766,7 +3803,7 @@
         advice = es ? '⚠ Peligro de golpe de calor. Mueve la sesión a otra hora o hazla en interior/caminadora.' : '⚠ Heat stroke risk. Move the session to another time or run indoors/treadmill.';
       } else {
         band = es ? 'PELIGRO EXTREMO' : 'EXTREME DANGER'; color = 'var(--rust-bright)'; bpmAdd = null; paceAddSec = null;
-        advice = es ? '🛑 NO corras al aire libre. Riesgo serio de golpe de calor.' : '🛑 Do NOT run outdoors. Serious heat stroke risk.';
+        advice = es ? '⚠ NO corras al aire libre. Riesgo serio de golpe de calor.' : '⚠ Do NOT run outdoors. Serious heat stroke risk.';
       }
       return { heatIndexF, band, color, bpmAdd, paceAddSec, advice };
     }
@@ -4790,10 +4827,10 @@
       coming_soon: { en: 'Coming soon', es: 'Próximamente' },
 
       // STATS
-      stats_charts: { en: '📊 Charts', es: '📊 Gráficas' },
-      stats_injuries: { en: '🩹 Injuries', es: '🩹 Lesiones' },
-      stats_reports: { en: '📋 Reports', es: '📋 Reportes' },
-      stats_context: { en: '🤖 Context', es: '🤖 Context' },
+      stats_charts: { en: 'Charts', es: 'Gráficas' },
+      stats_injuries: { en: 'Injuries', es: 'Lesiones' },
+      stats_reports: { en: 'Reports', es: 'Reportes' },
+      stats_context: { en: 'Context', es: 'Contexto' },
       stats_pace_trend: { en: 'Pace Trend', es: 'Tendencia de Pace' },
       stats_hr_trend: { en: 'Heart Rate Trend', es: 'Tendencia FC' },
       stats_vdot_trend: { en: 'VDOT & 5K Prediction', es: 'VDOT y Predicción 5K' },
@@ -4805,8 +4842,8 @@
       stats_injury_body_part: { en: 'Body Part', es: 'Zona del Cuerpo' },
       stats_injury_resolve: { en: '✓ Resolved', es: '✓ Resuelto' },
       stats_injury_delete: { en: '✕ Delete', es: '✕ Borrar' },
-      stats_report_excel: { en: '📊 Excel Report', es: '📊 Reporte Excel' },
-      stats_report_pdf: { en: '📄 PDF Report', es: '📄 Reporte PDF' },
+      stats_report_excel: { en: 'Excel Report', es: 'Reporte Excel' },
+      stats_report_pdf: { en: 'PDF Report', es: 'Reporte PDF' },
       stats_context_generate: { en: 'Generate Context Block', es: 'Generar Context Block' },
       stats_context_copy: { en: 'Copy', es: 'Copiar' },
       stats_context_download: { en: 'Download', es: 'Descargar' },
@@ -5515,7 +5552,7 @@
       return `
         <div class="card" style="border:1px solid var(--coyote); background:rgba(201,169,97,0.08);">
           <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
-            <span style="font-size:18px;">📈</span>
+            <span style="color:var(--coyote);">${ic('chart', 18)}</span>
             <div class="card-title" style="margin:0;">${es?'Tu condición mejoró':'Your fitness improved'}</div>
           </div>
           <p style="font-size:12px; color:var(--paper); line-height:1.5; margin-bottom:10px;">
@@ -5523,7 +5560,7 @@
               ? `Según tus sesiones recientes tu 5K proyectado bajó de <b>${secToMMSS(change.currentSec)}</b> a <b>${secToMMSS(change.impliedFiveKSec)}</b> (VDOT ${change.newVdot.toFixed(1)}). Te recomiendo actualizar los paces objetivo de tus próximas sesiones:`
               : `Based on recent sessions your projected 5K dropped from <b>${secToMMSS(change.currentSec)}</b> to <b>${secToMMSS(change.impliedFiveKSec)}</b> (VDOT ${change.newVdot.toFixed(1)}). I recommend updating the target paces on your upcoming sessions:`}
           </p>
-          <div style="background:var(--field-surface); border-radius:4px; padding:8px; margin-bottom:10px;">
+          <div style="background:var(--field-surface); border-radius:2px; padding:8px; margin-bottom:10px;">
             ${change.diffs.map(d => `
               <div style="display:flex; justify-content:space-between; font-size:11px; padding:2px 0;">
                 <span style="color:var(--paper-dim);">${d.label}</span>
@@ -5554,7 +5591,7 @@
         <div class="card">
           <div class="card-title">${es?'¿LLEGO A SUB-'+secToMMSS(pred.goalSec).split(':')[0]+'?':'WILL I HIT SUB-'+secToMMSS(pred.goalSec).split(':')[0]+'?'}</div>
           <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px;">
-            <div style="display:flex; flex-direction:column; gap:6px; padding:8px; background:var(--field-surface); border-radius:6px;">
+            <div style="display:flex; flex-direction:column; gap:6px; padding:8px; background:var(--field-surface); border-radius:2px;">
               ${dot('red')}${dot('amber')}${dot('green')}
             </div>
             <div style="flex:1;">
@@ -5582,11 +5619,11 @@
             <span style="font-size:28px; font-weight:700; color:${acwr.color}; font-family:var(--font-mono);">${acwr.ratio}</span>
             <span style="font-size:12px; color:${acwr.color}; font-weight:600;">${acwr.band}</span>
           </div>
-          <div style="height:8px; background:var(--field-surface); border-radius:4px; overflow:hidden; margin-bottom:4px; position:relative;">
+          <div style="height:8px; background:var(--field-surface); border-radius:2px; overflow:hidden; margin-bottom:4px; position:relative;">
             <div style="position:absolute; left:40%; width:25%; height:100%; background:rgba(90,133,48,0.25);"></div>
             <div style="height:100%; width:${pct}%; background:${acwr.color};"></div>
           </div>
-          <div style="display:flex; justify-content:space-between; font-size:8px; color:var(--paper-dim); margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between; font-size:10px; color:var(--paper-dim); margin-bottom:8px;">
             <span>0.8</span><span style="color:var(--olive-text);">${es?'zona óptima':'sweet spot'}</span><span>1.5+</span>
           </div>
           <p style="font-size:11px; color:${acwr.color}; line-height:1.4;">${acwr.msg}</p>
@@ -5614,7 +5651,7 @@
         const volCut = Math.round(40 + (taper.taperDays - taper.daysLeft) / taper.taperDays * 15); // progressive cut
         return `
           <div class="card" style="border:1px solid var(--coyote); background:rgba(201,169,97,0.06);">
-            <div class="card-title">🎯 ${es?'FASE DE TAPER':'TAPER PHASE'} · ${taper.daysLeft} ${es?'días para la carrera':'days to race'}</div>
+            <div class="card-title">${es?'REDUCCIÓN DE VOLUMEN':'TAPER PHASE'} · ${taper.daysLeft} ${es?'días para la carrera':'days to race'}</div>
             <p style="font-size:12px; color:var(--paper); line-height:1.5; margin-bottom:8px;">
               ${es?`Estás afinando. Reduce el volumen ~${volCut}% pero MANTÉN la intensidad — sesiones cortas y rápidas para seguir afilado.`:`You're sharpening. Cut volume ~${volCut}% but KEEP intensity — short, fast sessions to stay sharp.`}
             </p>
@@ -5627,7 +5664,7 @@
       if (taper.phase === 'raceday') {
         return `
           <div class="card" style="border:2px solid var(--coyote); background:rgba(201,169,97,0.12);">
-            <div class="card-title">🏁 ${es?'¡DÍA DE CARRERA!':'RACE DAY!'}</div>
+            <div class="card-title">${es?'¡DÍA DE CARRERA!':'RACE DAY!'}</div>
             <p style="font-size:13px; color:var(--coyote); font-weight:600; line-height:1.5;">
               ${es?'Hoy es el día. Confía en tu entrenamiento. Corre por esfuerzo, negative split, y recuerda: el calor es igual para todos.':'Today is the day. Trust your training. Run by effort, negative split, and remember: the heat is the same for everyone.'}
             </p>
@@ -5680,6 +5717,36 @@
       return { big: s.paceGuide, label: t('target_pace_label'), small: miTxt, mono: true };
     }
 
+    // 2026.11.03: short title for the TODAY card ("Cuestas 8×60 s + fuerza A"); the full plan line stays one tap away.
+    function shortSessionTitle(s) {
+      const es = getLang() === 'es';
+      if (!s) return '';
+      if (!s.notes) return sessionTitle(s);
+      const txt = String(s.notes).toLowerCase();
+      const T = planLineTargets(s) || {};
+      const sr = strengthForSession(s);
+      const plusF = sr ? (es ? ` + fuerza ${sr.key}` : ` + strength ${sr.key}`) : '';
+      const reps = /(\d+)\s*x\s*(\d+)\s*(s|min)\b/.exec(txt);
+      const tm = /(\d+)(?:\s*a\s*(\d+))?\s*min\s+a\s+fc/.exec(txt);
+      switch (s.type) {
+        case 'rest': return es ? 'Descanso' : 'Rest';
+        case 'easy': return (es ? 'Carrera fácil' : 'Easy run') + (T.distMi ? ` ${T.distMi} mi` : '') + plusF;
+        case 'long': return (es ? 'Larga' : 'Long run') + (T.distMi ? ` ${T.distMi} mi` : '') + (/evento/.test(txt) ? (es ? ' · evento' : ' · event') : '') + plusF;
+        case 'tempo':
+          if (/espec[ií]fico|recorrido/.test(txt)) return (es ? 'Recorrido de la carrera' : 'Race course') + (T.distMi ? ` ${T.distMi} mi` : '');
+          return (es ? 'Ritmo sostenido' : 'Sustained pace') + (tm ? ` ${tm[1]}${tm[2] ? '–' + tm[2] : ''} min` : '') + (/calibraci/.test(txt) ? (es ? ' (calibración)' : ' (calibration)') : '') + plusF;
+        case 'intervals':
+          // reps go in the big headline below, so the title stays short
+          return (/cuesta/.test(txt) ? (es ? 'Cuestas' : 'Hills') : (es ? 'Intervalos' : 'Intervals')) + plusF;
+        case 'cross_training': {
+          if (/chaleco|caminata/.test(txt)) { const lb = /chaleco\s+(\d+)\s*lb/.exec(txt); return (es ? 'Marcha con chaleco' : 'Vest march') + (lb ? ` ${lb[1]} lb` : '') + (T.distMi ? ` · ${T.distMi} mi` : '') + plusF; }
+          if (sr) return (es ? 'Fuerza ' : 'Strength ') + sr.key + (sr.sets ? (es ? ` · ${sr.sets} series` : ` · ${sr.sets} sets`) : '');
+          return es ? 'Entrenamiento cruzado' : 'Cross-training';
+        }
+      }
+      return sessionTitle(s);
+    }
+
     function renderTodayHero() {
       const today = todayISO();
       const todaySess = state.plan.find(s => s.dateISO === today);
@@ -5688,7 +5755,7 @@
       if (todaySess.type === 'rest') {
         return `
           <div class="card" style="text-align:center; padding:24px 16px;">
-            <div style="font-size:32px; margin-bottom:6px;">😴</div>
+            <div style="color:var(--coyote); margin-bottom:6px;">${ic('moon', 32)}</div>
             <div style="font-size:16px; font-weight:600; color:var(--coyote);">${es?'Hoy: DESCANSO':'Today: REST'}</div>
             <p style="font-size:12px; color:var(--paper-dim); margin-top:6px;">${es?'La recuperación es donde te haces más fuerte. Hidrata y duerme bien.':'Recovery is where you get stronger. Hydrate and sleep well.'}</p>
           </div>`;
@@ -5700,12 +5767,16 @@
             <span style="font-size:10px; letter-spacing:1px; color:var(--paper-dim);">${es?'HOY · QUÉ TOCA':'TODAY · WHAT IS ON'}</span>
             ${todaySess.completed ? `<span class="badge">${t('badge_done')}</span>` : `<span class="session-tag">${sessionTag(todaySess)}</span>`}
           </div>
-          <div class="hero-title" style="font-size:22px; font-weight:700; color:var(--paper); margin-bottom:2px;">${sessionTitleHtml(todaySess)}</div>
+          <div class="hero-title" style="font-family:var(--font-display); font-size:24px; font-weight:600; letter-spacing:.5px; color:var(--paper); margin-bottom:4px; line-height:1.15;">${esc(shortSessionTitle(todaySess))}</div>
           ${(() => { const h = sessionHeadline(todaySess); return `
           <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
-            <span style="font-size:28px; font-weight:700; color:var(--coyote); font-family:var(--font-mono);">${h.big}</span>
-            <span style="font-size:12px; color:var(--paper-dim);">${h.small}</span>
+            <span style="font-size:36px; font-weight:700; color:var(--coyote); font-family:var(--font-mono); line-height:1.1;">${h.big}</span>
+            <span style="font-size:13px; color:var(--paper-dim);">${h.small}</span>
           </div>`; })()}
+          ${todaySess.notes ? `<details class="fc-details" style="margin-top:8px;" onclick="event.stopPropagation()">
+            <summary style="font-size:11px; color:var(--coyote-text); font-family:var(--font-mono); letter-spacing:.5px;">${es ? 'INSTRUCCIÓN COMPLETA' : 'FULL INSTRUCTION'} ▾</summary>
+            <div style="font-size:13px; color:var(--paper); margin-top:6px;">${sessionTitleHtml(todaySess)}</div>
+          </details>` : ''}
           ${renderGearRecLine(todaySess)}
           <p style="font-size:11px; color:var(--paper-dim); margin-top:8px;">${es?'Toca para ver la sesión completa y los segmentos':'Tap to see the full session and segments'} →</p>
         </div>`;
@@ -5830,7 +5901,7 @@
         <div class="card" style="border-left:3px solid var(--coyote);">
           <div class="card-title">GRIT 100 · ${es ? 'NOVIEMBRE' : 'NOVEMBER'}</div>
           <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">${boxes}</div>
-          <div style="height:10px; background:var(--field-surface); border-radius:5px; overflow:hidden; margin:2px 0 8px;" role="img" aria-label="GRIT 100 ${Math.round(pct)}%">
+          <div style="height:10px; background:var(--field-surface); border-radius:2px; overflow:hidden; margin:2px 0 8px;" role="img" aria-label="GRIT 100 ${Math.round(pct)}%">
             <div style="height:100%; width:${pct.toFixed(0)}%; background:${color};"></div>
           </div>
           <p style="font-size:11px; color:var(--paper-dim);">${line1}</p>
@@ -5942,7 +6013,7 @@
               ${box(fmtPaceNoUnit(goalPace) + '/mi', es ? 'ritmo meta' : 'goal pace')}
               ${box((gap >= 0 ? '+' : '') + gap.toFixed(1), es ? 'brecha VDOT' : 'VDOT gap')}
             </div>
-            <div style="height:10px; background:var(--field-surface); border-radius:5px; overflow:hidden; margin:2px 0 8px;" role="img" aria-label="${es ? 'Avance hacia la meta' : 'Progress to goal'} ${Math.round(pct)}%">
+            <div style="height:10px; background:var(--field-surface); border-radius:2px; overflow:hidden; margin:2px 0 8px;" role="img" aria-label="${es ? 'Avance hacia la meta' : 'Progress to goal'} ${Math.round(pct)}%">
               <div style="height:100%; width:${pct.toFixed(0)}%; background:${gap <= 0 ? 'var(--olive-bright)' : 'var(--coyote)'};"></div>
             </div>
             <p style="font-size:11px; color:var(--paper-dim); line-height:1.5;">${gap <= 0
@@ -6109,6 +6180,9 @@
       ['upcoming',   'Próximas sesiones', 'Upcoming sessions'],
       ['recent',     'Recientes', 'Recent']
     ];
+    // 2026.11.03: section titles on Base. Upcoming/Recent already carry their own label.
+    const G_TODAY = ['ENTRENAMIENTO', 'TRAINING'], G_RACE = ['RETO Y CARRERA', 'CHALLENGE & RACE'], G_LOAD = ['CARGA', 'LOAD'];
+    const DASH_GROUP = { today: G_TODAY, strength: G_TODAY, route: G_RACE, races: G_RACE, taper: G_RACE, grit: G_RACE, prediction: G_RACE, acwr: G_LOAD, load: G_LOAD };
     let dashEdit = false;
     function dashOrder() {
       const known = DASH_WIDGETS.map(w => w[0]);
@@ -6188,19 +6262,26 @@
       const es = getLang() === 'es';
       const order = dashOrder(), hidden = dashHidden();
       const name = k => { const w = DASH_WIDGETS.find(x => x[0] === k); return w ? (es ? w[1] : w[2]) : k; };
+      let lastGroup = null;
       const parts = order.map((k, i) => {
         const off = hidden.has(k);
         if (off && !dashEdit) return '';
         let html = '';
         try { html = dashWidgetHtml(k, today, recentPast) || ''; } catch (e) { console.warn('widget', k, e); }
         const empty = k !== 'route' && !String(html).trim();
-        if (!dashEdit) return empty ? '' : `<div class="dash-w" data-w="${k}">${html}</div>`;
+        if (!dashEdit) {
+          if (empty) return '';
+          const g = DASH_GROUP[k];
+          const head = g && g !== lastGroup ? `<div class="sitrep-label dash-sec">${es ? g[0] : g[1]}</div>` : '';
+          lastGroup = g || lastGroup;
+          return `${head}<div class="dash-w" data-w="${k}">${html}</div>`;
+        }
         const bar = `
           <div class="dash-bar">
             <span class="dash-name">${esc(name(k))}${off ? ` <small>${es ? 'Oculto' : 'Hidden'}</small>` : empty ? ` <small>${es ? 'No aparece ahora (sin datos o no aplica hoy)' : 'Not showing now (no data or not today)'}</small>` : ''}</span>
             <button type="button" onclick="dashMove('${k}', -1)" ${i === 0 ? 'disabled' : ''} aria-label="${es ? 'Subir' : 'Move up'} ${esc(name(k))}">▲</button>
             <button type="button" onclick="dashMove('${k}', 1)" ${i === order.length - 1 ? 'disabled' : ''} aria-label="${es ? 'Bajar' : 'Move down'} ${esc(name(k))}">▼</button>
-            <button type="button" onclick="dashToggle('${k}')" aria-label="${off ? (es ? 'Mostrar' : 'Show') : (es ? 'Ocultar' : 'Hide')} ${esc(name(k))}" title="${off ? (es ? 'Mostrar' : 'Show') : (es ? 'Ocultar' : 'Hide')}">${off ? '👁' : '✕'}</button>
+            <button type="button" onclick="dashToggle('${k}')" aria-label="${off ? (es ? 'Mostrar' : 'Show') : (es ? 'Ocultar' : 'Hide')} ${esc(name(k))}" title="${off ? (es ? 'Mostrar' : 'Show') : (es ? 'Ocultar' : 'Hide')}">${off ? ic('eye', 16) : '✕'}</button>
           </div>`;
         return `<div class="dash-w${off ? ' is-off' : ''}" data-w="${k}">${bar}${off ? '' : html}</div>`;
       }).join('');
@@ -6300,7 +6381,7 @@
                   <div class="alt-meta">${act.totalDistMi.toFixed(2)} MI · ${secToMMSS(act.totalTimeSec)} · ${fmtPace(act.avgPaceSecPerMi)}</div>
                   ${linkedSession ? `<span class="link-pill">${t('linked_to_day')} ${linkedSession.day}</span>` : ''}
                   ${isOpticalHR(act) ? `<span class="link-pill" style="color:var(--rust-text); border-color:var(--rust);">⚠ ${getLang()==='es'?'FC ÓPTICA':'OPTICAL HR'}</span>` : ''}
-                  ${gearById(act.manualFields?.gearId) ? `<span style="font-size:10px; color:var(--paper-dim); display:block; margin-top:2px;">${gearById(act.manualFields.gearId).kind==='boot'?'🥾':'👟'} ${esc(gearById(act.manualFields.gearId).name)}${act.manualFields.gearAuto ? ' ?' : ''}</span>` : ''}
+                  ${gearById(act.manualFields?.gearId) ? `<span style="font-size:10px; color:var(--paper-dim); display:block; margin-top:2px;">${ic(gearById(act.manualFields.gearId).kind==='boot'?'boot':'shoe', 12)} ${esc(gearById(act.manualFields.gearId).name)}${act.manualFields.gearAuto ? ' ?' : ''}</span>` : ''}
                 </div>
                 <div class="tcx-grade grade-${gradeClass}">${act.analysis?.sessionGrade || '—'}</div>
               </div>
@@ -6362,7 +6443,7 @@
           <p style="font-size:11px; color:var(--paper-dim); margin-bottom:12px;">${t('hr_zone_ref_sub')}: <span style="color:var(--coyote); font-weight:600;">${lthr} bpm</span></p>
 
           ${calib ? `
-            <div style="background:rgba(166,69,58,0.12); border:1px solid var(--rust); border-radius:6px; padding:10px; margin-bottom:12px;">
+            <div style="background:rgba(166,69,58,0.12); border:1px solid var(--rust); border-radius:2px; padding:10px; margin-bottom:12px;">
               <div style="font-size:11px; color:var(--rust-bright); font-weight:600; margin-bottom:4px;">⚠ ${es?'Posible LTHR mal calibrado':'Possible LTHR miscalibration'}</div>
               <p style="font-size:10px; color:var(--paper-dim); line-height:1.4;">${calib.message}</p>
               <div style="margin-top:6px; font-size:10px; color:var(--paper-dim);">
@@ -6398,7 +6479,7 @@
           ${grandTotal ? `
             <div style="margin-top:10px;">
               <div style="font-size:10px; color:var(--paper-dim); margin-bottom:4px;">${es?'Distribución real de tiempo en zonas':'Actual time-in-zone distribution'}</div>
-              <div style="display:flex; height:14px; border-radius:4px; overflow:hidden;">
+              <div style="display:flex; height:14px; border-radius:2px; overflow:hidden;">
                 ${zones.map(z => {
                   const pct = realPct['z'+z.num] || 0;
                   return pct > 0 ? `<div style="width:${pct}%; background:${z.color};" title="Z${z.num}: ${pct.toFixed(0)}%"></div>` : '';
@@ -6779,11 +6860,11 @@
       // Weekly reminder: nudge if it's been 7+ days since the last entry (or there's never been one).
       let reminderHtml = '';
       if (!latest) {
-        reminderHtml = `<p style="font-size:11px; color:var(--coyote); background:rgba(201,169,97,0.08); border:1px solid var(--field-line); padding:8px 10px; margin-bottom:12px; line-height:1.4;">📏 ${t('body_meas_reminder_never')}</p>`;
+        reminderHtml = `<p style="font-size:11px; color:var(--coyote); background:rgba(201,169,97,0.08); border:1px solid var(--field-line); padding:8px 10px; margin-bottom:12px; line-height:1.4;">${ic('ruler', 14)} ${t('body_meas_reminder_never')}</p>`;
       } else {
         const daysSince = Math.floor((new Date(todayISO()) - new Date(latest.dateISO)) / 86400000);
         if (daysSince >= 7) {
-          reminderHtml = `<p style="font-size:11px; color:var(--coyote); background:rgba(201,169,97,0.08); border:1px solid var(--field-line); padding:8px 10px; margin-bottom:12px; line-height:1.4;">📏 ${t('body_meas_reminder').replace('{days}', daysSince)}</p>`;
+          reminderHtml = `<p style="font-size:11px; color:var(--coyote); background:rgba(201,169,97,0.08); border:1px solid var(--field-line); padding:8px 10px; margin-bottom:12px; line-height:1.4;">${ic('ruler', 14)} ${t('body_meas_reminder').replace('{days}', daysSince)}</p>`;
         }
       }
 
@@ -7047,7 +7128,7 @@
 
             <div class="sitrep-label" style="display:flex; justify-content:space-between; align-items:center;">
               <span>${t('conditions_label')}</span>
-              <button class="btn-small" style="font-size:10px; padding:4px 8px;" onclick="fetchWeatherForActivity('${act.id}')">🌦 ${getLang()==='es' ? 'Obtener clima' : 'Fetch weather'}</button>
+              <button class="btn-small" style="font-size:10px; padding:4px 8px;" onclick="fetchWeatherForActivity('${act.id}')">${ic('cloud', 14)} ${getLang()==='es' ? 'Obtener clima' : 'Fetch weather'}</button>
             </div>
             <div class="card">
               <p id="weatherFetchStatusTop-${act.id}" style="font-size:10px; color:var(--paper-dim); margin-bottom:8px; display:none;"></p>
@@ -7146,7 +7227,7 @@
 
             <div class="sitrep-label" style="display:flex; justify-content:space-between; align-items:center;">
               <span>${getLang() === 'es' ? 'CONDICIONES AMBIENTALES' : 'ENVIRONMENTAL CONDITIONS'}</span>
-              <button class="btn-small" style="font-size:10px; padding:4px 8px;" onclick="fetchWeatherForActivity('${act.id}')">🌦 ${getLang()==='es' ? 'Obtener clima' : 'Fetch weather'}</button>
+              <button class="btn-small" style="font-size:10px; padding:4px 8px;" onclick="fetchWeatherForActivity('${act.id}')">${ic('cloud', 14)} ${getLang()==='es' ? 'Obtener clima' : 'Fetch weather'}</button>
             </div>
             <div class="card">
               <p id="weatherFetchStatus-${act.id}" style="font-size:10px; color:var(--paper-dim); margin-bottom:8px; display:none;"></p>
@@ -7892,9 +7973,9 @@
         <div class="card" style="margin-bottom:12px; border:1px solid var(--field-line); background:var(--field-dark);">
           <div class="card-title">${t('claude_import_title')}</div>
           <p style="font-size:11px; color:var(--paper-dim); margin-bottom:10px;">${t('claude_import_sub')}</p>
-          <textarea id="claudePlanInput" placeholder="${t('claude_import_placeholder')}" style="width:100%; min-height:80px; font-size:11px; padding:8px; border:1px solid var(--field-line); border-radius:4px; font-family:var(--font-mono); color:var(--paper); background:var(--field-surface);" spellcheck="false"></textarea>
+          <textarea id="claudePlanInput" placeholder="${t('claude_import_placeholder')}" style="width:100%; min-height:80px; font-size:11px; padding:8px; border:1px solid var(--field-line); border-radius:2px; font-family:var(--font-mono); color:var(--paper); background:var(--field-surface);" spellcheck="false"></textarea>
           <div style="display:flex; gap:8px; margin-top:8px;">
-            <button class="btn btn-secondary" style="flex:1; font-size:11px;" onclick="document.getElementById('claudePlanFileInput').click();">${getLang()==='es' ? '📄 SUBIR ARCHIVO' : '📄 UPLOAD FILE'}</button>
+            <button class="btn btn-secondary" style="flex:1; font-size:11px;" onclick="document.getElementById('claudePlanFileInput').click();">${ic('file', 14)} ${getLang()==='es' ? 'SUBIR ARCHIVO' : 'UPLOAD FILE'}</button>
             <button class="btn btn-primary" style="flex:1; font-size:11px;" onclick="handleClaudeImport()">${t('claude_import_btn')}</button>
           </div>
           <input type="file" accept=".txt,.md" id="claudePlanFileInput" style="display:none;" onchange="handleClaudePlanFileUpload(event)" />
@@ -7916,7 +7997,7 @@
       return `
         <div class="card" style="margin-bottom:12px; border:1px solid var(--field-line);">
           <div class="card-title" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="togglePlanManager()">
-            <span>${getLang() === 'es' ? '🗂️ GESTIONAR SESIONES' : '🗂️ MANAGE SESSIONS'} (${sorted.length})</span>
+            <span>${getLang() === 'es' ? 'GESTIONAR SESIONES' : 'MANAGE SESSIONS'} (${sorted.length})</span>
             <span style="font-size:11px; color:var(--coyote);">${planManagerOpen ? '▲' : '▼'}</span>
           </div>
           ${planManagerOpen ? `
@@ -7924,7 +8005,7 @@
               ${getLang() === 'es' ? 'Si ves fechas duplicadas o entrenamientos que no reconoces, bórralos aquí.' : 'If you see duplicate dates or sessions you do not recognize, delete them here.'}
             </p>
             <button class="btn btn-secondary" style="width:100%; font-size:11px; margin-bottom:8px; color:#c94a4a; border-color:#c94a4a;" onclick="handleClearAllPlan()">
-              ${getLang() === 'es' ? '🗑️ BORRAR TODO EL PLAN' : '🗑️ CLEAR ENTIRE PLAN'}
+              ${ic('trash', 14)} ${getLang() === 'es' ? 'BORRAR TODO EL PLAN' : 'CLEAR ENTIRE PLAN'}
             </button>
             <div style="max-height:280px; overflow-y:auto; border-top:1px solid var(--field-line);">
               ${sorted.map(s => `
@@ -8037,10 +8118,10 @@
                 <div style="font-family:var(--font-mono); font-size:10px; color:${d.isToday ? 'var(--coyote)' : 'var(--paper-dim)'}; letter-spacing:0.5px; margin-bottom:3px;">${d.dayName.toUpperCase()}</div>
                 <div style="background:${d.isToday ? 'rgba(201,169,97,0.1)' : 'var(--field-dark)'}; border:1px solid ${d.isToday ? 'var(--coyote)' : 'var(--field-line)'}; border-bottom: 3px solid ${color}; padding:8px 4px;">
                   <div style="font-family:var(--font-display); font-size:18px; color:${d.isToday ? 'var(--coyote)' : 'var(--paper)'};">${d.dayNum}</div>
-                  <div style="font-family:var(--font-mono); font-size:8px; color:${color}; letter-spacing:0.3px; margin-top:2px;">
+                  <div style="font-family:var(--font-mono); font-size:10px; color:${color}; letter-spacing:0.3px; margin-top:2px;">
                     ${d.session ? sessionTag(d.session) : '—'}
                   </div>
-                  ${done ? '<div style="font-size:8px; color:var(--olive-text);">✓</div>' : (d.activity ? '<div style="font-size:8px; color:var(--blue-text);">↑</div>' : '<div style="height:10px;"></div>')}
+                  ${done ? '<div style="font-size:10px; color:var(--olive-text);">✓</div>' : (d.activity ? '<div style="font-size:10px; color:var(--blue-text);">↑</div>' : '<div style="height:10px;"></div>')}
                 </div>
               </div>
             `}).join('')}
@@ -8071,7 +8152,7 @@
                 ${strength.length > 0 ? `
                   <div style="background:var(--field-surface); border:1px solid var(--field-line); border-left:3px solid var(--coyote-dim); padding:10px 12px;">
                     <div style="font-family:var(--font-mono); font-size:10px; color:var(--coyote-text); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
-                      💪 ${getLang()==='es'?'FUERZA ':'STRENGTH '}${sr ? sr.key : ''}${sr && sr.sets ? (getLang()==='es' ? ` · ${sr.sets} series` : ` · ${sr.sets} sets`) : ''}
+                      ${ic('dumbbell', 14)} ${getLang()==='es'?'FUERZA ':'STRENGTH '}${sr ? sr.key : ''}${sr && sr.sets ? (getLang()==='es' ? ` · ${sr.sets} series` : ` · ${sr.sets} sets`) : ''}
                     </div>
                     ${strengthCompactTable(strength, sr && sr.sets)}
                   </div>
@@ -8081,7 +8162,7 @@
           }).join('')}
 
           <div class="card" style="cursor:pointer; text-align:center;" onclick="switchView('strength')">
-            <div style="font-size:13px; color:var(--coyote); font-weight:600;">💪 ${getLang()==='es'?'Ver rutinas de fuerza A y B':'View strength routines A and B'}</div>
+            <div style="font-size:13px; color:var(--coyote); font-weight:600;">${ic('dumbbell', 16)} ${getLang()==='es'?'Ver rutinas de fuerza A y B':'View strength routines A and B'}</div>
             <p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">${getLang()==='es'?'Con series, carga y para qué sirve cada ejercicio':'With sets, load and purpose of each exercise'}</p>
           </div>
 
@@ -8113,7 +8194,7 @@
           <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; margin-bottom:16px;">
             ${tabs.map(tab => `
               <button onclick="switchStatsTab('${tab.id}')" 
-                style="padding:10px; font-size:11px; border-radius:8px; border:1px solid var(--field-line); cursor:pointer; font-weight:600; background:${statsTab===tab.id?'var(--olive)':'var(--field-dark)'}; color:${statsTab===tab.id?'var(--black-olive)':'var(--paper-dim)'};">
+                style="padding:10px; font-size:11px; border-radius:2px; border:1px solid var(--field-line); cursor:pointer; font-weight:600; background:${statsTab===tab.id?'var(--olive)':'var(--field-dark)'}; color:${statsTab===tab.id?'var(--black-olive)':'var(--paper-dim)'};">
                 ${tab.label}
               </button>
             `).join('')}
@@ -8137,7 +8218,7 @@
       const sorted = [...state.tcxSessions].sort((a,b) => a.dateISO.localeCompare(b.dateISO));
       if (sorted.length === 0) {
         return `<div style="text-align:center; padding:40px; color:var(--paper-dim);">
-          📊 ${t('stats_no_data')}<br/>
+          ${t('stats_no_data')}<br/>
           <span style="font-size:12px;">Sube sesiones TCX para ver gráficas</span>
         </div>`;
       }
@@ -8446,16 +8527,16 @@
           <div class="card" style="margin-bottom:16px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
               <div class="card-title">${t('stats_injuries')}</div>
-              <button onclick="toggleInjuryForm()" style="padding:6px 12px; font-size:11px; border-radius:6px; border:1px solid var(--field-line); cursor:pointer; background:rgba(168,69,58,0.15); color:var(--rust-text); font-weight:600;">
+              <button onclick="toggleInjuryForm()" style="padding:6px 12px; font-size:11px; border-radius:2px; border:1px solid var(--field-line); cursor:pointer; background:rgba(168,69,58,0.15); color:var(--rust-text); font-weight:600;">
                 ${statsShowInjuryForm ? 'Cancel' : '+ Add'}
               </button>
             </div>
 
             ${statsShowInjuryForm ? `
-              <div style="padding:12px; background:var(--field-dark); border:1px solid var(--field-line); border-radius:8px; margin-bottom:12px; space-y:2;">
+              <div style="padding:12px; background:var(--field-dark); border:1px solid var(--field-line); border-radius:2px; margin-bottom:12px; space-y:2;">
                 <div style="margin-bottom:10px;">
                   <label style="display:block; font-size:10px; color:var(--paper-dim); margin-bottom:6px;">Body Part</label>
-                  <select id="injuryBodyPart" style="width:100%; padding:6px; font-size:11px; border:1px solid var(--field-line); border-radius:4px; background:var(--field-surface); color:var(--paper);">
+                  <select id="injuryBodyPart" style="width:100%; padding:6px; font-size:11px; border:1px solid var(--field-line); border-radius:2px; background:var(--field-surface); color:var(--paper);">
                     ${bodyParts.map(bp => `<option value="${bp}">${bodyPartLabels[bp]}</option>`).join('')}
                   </select>
                 </div>
@@ -8464,7 +8545,7 @@
                   <label style="display:block; font-size:10px; color:var(--paper-dim); margin-bottom:6px;">Severity</label>
                   <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;">
                     ${['leve','moderado','severo'].map(sev => `
-                      <button onclick="setInjurySeverity('${sev}')" id="sev_${sev}" style="padding:8px; font-size:11px; border:1px solid ${sevColors[sev]}; border-radius:4px; background:${statsInjurySeverity===sev ? hexAlpha(sevColors[sev],40) : hexAlpha(sevColors[sev],15)}; color:${sevColors[sev]}; cursor:pointer; font-weight:600; ${statsInjurySeverity===sev ? 'box-shadow: 0 0 0 2px '+sevColors[sev]+';' : ''}">
+                      <button onclick="setInjurySeverity('${sev}')" id="sev_${sev}" style="padding:8px; font-size:11px; border:1px solid ${sevColors[sev]}; border-radius:2px; background:${statsInjurySeverity===sev ? hexAlpha(sevColors[sev],40) : hexAlpha(sevColors[sev],15)}; color:${sevColors[sev]}; cursor:pointer; font-weight:600; ${statsInjurySeverity===sev ? 'box-shadow: 0 0 0 2px '+sevColors[sev]+';' : ''}">
                         ${sev}
                       </button>
                     `).join('')}
@@ -8472,10 +8553,10 @@
                 </div>
 
                 <div style="margin-bottom:10px;">
-                  <textarea id="injuryDesc" placeholder="Describe..." style="width:100%; padding:6px; font-size:11px; border:1px solid var(--field-line); border-radius:4px; background:var(--field-surface); color:var(--paper); resize:none;" rows="2"></textarea>
+                  <textarea id="injuryDesc" placeholder="Describe..." style="width:100%; padding:6px; font-size:11px; border:1px solid var(--field-line); border-radius:2px; background:var(--field-surface); color:var(--paper); resize:none;" rows="2"></textarea>
                 </div>
 
-                <button onclick="addInjury()" style="width:100%; padding:8px; font-size:11px; border-radius:4px; border:none; background:var(--rust); color:white; cursor:pointer; font-weight:600;">
+                <button onclick="addInjury()" style="width:100%; padding:8px; font-size:11px; border-radius:2px; border:none; background:var(--rust); color:white; cursor:pointer; font-weight:600;">
                   Register Injury
                 </button>
               </div>
@@ -8485,7 +8566,7 @@
               <div style="margin-bottom:12px;">
                 <p style="font-size:10px; color:var(--rust-text); font-weight:600; margin-bottom:8px;">ACTIVE (${active.length})</p>
                 ${active.map(inj => `
-                  <div style="padding:10px; background:var(--field-dark); border-left:3px solid ${sevColors[inj.severity]}; border:1px solid ${hexAlpha(sevColors[inj.severity],30)}; border-radius:6px; margin-bottom:8px;">
+                  <div style="padding:10px; background:var(--field-dark); border-left:3px solid ${sevColors[inj.severity]}; border:1px solid ${hexAlpha(sevColors[inj.severity],30)}; border-radius:2px; margin-bottom:8px;">
                     <div style="display:flex; justify-content:space-between; align-items:start;">
                       <div>
                         <p style="font-size:12px; font-weight:600; color:var(--paper); text-transform:capitalize;">${inj.bodyPart.replace(/_/g,' ')}</p>
@@ -8493,20 +8574,20 @@
                         ${inj.description ? `<p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">${esc(inj.description)}</p>` : ''}
                       </div>
                       <div style="display:flex; gap:6px;">
-                        <button onclick="resolveInjury('${inj.id}')" style="padding:4px 8px; font-size:10px; border:none; border-radius:4px; background:rgba(61,90,31,0.2); color:var(--olive); cursor:pointer;">✓</button>
-                        <button onclick="deleteInjury('${inj.id}')" style="padding:4px 8px; font-size:10px; border:none; border-radius:4px; background:rgba(168,69,58,0.2); color:var(--rust-text); cursor:pointer;">✕</button>
+                        <button onclick="resolveInjury('${inj.id}')" style="padding:4px 8px; font-size:10px; border:none; border-radius:2px; background:rgba(61,90,31,0.2); color:var(--olive); cursor:pointer;">✓</button>
+                        <button onclick="deleteInjury('${inj.id}')" style="padding:4px 8px; font-size:10px; border:none; border-radius:2px; background:rgba(168,69,58,0.2); color:var(--rust-text); cursor:pointer;">✕</button>
                       </div>
                     </div>
                   </div>
                 `).join('')}
               </div>
-            ` : `<p style="text-align:center; color:var(--paper-dim); padding:20px; font-size:12px;">✅ ${t('stats_injuries_none')}</p>`}
+            ` : `<p style="text-align:center; color:var(--paper-dim); padding:20px; font-size:12px;">✓ ${t('stats_injuries_none')}</p>`}
 
             ${resolved.length > 0 ? `
               <div>
                 <p style="font-size:10px; color:var(--paper-dim); font-weight:600; margin-bottom:8px;">RESOLVED (${resolved.length})</p>
                 ${resolved.slice(0,5).map(inj => `
-                  <div style="padding:8px; background:rgba(17,21,13,0.4); border-radius:4px; margin-bottom:4px; display:flex; gap:8px; align-items:center;">
+                  <div style="padding:8px; background:rgba(17,21,13,0.4); border-radius:2px; margin-bottom:4px; display:flex; gap:8px; align-items:center;">
                     <span style="color:var(--olive); font-size:11px;">✓</span>
                     <span style="font-size:10px; flex:1; color:var(--paper-dim); text-transform:capitalize;">${inj.bodyPart.replace(/_/g,' ')}</span>
                     <span style="font-size:10px; color:var(--paper-dim);">${inj.resolvedDateISO}</span>
@@ -8566,16 +8647,16 @@
       return `
         <div style="space-y:3;">
           <div class="card" style="margin-bottom:16px;">
-            <div class="card-title">📊 CSV Export</div>
+            <div class="card-title">${getLang()==='es'?'EXPORTAR CSV':'CSV EXPORT'}</div>
             <p style="font-size:11px; color:var(--paper-dim); margin-bottom:12px;">Exporta sesiones a CSV (abre en Excel)</p>
             <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px;">
-              <button onclick="exportCSV('week')" style="padding:12px; font-size:11px; border:1px solid var(--olive); border-radius:6px; background:rgba(61,90,31,0.15); color:var(--olive); cursor:pointer; font-weight:600;">
+              <button onclick="exportCSV('week')" style="padding:12px; font-size:11px; border:1px solid var(--olive); border-radius:2px; background:rgba(61,90,31,0.15); color:var(--olive); cursor:pointer; font-weight:600;">
                 Last 7 days
               </button>
-              <button onclick="exportCSV('month')" style="padding:12px; font-size:11px; border:1px solid var(--olive); border-radius:6px; background:rgba(61,90,31,0.15); color:var(--olive); cursor:pointer; font-weight:600;">
+              <button onclick="exportCSV('month')" style="padding:12px; font-size:11px; border:1px solid var(--olive); border-radius:2px; background:rgba(61,90,31,0.15); color:var(--olive); cursor:pointer; font-weight:600;">
                 Last 30 days
               </button>
-              <button onclick="exportCSV('all')" style="padding:12px; font-size:11px; border:1px solid var(--olive); border-radius:6px; background:rgba(61,90,31,0.15); color:var(--olive); cursor:pointer; font-weight:600;">
+              <button onclick="exportCSV('all')" style="padding:12px; font-size:11px; border:1px solid var(--olive); border-radius:2px; background:rgba(61,90,31,0.15); color:var(--olive); cursor:pointer; font-weight:600;">
                 All
               </button>
             </div>
@@ -8643,19 +8724,19 @@
                 ? 'Genera un resumen de los últimos 7 días — actividades, aciertos, áreas a mejorar y qué mantener — listo para pegar en Claude/ChatGPT y pedir el plan actualizado de la próxima semana.'
                 : 'Generates a summary of the last 7 days — activities, wins, areas to improve, and what to maintain — ready to paste into Claude/ChatGPT to request next week\'s updated plan.'}
             </p>
-            <button onclick="generateWeeklyPrompt()" style="width:100%; padding:12px; font-size:11px; border:none; border-radius:6px; background:var(--coyote); color:var(--black-olive); cursor:pointer; font-weight:600; margin-bottom:12px;">
+            <button onclick="generateWeeklyPrompt()" style="width:100%; padding:12px; font-size:11px; border:none; border-radius:2px; background:var(--coyote); color:var(--black-olive); cursor:pointer; font-weight:600; margin-bottom:12px;">
               ${getLang()==='es' ? 'Generar Prompt Semanal' : 'Generate Weekly Prompt'}
             </button>
             ${weeklyPromptBlock ? `
-              <div style="border:1px solid var(--field-line); border-radius:6px; padding:10px; background:var(--field-dark); margin-bottom:12px;">
+              <div style="border:1px solid var(--field-line); border-radius:2px; padding:10px; background:var(--field-dark); margin-bottom:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                   <span style="font-size:10px; color:var(--paper-dim);">~${Math.round(weeklyPromptBlock.length / 4)} tokens</span>
                   <div style="display:flex; gap:6px;">
-                    <button onclick="copyWeeklyPrompt()" style="padding:4px 10px; font-size:10px; border:1px solid var(--coyote); border-radius:4px; background:rgba(201,169,97,0.15); color:var(--coyote); cursor:pointer; font-weight:600;">${getLang()==='es'?'Copiar':'Copy'}</button>
-                    <button onclick="downloadWeeklyPrompt()" style="padding:4px 10px; font-size:10px; border:1px solid var(--field-line); border-radius:4px; background:var(--field-surface); color:var(--paper-dim); cursor:pointer;">↓ .md</button>
+                    <button onclick="copyWeeklyPrompt()" style="padding:4px 10px; font-size:10px; border:1px solid var(--coyote); border-radius:2px; background:rgba(201,169,97,0.15); color:var(--coyote); cursor:pointer; font-weight:600;">${getLang()==='es'?'Copiar':'Copy'}</button>
+                    <button onclick="downloadWeeklyPrompt()" style="padding:4px 10px; font-size:10px; border:1px solid var(--field-line); border-radius:2px; background:var(--field-surface); color:var(--paper-dim); cursor:pointer;">↓ .md</button>
                   </div>
                 </div>
-                <pre style="font-size:10px; color:var(--paper-dim); overflow-x:auto; background:var(--field-surface); padding:8px; border-radius:4px; font-family:var(--font-mono); max-height:260px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;">${weeklyPromptBlock}</pre>
+                <pre style="font-size:10px; color:var(--paper-dim); overflow-x:auto; background:var(--field-surface); padding:8px; border-radius:2px; font-family:var(--font-mono); max-height:260px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;">${weeklyPromptBlock}</pre>
               </div>
               <p style="font-size:10px; color:var(--paper-dim); margin-bottom:16px; line-height:1.4;">
                 ${getLang()==='es'
@@ -8666,23 +8747,23 @@
           </div>
 
           <div class="card" style="margin-bottom:16px;">
-            <div class="card-title">🤖 Context Block</div>
+            <div class="card-title">${getLang()==='es'?'BLOQUE DE CONTEXTO':'CONTEXT BLOCK'}</div>
             <p style="font-size:11px; color:var(--paper-dim); margin-bottom:12px;">Export your state for Claude/ChatGPT</p>
             
-            <button onclick="generateContextBlock()" style="width:100%; padding:12px; font-size:11px; border:none; border-radius:6px; background:var(--olive); color:var(--black-olive); cursor:pointer; font-weight:600; margin-bottom:12px;">
+            <button onclick="generateContextBlock()" style="width:100%; padding:12px; font-size:11px; border:none; border-radius:2px; background:var(--olive); color:var(--black-olive); cursor:pointer; font-weight:600; margin-bottom:12px;">
               Generate Context Block
             </button>
 
             ${hasContext ? `
-              <div style="border:1px solid var(--field-line); border-radius:6px; padding:10px; background:var(--field-dark); margin-bottom:12px;">
+              <div style="border:1px solid var(--field-line); border-radius:2px; padding:10px; background:var(--field-dark); margin-bottom:12px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                   <span style="font-size:10px; color:var(--paper-dim);">~${tokenCount} tokens</span>
                   <div style="display:flex; gap:6px;">
-                    <button onclick="copyContextBlock()" style="padding:4px 10px; font-size:10px; border:1px solid var(--olive); border-radius:4px; background:rgba(61,90,31,0.15); color:var(--olive); cursor:pointer; font-weight:600;">Copy</button>
-                    <button onclick="downloadContextBlock()" style="padding:4px 10px; font-size:10px; border:1px solid var(--field-line); border-radius:4px; background:var(--field-surface); color:var(--paper-dim); cursor:pointer;">↓ .md</button>
+                    <button onclick="copyContextBlock()" style="padding:4px 10px; font-size:10px; border:1px solid var(--olive); border-radius:2px; background:rgba(61,90,31,0.15); color:var(--olive); cursor:pointer; font-weight:600;">Copy</button>
+                    <button onclick="downloadContextBlock()" style="padding:4px 10px; font-size:10px; border:1px solid var(--field-line); border-radius:2px; background:var(--field-surface); color:var(--paper-dim); cursor:pointer;">↓ .md</button>
                   </div>
                 </div>
-                <pre style="font-size:10px; color:var(--paper-dim); overflow-x:auto; background:var(--field-surface); padding:8px; border-radius:4px; font-family:var(--font-mono); max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;">${statsContextBlock}</pre>
+                <pre style="font-size:10px; color:var(--paper-dim); overflow-x:auto; background:var(--field-surface); padding:8px; border-radius:2px; font-family:var(--font-mono); max-height:200px; overflow-y:auto; white-space:pre-wrap; word-break:break-word;">${statsContextBlock}</pre>
               </div>
             ` : ``}
           </div>
@@ -9203,6 +9284,15 @@
     function renderMore() {
       return `
         <div class="view-container">
+          ${(() => { const es = getLang() === 'es'; return `
+          <div class="card">
+            <div class="card-title">${es ? 'HERRAMIENTAS' : 'TOOLS'}</div>
+            <div style="display:grid; grid-template-columns:1fr; gap:8px;">
+              <button class="btn btn-secondary" style="display:flex; align-items:center; gap:10px; justify-content:flex-start;" onclick="switchView('calc')">${ic('target', 18)} ${es ? 'CALCULADORA DE ZONAS Y METAS' : 'ZONES & GOALS CALCULATOR'}</button>
+              <button class="btn btn-secondary" style="display:flex; align-items:center; gap:10px; justify-content:flex-start;" onclick="switchView('strength')">${ic('dumbbell', 18)} ${es ? 'FUERZA A Y B' : 'STRENGTH A & B'}</button>
+              <button class="btn btn-secondary" style="display:flex; align-items:center; gap:10px; justify-content:flex-start;" onclick="switchView('profile')">${ic('home', 18)} ${es ? 'PERFIL DEL ATLETA' : 'ATHLETE PROFILE'}</button>
+            </div>
+          </div>`; })()}
           <div class="sitrep-label">${t('support_systems')}</div>
           <div class="card">
             <div class="card-title">${t('race_strategy_label')}</div>
@@ -9218,7 +9308,7 @@
             <div class="card-title">${t('settings_label')}</div>
             <div style="margin-bottom:12px;">
               <label style="display:block; font-size:12px; color:var(--paper-dim); margin-bottom:4px;">LTHR (bpm)</label>
-              <input type="number" id="lthrInput" value="${state.profile?.lthr || 174}" min="120" max="200" style="width:100%; padding:8px; font-size:12px; border:1px solid var(--field-line); border-radius:4px; background:var(--field-surface); color:var(--paper);" onchange="updateLTHR(parseInt(this.value))" />
+              <input type="number" id="lthrInput" value="${state.profile?.lthr || 174}" min="120" max="200" style="width:100%; padding:8px; font-size:12px; border:1px solid var(--field-line); border-radius:2px; background:var(--field-surface); color:var(--paper);" onchange="updateLTHR(parseInt(this.value))" />
               <p style="font-size:10px; color:var(--paper-dim); margin-top:4px;">Garmin → ${state.profile?.lthr || 174} bpm · HR zones will update automatically</p>
             </div>
             <label class="checkbox-item">
@@ -9277,29 +9367,14 @@
           <div class="view ${currentView === 'profile' ? 'active' : ''}">${currentView === 'profile' ? renderProfileView() : ''}</div>
           <div class="view ${currentView === 'strength' ? 'active' : ''}">${currentView === 'strength' ? renderStrengthView() : ''}</div>
         </main>
-        <nav aria-label="${getLang()==='es'?'Navegación principal':'Main navigation'}">
-          <button class="${currentView === 'home' ? 'active' : ''}" onclick="switchView('home')">
-            <span class="nav-icon">⌂</span><span>${t('nav_base')}</span>
-          </button>
-          <button class="${currentView === 'tcx' ? 'active' : ''}" onclick="switchView('tcx')">
-            <span class="nav-icon">↑</span><span>${t('nav_tcx')}</span>
-          </button>
-          <button class="${currentView === 'calendar' ? 'active' : ''}" onclick="switchView('calendar')">
-            <span class="nav-icon">▦</span><span>${t('nav_calendar')}</span>
-          </button>
-          <button class="${currentView === 'strength' ? 'active' : ''}" onclick="switchView('strength')">
-            <span class="nav-icon">💪</span><span>${getLang()==='es'?'FUERZA':'STRENGTH'}</span>
-          </button>
-          <button class="${currentView === 'calc' ? 'active' : ''}" onclick="switchView('calc')" aria-label="${getLang()==='es'?'Calculadora de zonas y metas':'Zones and goals calculator'}">
-            <span class="nav-icon">∑</span><span>CALC</span>
-          </button>
-          <button class="${currentView === 'more' ? 'active' : ''}" onclick="switchView('more')">
-            <span class="nav-icon">⚙</span><span>${t('nav_more')}</span>
-          </button>
-          <button class="${currentView === 'stats' ? 'active' : ''}" onclick="switchView('stats')">
-            <span class="nav-icon">📊</span><span>STATS</span>
-          </button>
-        </nav>
+        ${(() => {
+          // 2026.11.03: 5 pestañas. Fuerza vive en Semana; Calc y Perfil en Más (el botón PERFIL del encabezado sigue).
+          const es = getLang() === 'es';
+          const parent = { home: 'home', calendar: 'calendar', strength: 'calendar', tcx: 'tcx', stats: 'stats', more: 'more', calc: 'more', profile: 'more' }[currentView] || currentView;
+          const tabs = [['home', 'home', es ? 'HOY' : 'TODAY'], ['calendar', 'week', es ? 'SEMANA' : 'WEEK'], ['tcx', 'upload', es ? 'SUBIR' : 'UPLOAD'], ['stats', 'progress', es ? 'PROGRESO' : 'PROGRESS'], ['more', 'more', es ? 'MÁS' : 'MORE']];
+          return `<nav aria-label="${es ? 'Navegación principal' : 'Main navigation'}">` + tabs.map(([v, icn, lbl]) =>
+            `<button class="${parent === v ? 'active' : ''}" ${parent === v ? 'aria-current="page"' : ''} onclick="switchView('${v}')"><span class="nav-icon">${ic(icn, 20)}</span><span>${lbl}</span></button>`).join('') + `</nav>`;
+        })()}
         ${overlayHtml}
         ${mdModalContent ? renderMarkdownModal() : ''}`;
     }
@@ -11681,7 +11756,7 @@
         <div class="card">
           <div class="card-title">${es?'GESTIÓN DE DATOS':'DATA MANAGEMENT'}</div>
 
-          <div style="background:${backupStale?'rgba(166,69,58,0.12)':'rgba(61,90,31,0.12)'}; border:1px solid ${backupStale?'var(--rust)':'var(--olive)'}; border-radius:6px; padding:10px; margin-bottom:12px;">
+          <div style="background:${backupStale?'rgba(166,69,58,0.12)':'rgba(61,90,31,0.12)'}; border:1px solid ${backupStale?'var(--rust)':'var(--olive)'}; border-radius:2px; padding:10px; margin-bottom:12px;">
             <div style="font-size:11px; color:${backupStale?'var(--rust)':'var(--olive-bright)'}; font-weight:600; margin-bottom:4px;">
               ${backupStale ? (es?'⚠ Respaldo recomendado':'⚠ Backup recommended') : (es?'✓ Respaldo al día':'✓ Backup up to date')}
             </div>
@@ -11699,7 +11774,7 @@
           <input type="file" id="backupImportInput" accept=".json" style="display:none;" onchange="handleBackupImport(event)" />
 
           <button class="btn btn-secondary" style="width:100%; margin-bottom:12px;" onclick="cleanDuplicatePlanEntries()">
-            ${es?`🧹 Limpiar plan duplicado (${state.plan.length} entradas)`:`🧹 Clean duplicate plan (${state.plan.length} entries)`}
+            ${es?`Limpiar plan duplicado (${state.plan.length} entradas)`:`Clean duplicate plan (${state.plan.length} entries)`}
           </button>
 
           <div style="border-top:1px solid var(--field-line); padding-top:10px; margin-bottom:6px;">
@@ -11723,7 +11798,7 @@
               <span>${es?'Almacenamiento usado':'Storage used'}</span>
               <span>${sizeKB} KB / ~5 MB</span>
             </div>
-            <div style="height:6px; background:var(--field-surface); border-radius:3px; overflow:hidden;">
+            <div style="height:6px; background:var(--field-surface); border-radius:2px; overflow:hidden;">
               <div style="height:100%; width:${sizePct}%; background:${sizeColor};"></div>
             </div>
             ${sizePct > 80 ? `<p style="font-size:10px; color:var(--rust-text); margin-top:6px;">${es?'Espacio casi lleno — exporta backup y borra actividades viejas.':'Nearly full — export a backup and delete old activities.'}</p>` : ''}
@@ -11865,7 +11940,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.02-3';
+    const APP_BUILD = '2026.11.03-1';
     console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
@@ -11977,8 +12052,8 @@
         setTimeout(() => {
           try {
             showToast(getLang() === 'es'
-              ? '💾 Recuerda exportar un backup (Más → Gestión de Datos)'
-              : '💾 Remember to export a backup (More → Data Management)');
+              ? 'Recuerda exportar un respaldo (Más → Gestión de datos)'
+              : 'Remember to export a backup (More → Data Management)');
           } catch (_) {}
         }, 2500);
       }
