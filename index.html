@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <title>FITCOACH // MISSION 5K</title>
+  <title>FitCoach Táctico</title>
   <meta name="theme-color" content="#0a0d08">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="FitCoach 5K">
+  <meta name="apple-mobile-web-app-title" content="FitCoach Táctico">
   <meta name="mobile-web-app-capable" content="yes">
   <!-- PWA manifest: real file (manifest.json) served alongside this page -->
   <link rel="manifest" href="manifest.json">
@@ -3883,6 +3883,16 @@
       };
     }
     function getLatestVDOT() {
+      // 2026.11.05: race/hard efforts were dropped by the fatigue filter (high HR for the pace looks like
+      // "fatigue"), leaving only easy runs whose VDOT is meaningless → a 78–84 min 10K projection.
+      // Use the best effort the VDOT validity rules accept (≥ threshold effort, terrain OK) in the last 60 days.
+      const cut = addDaysISO(todayISO(), -60);
+      const valid = (state.tcxSessions || []).filter(s => s.analysis?.vdot > 0 && s.analysis.vdotTerrainInvalid === false && s.sport !== 'biking' && (s.dateISO || '') >= cut)
+        .sort((a, b) => (b.dateISO || '').localeCompare(a.dateISO || ''));
+      if (valid.length) {
+        const best = valid.reduce((m, s) => s.analysis.vdot > m.analysis.vdot ? s : m, valid[0]);
+        return { bestVdot: best.analysis.vdot, bestDate: best.dateISO, latestVdot: valid[0].analysis.vdot, count: valid.length, latestDate: valid[0].dateISO, windowDays: 60 };
+      }
       const withVdot = state.tcxSessions
         .filter(s => s.analysis?.vdot > 0 && !isSessionFatigued(s))
         .sort((a,b) => (b.dateISO||'').localeCompare(a.dateISO||''));
@@ -3941,7 +3951,8 @@
         goalSec, band, color, verdict, daysLeft,
         raceMeters: raceM, raceLabel: raceDistanceLabel(profile),
         heatPenaltyPct: raceHeatPenaltyPct(profile.raceDateISO),
-        hasVdot: !!vd, vdotCount: vd?.count || 0
+        hasVdot: !!vd, vdotCount: vd?.count || 0, vdotBest: vd?.bestVdot || null, vdotDate: vd?.bestDate || null,
+        bootPct: profile.raceInBoots === false ? 0 : 0.04
       };
     }
 
@@ -5606,24 +5617,22 @@
       const pred = getRacePrediction();
       if (!pred) return '';
       const es = getLang() === 'es';
-      const lightColors = { green: 'var(--olive-bright)', amber: 'var(--signal-amber)', red: 'var(--rust-bright)' };
-      const dot = (b) => `<span style="display:inline-block; width:14px; height:14px; border-radius:50%; background:${pred.band===b?lightColors[b]:'var(--field-line)'}; ${pred.band===b?'box-shadow:0 0 8px '+lightColors[b]:''};"></span>`;
+      const diff = pred.realisticSec - pred.goalSec;
+      const adj = [pred.heatPenaltyPct ? (es ? 'calor ' : 'heat ') + '+' + (pred.heatPenaltyPct * 100).toFixed(1) + '%' : '', pred.bootPct ? (es ? 'botas +4%' : 'boots +4%') : ''].filter(Boolean).join(' · ');
       return `
         <div class="card">
-          <div class="card-title">${es?'¿LLEGO A SUB-'+secToMMSS(pred.goalSec).split(':')[0]+'?':'WILL I HIT SUB-'+secToMMSS(pred.goalSec).split(':')[0]+'?'}</div>
-          <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px;">
-            <div style="display:flex; flex-direction:column; gap:6px; padding:8px; background:var(--field-surface); border-radius:2px;">
-              ${dot('red')}${dot('amber')}${dot('green')}
-            </div>
-            <div style="flex:1;">
-              <div style="font-size:10px; color:var(--paper-dim);">${es?'Proyección día de carrera (botas + calor PR)':'Race-day projection (boots + PR heat)'}</div>
-              <div style="font-size:24px; font-weight:700; color:${pred.color}; font-family:var(--font-mono);">${secToMMSS(pred.lowSec)}–${secToMMSS(pred.highSec)}</div>
-              <div style="font-size:10px; color:var(--paper-dim);">${es?'Meta':'Goal'}: ${secToMMSS(pred.goalSec)} · ${es?'en pista plana':'flat course'}: ${secToMMSS(pred.flatPredSec)}</div>
-            </div>
+          <div class="card-title">${es ? 'PROYECCIÓN DE CARRERA' : 'RACE PROJECTION'} · ${esc(pred.raceLabel || '')}</div>
+          <div style="font-size:11px; color:var(--paper-dim);">${es ? 'Con tu forma actual' : 'With your current fitness'}${adj ? ' (' + adj + ')' : ''}</div>
+          <div style="font-size:28px; font-weight:700; color:var(--coyote); font-family:var(--font-mono); line-height:1.2;">${fmtRaceTime(pred.lowSec)}–${fmtRaceTime(pred.highSec)}</div>
+          <div style="font-size:12px; color:var(--paper-dim); margin-top:2px;">${es ? 'Central' : 'Central'} ${fmtRaceTime(pred.realisticSec)} · ${es ? 'en plano' : 'flat'} ${fmtRaceTime(pred.flatPredSec)}</div>
+          <div style="display:flex; justify-content:space-between; margin-top:10px; padding-top:8px; border-top:1px solid var(--field-line); font-size:12px;">
+            <span>${es ? 'Meta personal' : 'Personal goal'}: <strong>${fmtRaceTime(pred.goalSec)}</strong></span>
+            <span style="color:${diff <= 0 ? 'var(--olive-text)' : 'var(--paper-dim)'};">${diff <= 0 ? (es ? 'dentro de la proyección' : 'within projection') : '+' + fmtRaceTime(Math.abs(diff)) + (es ? ' sobre la meta' : ' over goal')}</span>
           </div>
-          <p style="font-size:12px; color:${pred.color}; line-height:1.5;">${pred.verdict}</p>
-          ${!pred.hasVdot ? `<p style="font-size:10px; color:var(--paper-dim); margin-top:6px;">${es?'Sube y vincula sesiones TCX para una proyección basada en tu VDOT real.':'Upload and link TCX sessions for a projection based on your real VDOT.'}</p>`
-            : `<p style="font-size:10px; color:var(--paper-dim); margin-top:6px;">${es?`Basado en tus mejores ${pred.vdotCount} sesiones recientes. Es un rango honesto, no una garantía — el calor y las botas cuentan.`:`Based on your best ${pred.vdotCount} recent sessions. It's an honest range, not a guarantee — heat and boots count.`}</p>`}
+          <p style="font-size:11px; color:var(--paper-dim); margin-top:8px; line-height:1.5;">${pred.hasVdot
+            ? (es ? `Basada en tu mejor esfuerzo válido de los últimos 60 días${pred.vdotDate ? ' (' + pred.vdotDate + ', VDOT ' + Number(pred.vdotBest).toFixed(1) + ')' : ''}. Mide la forma de hoy, no la de diciembre. La meta personal nunca se usa como ritmo de entrenamiento.`
+                  : `Based on your best valid effort of the last 60 days${pred.vdotDate ? ' (' + pred.vdotDate + ', VDOT ' + Number(pred.vdotBest).toFixed(1) + ')' : ''}. It measures today's fitness, not December's. The goal is never used as a training pace.`)
+            : (es ? 'Sin esfuerzos válidos recientes: se usa tu 5K del perfil.' : 'No recent valid efforts: using your profile 5K.')}</p>
         </div>`;
     }
 
@@ -6195,7 +6204,7 @@
       ['today',      'Hoy · qué toca', 'Today'],
       ['strength',   'Fuerza de hoy', "Today's strength"],
       ['grit',       'GRIT 100', 'GRIT 100'],
-      ['prediction', 'Predicción de carrera', 'Race prediction'],
+      ['prediction', 'Proyección de carrera', 'Race projection'],
       ['acwr',       'Carga aguda / crónica', 'Acute / chronic load'],
       ['load',       'Carga de entrenamiento', 'Training load'],
       ['upcoming',   'Próximas sesiones', 'Upcoming sessions'],
@@ -6352,14 +6361,14 @@
           <div class="mission-clock">
             <div class="clock-top">
               <span class="clock-label">${t('clock_label').replace('5K', raceLabelByKey(profile.raceDistanceKey || '5k'))}</span>
-              <span class="clock-coords">${fmtRaceDateShort(profile.raceDateISO)} · ${activeRaceGoalPaceStr()}/MI</span>
+              <span class="clock-coords" style="margin-left:10px; white-space:nowrap; text-align:right;">${profile.raceDateISO ? parseISODateLocal(profile.raceDateISO).toLocaleDateString(getLang() === 'es' ? 'es-PR' : 'en-US', { day: 'numeric', month: 'short', year: 'numeric' }).toUpperCase() : '—'}</span>
             </div>
             <div class="clock-main">
               <div class="clock-countdown">
                 <span class="clock-number">${daysLeft}</span>
                 <span class="clock-unit">${t('clock_unit')}</span>
               </div>
-              <div class="clock-meta">${esc((activeRace()?.name) || raceLabelByKey(profile.raceDistanceKey || '5k'))} · ${fmtRaceTime(activeGoalSec(profile, raceMetersByKey(profile.raceDistanceKey || '5k')))}</div>
+              <div class="clock-meta">${esc((activeRace()?.name) || raceLabelByKey(profile.raceDistanceKey || '5k'))} · ${getLang() === 'es' ? 'meta personal' : 'personal goal'} ${fmtRaceTime(activeGoalSec(profile, raceMetersByKey(profile.raceDistanceKey || '5k')))}</div>
             </div>
             <div class="clock-divider"></div>
             <div class="clock-stats">
@@ -6384,6 +6393,65 @@
     }
 
 
+
+    // ═══ 2026.11.05 — vest weight confirmation for marches ═══
+    // Opens after a TCX upload that looks like a march (plan day says vest, boots prefilled, or walking
+    // cadence + slow pace) and when boots are chosen for an activity without a weight.
+    let vestQueue = [];
+    function planVestLb(dateISO) {
+      const pl = (state.plan || []).find(p => p.dateISO === dateISO && /chaleco|caminata/i.test(p.notes || ''));
+      const m = pl ? /chaleco\s+(\d+(?:\.\d+)?)\s*lb/i.exec(pl.notes) : null;
+      return { isPlanMarch: !!pl, lb: m ? Number(m[1]) : null };
+    }
+    function looksLikeMarch(act) {
+      if (!act || act.sport === 'biking') return false;
+      if (gearById(act.manualFields?.gearId)?.kind === 'boot') return true;
+      if (planVestLb(act.dateISO).isPlanMarch) return true;
+      return (act.avgCadSPM || 999) < 140 && (act.avgPaceSecPerMi || 0) > 13.5 * 60;
+    }
+    function queueVestPrompt(ids) { ids.forEach(id => { if (!vestQueue.includes(id)) vestQueue.push(id); }); render(); }
+    function renderVestModal() {
+      const id = vestQueue[0]; if (!id) return '';
+      const act = state.tcxSessions.find(a => a.id === id); if (!act) { vestQueue.shift(); return ''; }
+      const es = getLang() === 'es';
+      const mf = act.manualFields || {};
+      const isBoot = gearById(mf.gearId)?.kind === 'boot';
+      const pv = planVestLb(act.dateISO);
+      const last = state.settings.lastVestLb;
+      const val = mf.vestLb || last || pv.lb || '';
+      return `
+        <div class="md-modal" role="dialog" aria-modal="true" aria-labelledby="vestTitle" style="z-index:2000;">
+          <div class="card" style="width:100%; max-width:420px; margin:0; border-color:var(--coyote);">
+            <div class="card-title" id="vestTitle">${es ? 'MARCHA CON CHALECO' : 'VEST MARCH'}</div>
+            <p style="font-size:13px; color:var(--paper); line-height:1.5; margin-bottom:10px;">${act.dateISO} · ${(act.totalDistMi || 0).toFixed(2)} mi · ${secToHHMMSS(act.totalTimeSec)}${isBoot ? '' : (es ? '<br>Parece una marcha. ¿Fue con chaleco?' : '<br>This looks like a march. Was it with a vest?')}</p>
+            <div class="manual-field-row"><label for="vestLbInput">${es ? 'Peso del chaleco (lb)' : 'Vest weight (lb)'}</label><input type="number" inputmode="decimal" id="vestLbInput" value="${esc(val)}" min="0" max="80" step="0.5" style="max-width:100px; text-align:right;" /></div>
+            ${pv.lb ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${es ? 'Plan de ese día: ' : 'Plan for that day: '}${pv.lb} lb</p>` : ''}
+            <div style="display:flex; gap:8px; margin-top:14px;">
+              <button class="btn btn-primary" style="flex:2;" onclick="confirmVest('${esc(act.id)}', true)">${es ? 'CONFIRMAR' : 'CONFIRM'}</button>
+              <button class="btn btn-secondary" style="flex:1;" onclick="confirmVest('${esc(act.id)}', false)">${isBoot ? (es ? 'Ahora no' : 'Not now') : (es ? 'Fue corrida' : 'It was a run')}</button>
+            </div>
+          </div>
+        </div>`;
+    }
+    function confirmVest(id, yes) {
+      const act = state.tcxSessions.find(a => a.id === id);
+      vestQueue = vestQueue.filter(x => x !== id);
+      if (act && yes) {
+        const v = parseFloat((document.getElementById('vestLbInput') || {}).value);
+        if (!act.manualFields) act.manualFields = {};
+        if (gearById(act.manualFields.gearId)?.kind !== 'boot') {
+          const boot = (state.gear || []).find(g => g.kind === 'boot' && !g.retired);
+          if (boot) { act.manualFields.gearId = boot.id; delete act.manualFields.gearAuto; }
+        }
+        if (!isNaN(v)) { act.manualFields.vestLb = v; state.settings.lastVestLb = v; }
+        const pv = planVestLb(act.dateISO);
+        saveState();
+        showToast((getLang() === 'es' ? '✓ Marcha guardada' : '✓ March saved') + (!isNaN(v) ? ` · ${v} lb` : '') + (pv.lb && !isNaN(v) && v > pv.lb ? (getLang() === 'es' ? ` (plan: ${pv.lb} lb)` : ` (plan: ${pv.lb} lb)`) : ''));
+      } else if (act && !yes && gearById(act.manualFields?.gearId)?.kind === 'boot' && act.manualFields.gearAuto) {
+        delete act.manualFields.gearId; delete act.manualFields.gearAuto; saveState();   // "it was a run": drop the auto-filled boots
+      }
+      render();
+    }
     // ═══ 2026.11.04 — Upload list: filter by type and distance, sort, compare 2+ activities ═══
     let tcxFilterType = 'all', tcxFilterDist = 'all', tcxSortKey = 'date_desc', tcxCmpMode = false;
     const tcxCmpSel = new Set();
@@ -8290,7 +8358,7 @@
 
       return `
         <div class="view-container">
-          <div class="sitrep-label">STATS & ANALYTICS</div>
+          <div class="sitrep-label">${getLang()==='es' ? 'PROGRESO Y ANÁLISIS' : 'PROGRESS & ANALYTICS'}</div>
           
           <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; margin-bottom:16px;">
             ${tabs.map(tab => `
@@ -8744,203 +8812,343 @@
     }
 
     // ── REPORTS SECTION ────────────────────────────────────────────────────
-    // ═══ 2026.11.04 — detailed activity report: one row per activity, one column per field ═══
-    // Each cell value is { v, t } with t = 'n' (number) or 's' (text) so the .xlsx keeps real numbers.
+    // ═══ 2026.11.05 — Activity report v2: choose period (incl. any month) and content (GRIT 100 / full / custom) ═══
     function reportPeriodFilter(period) {
       const today = todayISO();
       if (period === 'week') return (iso) => iso >= addDaysISO(today, -6) && iso <= today;
       if (period === 'month') return (iso) => iso >= addDaysISO(today, -29) && iso <= today;
       if (period === 'thismonth') return (iso) => iso.slice(0, 7) === today.slice(0, 7);
+      if (/^m:\d{4}-\d{2}$/.test(period)) return (iso) => iso.slice(0, 7) === period.slice(2);
       return () => true;
     }
-    function buildActivityReport(period) {
-      const es = getLang() === 'es';
-      const L = (a, b) => (es ? a : b);
+    function reportPeriodLabel(period) {
+      const es = getLang() === 'es', today = todayISO();
+      const monthName = (ym) => { const [y, m] = ym.split('-').map(Number); const s = new Date(y, m - 1, 1).toLocaleDateString(es ? 'es-PR' : 'en-US', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
+      if (period === 'week') return (es ? 'Últimos 7 días' : 'Last 7 days') + ` (${addDaysISO(today, -6)} → ${today})`;
+      if (period === 'month') return (es ? 'Últimos 30 días' : 'Last 30 days') + ` (${addDaysISO(today, -29)} → ${today})`;
+      if (period === 'thismonth') return monthName(today.slice(0, 7));
+      if (/^m:/.test(period)) return monthName(period.slice(2));
+      return es ? 'Todo el historial' : 'All history';
+    }
+    function activityLocation(a) {
+      const mf = a.manualFields || {};
+      if (mf.locationName) return mf.locationName;
+      const g = a.firstGPS; return g && g.lat != null ? g.lat.toFixed(4) + ', ' + g.lon.toFixed(4) : '';
+    }
+    function activityTempF(a) {
+      const mf = a.manualFields || {};
+      if (mf.wxAvgTempF != null && mf.wxAvgTempF !== '') return Number(mf.wxAvgTempF);  // weather service, most reliable
+      if (a.avgTempF != null) return Number(a.avgTempF);                              // watch sensor (reads warm on the wrist)
+      if (mf.feelsLike != null && mf.feelsLike !== '') return Number(mf.feelsLike);
+      return null;
+    }
+    const isMarchAct = (a) => activityKind(a).key === 'march';
+
+    // Column catalog: [id, es, en, getter(a) → value, kind] — kind: 's' text, 'mi' 0.00, 'n0' 0, 'n1' 0.0, 'pct' 0 %
+    function reportColumns() {
+      const es = getLang() === 'es', L = (x, y) => (es ? x : y);
       const lthr = state.profile?.lthr || 174;
-      const keep = reportPeriodFilter(period);
-      const N = (x, d) => (x == null || x === '' || isNaN(Number(x))) ? { v: '', t: 's' } : { v: d == null ? Number(x) : Math.round(Number(x) * Math.pow(10, d)) / Math.pow(10, d), t: 'n' };
-      const S = (x) => ({ v: x == null ? '' : String(x), t: 's' });
-      const P = (sec) => S(sec > 0 ? secToMMSS(sec) : '');
-      const cols = [
-        ['Fecha', 'Date', a => S(a.dateISO)],
-        ['Día', 'Day', a => S(wpDow(a.dateISO))],
-        ['Hora de inicio', 'Start time', a => S(a.startTimeISO ? new Date(a.startTimeISO).toLocaleTimeString(es ? 'es-PR' : 'en-US', { hour: '2-digit', minute: '2-digit' }) : '')],
-        ['Tipo de actividad', 'Activity type', a => S(activityKind(a).label)],
-        ['Deporte', 'Sport', a => S(a.sport || 'running')],
-        ['Día del plan', 'Plan day', a => { const p = a.linkedPlanDay ? state.plan.find(x => x.day === a.linkedPlanDay) : null; return S(p ? (p.dateISO + ' · ' + shortSessionTitle(p)) : ''); }],
-        ['Distancia (mi)', 'Distance (mi)', a => N(a.totalDistMi, 2)],
-        ['Tiempo (h:mm:ss)', 'Time (h:mm:ss)', a => S(secToHHMMSS(a.totalTimeSec))],
-        ['Tiempo (min)', 'Time (min)', a => N(a.totalTimeSec / 60, 1)],
-        ['Ritmo prom (/mi)', 'Avg pace (/mi)', a => P(a.avgPaceSecPerMi)],
-        ['Ritmo prom (s/mi)', 'Avg pace (s/mi)', a => N(a.avgPaceSecPerMi, 0)],
-        ['Ritmo de trabajo (/mi)', 'Work pace (/mi)', a => P(a.workPaceSecPerMi)],
-        ['Velocidad prom (mph)', 'Avg speed (mph)', a => N(a.avgSpeedMph, 2)],
-        ['FC prom', 'Avg HR', a => N(a.avgHR)],
-        ['FC máx', 'Max HR', a => N(a.maxHR)],
-        ['FC prom % umbral', 'Avg HR % LTHR', a => N(a.avgHR ? a.avgHR / lthr * 100 : null, 0)],
-        ['Z1 %', 'Z1 %', a => N(a.analysis?.timeInZones?.pct?.z1)],
-        ['Z2 %', 'Z2 %', a => N(a.analysis?.timeInZones?.pct?.z2)],
-        ['Z3 %', 'Z3 %', a => N(a.analysis?.timeInZones?.pct?.z3)],
-        ['Z4 %', 'Z4 %', a => N(a.analysis?.timeInZones?.pct?.z4)],
-        ['Z5 %', 'Z5 %', a => N(a.analysis?.timeInZones?.pct?.z5)],
-        ['Z1 (min)', 'Z1 (min)', a => N((a.analysis?.timeInZones?.seconds?.['1'] || 0) / 60, 1)],
-        ['Z2 (min)', 'Z2 (min)', a => N((a.analysis?.timeInZones?.seconds?.['2'] || 0) / 60, 1)],
-        ['Z3 (min)', 'Z3 (min)', a => N((a.analysis?.timeInZones?.seconds?.['3'] || 0) / 60, 1)],
-        ['Z4 (min)', 'Z4 (min)', a => N((a.analysis?.timeInZones?.seconds?.['4'] || 0) / 60, 1)],
-        ['Z5 (min)', 'Z5 (min)', a => N((a.analysis?.timeInZones?.seconds?.['5'] || 0) / 60, 1)],
-        ['Deriva cardíaca (%)', 'Cardiac drift (%)', a => N(a.analysis?.cardiacDrift?.driftPct, 1)],
-        ['FC 1ª mitad → 2ª mitad', 'HR 1st → 2nd half', a => S(a.analysis?.cardiacDrift ? a.analysis.cardiacDrift.avgHRFirstHalf + ' → ' + a.analysis.cardiacDrift.avgHRSecondHalf : '')],
-        ['Desacople app (%)', 'App decoupling (%)', a => N(a.analysis?.aerobicDecouplingPct, 1)],
-        ['Desacople válido', 'Decoupling valid', a => S(a.analysis?.decouplingValid == null ? '' : (a.analysis.decouplingValid ? L('sí', 'yes') : 'no'))],
-        ['Desacople excluye milla 1', 'Decoupling excludes mile 1', a => S(a.analysis?.decouplingInfo ? (a.analysis.decouplingInfo.excludedFirstMile ? L('sí', 'yes') : 'no') : '')],
-        ['Consistencia ritmo CV (%)', 'Pace CV (%)', a => N(a.analysis?.pacingConsistency?.cvPct, 1)],
-        ['% corriendo', '% running', a => N(a.analysis?.runWalk?.runPct)],
-        ['Pausas de caminata', 'Walk breaks', a => N((a.analysis?.runWalk?.walkSegments || []).filter(w => w.durationSec >= 15).length)],
-        ['Cadencia prom (ppm)', 'Avg cadence (spm)', a => N(a.avgCadSPM)],
-        ['Cadencia máx (ppm)', 'Max cadence (spm)', a => N(a.maxCadSPM)],
-        ['Desnivel + (ft)', 'Elev gain (ft)', a => N(a.elevGainFt)],
-        ['Desnivel − (ft)', 'Elev loss (ft)', a => N(a.elevLossFt)],
-        ['Desnivel + por milla (m)', 'Elev gain per mi (m)', a => N(a.analysis?.elevGainPerMi)],
-        ['Altitud mín (m)', 'Min altitude (m)', a => N(a.altMinM)],
-        ['Altitud máx (m)', 'Max altitude (m)', a => N(a.altMaxM)],
-        ['Pendiente máx subida (%)', 'Max uphill grade (%)', a => N(a.maxGradeUp, 1)],
-        ['Pendiente máx bajada (%)', 'Max downhill grade (%)', a => N(a.maxGradeDown, 1)],
-        ['Potencia prom (W)', 'Avg power (W)', a => N(a.analysis?.powerStats?.avgWatts)],
-        ['Calorías', 'Calories', a => N(a.calories)],
-        ['TSS estimado', 'Estimated TSS', a => N(estimateTSS(a.totalDistMi, a.totalTimeSec, a.avgHR, lthr), 1)],
-        ['VDOT', 'VDOT', a => N(a.analysis?.vdotTerrainInvalid ? null : a.analysis?.vdot, 1)],
-        ['Pred. 5K', 'Pred. 5K', a => P(a.analysis?.vdotTerrainInvalid ? 0 : a.analysis?.predicted5KSec)],
-        ['Nota', 'Grade', a => S(a.analysis?.sessionGrade || '')],
-        ['Puntuación', 'Score', a => N(a.analysis?.sessionScore)],
-        ['Calidad de la FC (%)', 'HR data quality (%)', a => N(a.analysis?.hrDataQuality?.score)],
-        ['Zapato', 'Shoe', a => S(gearById(a.manualFields?.gearId)?.name || '')],
-        ['Fuente de FC', 'HR source', a => S(a.manualFields?.hrSource ? hrSourceLabel(a.manualFields.hrSource) : '')],
-        ['Chaleco (lb)', 'Vest (lb)', a => N(a.manualFields?.vestLb)],
-        ['Pies', 'Feet', a => S(a.manualFields?.feetNotes || '')],
-        ['Temp. prom (°F)', 'Avg temp (°F)', a => N(a.avgTempF != null ? a.avgTempF : a.manualFields?.wxAvgTempF)],
-        ['Sensación térmica (°F)', 'Feels like (°F)', a => N(a.manualFields?.feelsLike)],
-        ['Humedad (%)', 'Humidity (%)', a => N(a.manualFields?.humidity)],
-        ['Viento (mph)', 'Wind (mph)', a => N(a.manualFields?.wind)],
-        ['Superficie', 'Surface', a => S(a.manualFields?.surface || '')],
-        ['Lugar', 'Location', a => S(a.manualFields?.locationName || '')],
-        ['Sueño (h)', 'Sleep (h)', a => N(a.manualFields?.sleepHours)],
-        ['Calidad del sueño (1-10)', 'Sleep quality (1-10)', a => N(a.manualFields?.sleepQuality)],
-        ['Energía (1-10)', 'Energy (1-10)', a => N(a.manualFields?.energyLevel)],
-        ['Estrés (1-10)', 'Stress (1-10)', a => N(a.manualFields?.stressLevel)],
-        ['FC en reposo', 'Resting HR', a => N(a.manualFields?.restingHR)],
-        ['VFC (ms)', 'HRV (ms)', a => N(a.manualFields?.hrv)],
-        ['Peso (lb)', 'Weight (lb)', a => N(a.manualFields?.bodyWeight)],
-        ['Esfuerzo (RPE)', 'Effort (RPE)', a => N(a.manualFields?.rpe)],
-        ['Dolor', 'Pain', a => S(a.manualFields?.painNotes || '')],
-        ['TE aeróbico', 'Aerobic TE', a => N(a.manualFields?.aerobicTE, 1)],
-        ['TE anaeróbico', 'Anaerobic TE', a => N(a.manualFields?.anaerobicTE, 1)],
-        ['Carga Garmin', 'Garmin load', a => N(a.manualFields?.trainingLoad)],
-        ['Objetivo', 'Goal', a => S(a.manualFields?.sessionGoal || '')],
-        ['Notas', 'Notes', a => S(a.manualFields?.athleteNotes || '')],
-        ['Parciales por milla (ritmo @ FC)', 'Mile splits (pace @ HR)', a => S((a.analysis?.realSplitsMi || []).map(x => x.splitNum + (x.partial ? '*' : '') + ': ' + secToMMSS(x.paceSecPerUnit) + ' @' + (x.avgHR ? Math.round(x.avgHR) : '—')).join(' | '))],
-        ['Vueltas', 'Laps', a => N((a.laps || []).length)],
-        ['Hallazgos', 'Findings', a => S((a.analysis?.keyFindings || []).slice(0, 4).map(f => f.text).join(' / '))],
-        ['ID', 'ID', a => S(a.id)]
+      const mf = (a) => a.manualFields || {};
+      const num = (x) => (x == null || x === '' || isNaN(Number(x))) ? null : Number(x);
+      const tz = (a, k) => a.analysis?.timeInZones?.pct?.[k];
+      const tzm = (a, k) => (a.analysis?.timeInZones?.seconds?.[k] || 0) / 60;
+      return [
+        ['date', 'Fecha', 'Date', a => a.dateISO, 's', 'basic'],
+        ['dow', 'Día', 'Day', a => wpDow(a.dateISO), 's', 'basic'],
+        ['start', 'Hora de inicio', 'Start time', a => a.startTimeISO ? new Date(a.startTimeISO).toLocaleTimeString(es ? 'es-PR' : 'en-US', { hour: '2-digit', minute: '2-digit' }) : '', 's', 'basic'],
+        ['type', 'Tipo de actividad', 'Activity type', a => activityKind(a).label, 's', 'basic'],
+        ['grit', 'Categoría GRIT', 'GRIT category', a => isMarchAct(a) ? L('Marcha', 'Ruck') : L('Correr', 'Run'), 's', 'basic'],
+        ['sport', 'Deporte', 'Sport', a => a.sport || 'running', 's', 'basic'],
+        ['plan', 'Día del plan', 'Plan day', a => { const p = a.linkedPlanDay ? state.plan.find(x => x.day === a.linkedPlanDay) : null; return p ? p.dateISO + ' · ' + shortSessionTitle(p) : ''; }, 's', 'basic'],
+        ['dist', 'Distancia (mi)', 'Distance (mi)', a => num(a.totalDistMi), 'mi', 'basic'],
+        ['time', 'Tiempo (h:mm:ss)', 'Time (h:mm:ss)', a => secToHHMMSS(a.totalTimeSec), 's', 'basic'],
+        ['timemin', 'Tiempo (min)', 'Time (min)', a => num(a.totalTimeSec / 60), 'n1', 'basic'],
+        ['pace', 'Ritmo prom (/mi)', 'Avg pace (/mi)', a => a.avgPaceSecPerMi > 0 ? secToMMSS(a.avgPaceSecPerMi) : '', 's', 'basic'],
+        ['loc', 'Ubicación', 'Location', a => activityLocation(a), 's', 'basic'],
+        ['shoe', 'Calzado', 'Footwear', a => gearById(mf(a).gearId)?.name || '', 's', 'gear'],
+        ['hrsrc', 'Sensor de FC', 'HR sensor', a => mf(a).hrSource ? hrSourceLabel(mf(a).hrSource) : '', 's', 'gear'],
+        ['vest', 'Peso del chaleco (lb)', 'Vest weight (lb)', a => isMarchAct(a) ? num(mf(a).vestLb) : null, 'n1', 'gear'],
+        ['feet', 'Pies', 'Feet', a => mf(a).feetNotes || '', 's', 'gear'],
+        ['temp', 'Temperatura (°F)', 'Temperature (°F)', a => activityTempF(a), 'n0', 'weather'],
+        ['feels', 'Sensación térmica (°F)', 'Feels like (°F)', a => num(mf(a).feelsLike), 'n0', 'weather'],
+        ['hum', 'Humedad (%)', 'Humidity (%)', a => num(mf(a).humidity), 'n0', 'weather'],
+        ['wind', 'Viento (mph)', 'Wind (mph)', a => num(mf(a).wind), 'n0', 'weather'],
+        ['surface', 'Superficie', 'Surface', a => mf(a).surface || '', 's', 'weather'],
+        ['wpace', 'Ritmo de trabajo (/mi)', 'Work pace (/mi)', a => a.workPaceSecPerMi > 0 ? secToMMSS(a.workPaceSecPerMi) : '', 's', 'perf'],
+        ['speed', 'Velocidad prom (mph)', 'Avg speed (mph)', a => num(a.avgSpeedMph), 'mi', 'perf'],
+        ['hravg', 'FC prom', 'Avg HR', a => num(a.avgHR), 'n0', 'hr'],
+        ['hrmax', 'FC máx', 'Max HR', a => num(a.maxHR), 'n0', 'hr'],
+        ['hrpct', 'FC prom % umbral', 'Avg HR % LTHR', a => a.avgHR ? a.avgHR / lthr * 100 : null, 'n0', 'hr'],
+        ['z1', 'Z1 %', 'Z1 %', a => tz(a, 'z1'), 'n0', 'hr'], ['z2', 'Z2 %', 'Z2 %', a => tz(a, 'z2'), 'n0', 'hr'], ['z3', 'Z3 %', 'Z3 %', a => tz(a, 'z3'), 'n0', 'hr'],
+        ['z4', 'Z4 %', 'Z4 %', a => tz(a, 'z4'), 'n0', 'hr'], ['z5', 'Z5 %', 'Z5 %', a => tz(a, 'z5'), 'n0', 'hr'],
+        ['z1m', 'Z1 (min)', 'Z1 (min)', a => tzm(a, '1'), 'n1', 'hr'], ['z2m', 'Z2 (min)', 'Z2 (min)', a => tzm(a, '2'), 'n1', 'hr'], ['z3m', 'Z3 (min)', 'Z3 (min)', a => tzm(a, '3'), 'n1', 'hr'],
+        ['z4m', 'Z4 (min)', 'Z4 (min)', a => tzm(a, '4'), 'n1', 'hr'], ['z5m', 'Z5 (min)', 'Z5 (min)', a => tzm(a, '5'), 'n1', 'hr'],
+        ['drift', 'Deriva cardíaca (%)', 'Cardiac drift (%)', a => num(a.analysis?.cardiacDrift?.driftPct), 'n1', 'hr'],
+        ['dec', 'Desacople (%)', 'Decoupling (%)', a => num(a.analysis?.aerobicDecouplingPct), 'n1', 'hr'],
+        ['decok', 'Desacople válido', 'Decoupling valid', a => a.analysis?.decouplingValid == null ? '' : (a.analysis.decouplingValid ? L('sí', 'yes') : 'no'), 's', 'hr'],
+        ['decm1', 'Desacople excluye milla 1', 'Decoupling excludes mile 1', a => a.analysis?.decouplingInfo ? (a.analysis.decouplingInfo.excludedFirstMile ? L('sí', 'yes') : 'no') : '', 's', 'hr'],
+        ['cv', 'Consistencia ritmo CV (%)', 'Pace CV (%)', a => num(a.analysis?.pacingConsistency?.cvPct), 'n1', 'perf'],
+        ['runpct', '% corriendo', '% running', a => num(a.analysis?.runWalk?.runPct), 'n0', 'perf'],
+        ['walks', 'Pausas de caminata', 'Walk breaks', a => (a.analysis?.runWalk?.walkSegments || []).filter(w => w.durationSec >= 15).length, 'n0', 'perf'],
+        ['cad', 'Cadencia prom (ppm)', 'Avg cadence (spm)', a => num(a.avgCadSPM), 'n0', 'perf'],
+        ['cadmax', 'Cadencia máx (ppm)', 'Max cadence (spm)', a => num(a.maxCadSPM), 'n0', 'perf'],
+        ['gain', 'Desnivel + (ft)', 'Elev gain (ft)', a => num(a.elevGainFt), 'n0', 'terrain'],
+        ['loss', 'Desnivel − (ft)', 'Elev loss (ft)', a => num(a.elevLossFt), 'n0', 'terrain'],
+        ['gainmi', 'Desnivel + por milla (m)', 'Elev gain per mi (m)', a => num(a.analysis?.elevGainPerMi), 'n0', 'terrain'],
+        ['altmin', 'Altitud mín (m)', 'Min altitude (m)', a => num(a.altMinM), 'n0', 'terrain'],
+        ['altmax', 'Altitud máx (m)', 'Max altitude (m)', a => num(a.altMaxM), 'n0', 'terrain'],
+        ['gup', 'Pendiente máx subida (%)', 'Max uphill (%)', a => num(a.maxGradeUp), 'n1', 'terrain'],
+        ['gdown', 'Pendiente máx bajada (%)', 'Max downhill (%)', a => num(a.maxGradeDown), 'n1', 'terrain'],
+        ['watts', 'Potencia prom (W)', 'Avg power (W)', a => num(a.analysis?.powerStats?.avgWatts), 'n0', 'perf'],
+        ['kcal', 'Calorías', 'Calories', a => num(a.calories), 'n0', 'perf'],
+        ['tss', 'TSS estimado', 'Estimated TSS', a => estimateTSS(a.totalDistMi, a.totalTimeSec, a.avgHR, lthr), 'n1', 'perf'],
+        ['vdot', 'VDOT', 'VDOT', a => a.analysis?.vdotTerrainInvalid ? null : num(a.analysis?.vdot), 'n1', 'perf'],
+        ['grade', 'Nota', 'Grade', a => a.analysis?.sessionGrade || '', 's', 'perf'],
+        ['score', 'Puntuación', 'Score', a => num(a.analysis?.sessionScore), 'n0', 'perf'],
+        ['sleep', 'Sueño (h)', 'Sleep (h)', a => num(mf(a).sleepHours), 'n1', 'wellness'],
+        ['sleepq', 'Calidad del sueño (1-10)', 'Sleep quality (1-10)', a => num(mf(a).sleepQuality), 'n0', 'wellness'],
+        ['energy', 'Energía (1-10)', 'Energy (1-10)', a => num(mf(a).energyLevel), 'n0', 'wellness'],
+        ['stress', 'Estrés (1-10)', 'Stress (1-10)', a => num(mf(a).stressLevel), 'n0', 'wellness'],
+        ['rhr', 'FC en reposo', 'Resting HR', a => num(mf(a).restingHR), 'n0', 'wellness'],
+        ['hrv', 'VFC (ms)', 'HRV (ms)', a => num(mf(a).hrv), 'n0', 'wellness'],
+        ['weight', 'Peso corporal (lb)', 'Body weight (lb)', a => num(mf(a).bodyWeight), 'n1', 'wellness'],
+        ['rpe', 'Esfuerzo (RPE)', 'Effort (RPE)', a => num(mf(a).rpe), 'n0', 'wellness'],
+        ['pain', 'Dolor', 'Pain', a => mf(a).painNotes || '', 's', 'wellness'],
+        ['te', 'TE aeróbico', 'Aerobic TE', a => num(mf(a).aerobicTE), 'n1', 'garmin'],
+        ['tea', 'TE anaeróbico', 'Anaerobic TE', a => num(mf(a).anaerobicTE), 'n1', 'garmin'],
+        ['gload', 'Carga Garmin', 'Garmin load', a => num(mf(a).trainingLoad), 'n0', 'garmin'],
+        ['goal', 'Objetivo', 'Goal', a => mf(a).sessionGoal || '', 's', 'notes'],
+        ['notes', 'Notas', 'Notes', a => mf(a).athleteNotes || '', 's', 'notes'],
+        ['splits', 'Parciales por milla (ritmo @ FC)', 'Mile splits (pace @ HR)', a => (a.analysis?.realSplitsMi || []).map(x => x.splitNum + (x.partial ? '*' : '') + ': ' + secToMMSS(x.paceSecPerUnit) + ' @' + (x.avgHR ? Math.round(x.avgHR) : '—')).join(' | '), 's', 'notes'],
+        ['laps', 'Vueltas', 'Laps', a => (a.laps || []).length, 'n0', 'notes'],
+        ['findings', 'Hallazgos', 'Findings', a => (a.analysis?.keyFindings || []).slice(0, 4).map(f => f.text).join(' / '), 's', 'notes'],
+        ['id', 'ID', 'ID', a => a.id, 's', 'notes']
       ];
-      const acts = [...(state.tcxSessions || [])].filter(a => keep(a.dateISO)).sort((a, b) => a.dateISO.localeCompare(b.dateISO) || String(a.startTimeISO).localeCompare(String(b.startTimeISO)));
-      const rows = acts.map(a => cols.map(c => { try { return c[2](a); } catch (e) { return { v: '', t: 's' }; } }));
-      // Manual sessions (ruck / strength / other) share the sheet with the fields they have.
-      const idx = (name) => cols.findIndex(c => c[0] === name);
-      (state.manualSessions || []).filter(m => keep(m.dateISO)).forEach(m => {
-        const r = cols.map(() => ({ v: '', t: 's' }));
-        r[idx('Fecha')] = S(m.dateISO); r[idx('Día')] = S(wpDow(m.dateISO));
-        r[idx('Tipo de actividad')] = S(L('Manual: ', 'Manual: ') + (m.type || ''));
-        r[idx('Distancia (mi)')] = N(m.distMi, 2); r[idx('Tiempo (min)')] = N(m.durationMin, 0);
-        r[idx('FC prom')] = N(m.avgHR); r[idx('Notas')] = S(m.notes || ''); r[idx('ID')] = S(m.id || '');
-        rows.push(r);
-      });
-      rows.sort((x, y) => String(x[0].v).localeCompare(String(y[0].v)));
-      return { headers: cols.map(c => (es ? c[0] : c[1])), rows, widths: cols.map(c => Math.min(48, Math.max(9, (es ? c[0] : c[1]).length + 2))) };
+    }
+    const REPORT_GROUPS = { basic: ['Actividad', 'Activity'], gear: ['Equipo', 'Gear'], weather: ['Clima', 'Weather'], hr: ['FC y zonas', 'HR & zones'], perf: ['Rendimiento', 'Performance'], terrain: ['Terreno', 'Terrain'], wellness: ['Bienestar', 'Wellness'], garmin: ['Garmin', 'Garmin'], notes: ['Notas y detalle', 'Notes & detail'] };
+    const REPORT_PRESETS = {
+      grit: ['date', 'dow', 'start', 'type', 'grit', 'dist', 'time', 'pace', 'loc', 'shoe', 'hrsrc', 'temp', 'vest'],
+      full: null // all columns
+    };
+    let reportPeriod = 'thismonth';
+    function reportPreset() { return state.settings?.reportPreset || 'grit'; }
+    function reportSelectedIds() {
+      const p = reportPreset();
+      if (p === 'grit') return REPORT_PRESETS.grit;
+      if (p === 'custom' && Array.isArray(state.settings?.reportCols) && state.settings.reportCols.length) return state.settings.reportCols;
+      return reportColumns().map(c => c[0]);
+    }
+    function setReportPreset(p) {
+      state.settings.reportPreset = p;
+      if (p === 'custom' && !(state.settings.reportCols || []).length) state.settings.reportCols = REPORT_PRESETS.grit.slice();
+      saveState(); render();
+    }
+    function toggleReportCol(id) {
+      const cur = new Set(state.settings.reportCols || []); cur.has(id) ? cur.delete(id) : cur.add(id);
+      const order = reportColumns().map(c => c[0]);
+      state.settings.reportCols = order.filter(x => cur.has(x)); saveState(); render();
+    }
+    function setReportPeriod(v) { reportPeriod = v; render(); }
+
+    function buildActivityReport(period, ids) {
+      const es = getLang() === 'es';
+      const all = reportColumns();
+      const want = ids || all.map(c => c[0]);
+      const cols = want.map(id => all.find(c => c[0] === id)).filter(Boolean);
+      const keep = reportPeriodFilter(period);
+      const gritOnly = reportPreset() === 'grit';
+      const acts = [...(state.tcxSessions || [])]
+        .filter(a => keep(a.dateISO) && !(gritOnly && a.sport === 'biking'))   // GRIT 100 = run + ruck; no bike
+        .sort((a, b) => a.dateISO.localeCompare(b.dateISO) || String(a.startTimeISO).localeCompare(String(b.startTimeISO)));
+      // Values are rounded to what the sheet shows, so the totals add up to the visible numbers.
+      const rnd = (v, k) => (typeof v === 'number' && isFinite(v)) ? (k === 'mi' ? Math.round(v * 100) / 100 : k === 'n1' ? Math.round(v * 10) / 10 : k === 'n0' ? Math.round(v) : v) : v;
+      const rows = acts.map(a => cols.map(c => { let v; try { v = c[3](a); } catch (e) { v = null; } return { v: v == null ? '' : rnd(v, c[4]), k: c[4] }; }));
+      const tot = { n: acts.length, run: 0, ruck: 0, sec: 0 };
+      acts.forEach(a => { const mi = Math.round((Number(a.totalDistMi) || 0) * 100) / 100; isMarchAct(a) ? tot.ruck += mi : tot.run += mi; tot.sec += a.totalTimeSec || 0; });
+      return { cols, headers: cols.map(c => (es ? c[1] : c[2])), rows, totals: tot };
     }
 
-    // CSV that Excel splits into columns in any language: UTF-8 BOM + "sep=," line + quoted fields.
     function exportCSV(period) {
-      const R = buildActivityReport(period);
+      period = period || reportPeriod;
+      const R = buildActivityReport(period, reportSelectedIds());
       if (!R.rows.length) { showToast(getLang() === 'es' ? 'No hay actividades en ese periodo.' : 'No activities in that period.'); return; }
+      const fmt = (c) => (c.v === '' ? '' : c.k === 'mi' ? Number(c.v).toFixed(2) : c.k === 'n1' ? Number(c.v).toFixed(1) : c.k === 'n0' ? String(Math.round(Number(c.v))) : String(c.v));
       const q = (x) => { const s = String(x == null ? '' : x); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-      const csv = 'sep=,\r\n' + [R.headers.map(q).join(','), ...R.rows.map(r => r.map(c => q(c.v)).join(','))].join('\r\n');
-      downloadBlob('﻿' + csv, `FitCoach_actividades_${period}_${todayISO()}.csv`, 'text/csv;charset=utf-8');
+      const csv = 'sep=,\r\n' + [R.headers.map(q).join(','), ...R.rows.map(r => r.map(c => q(fmt(c))).join(','))].join('\r\n');
+      downloadBlob('\ufeff' + csv, reportFileName(period, 'csv'), 'text/csv;charset=utf-8');
       showToast(getLang() === 'es' ? `✓ CSV: ${R.rows.length} actividades` : `✓ CSV: ${R.rows.length} activities`);
     }
+    function reportFileName(period, ext) {
+      const tag = reportPreset() === 'grit' ? 'GRIT100' : reportPreset() === 'custom' ? 'personalizado' : 'completo';
+      const per = /^m:/.test(period) ? period.slice(2) : period === 'thismonth' ? todayISO().slice(0, 7) : period === 'all' ? 'todo' : period === 'week' ? '7dias' : '30dias';
+      return `FitCoach_${tag}_${per}.${ext}`;
+    }
 
-    // Real .xlsx without libraries: one sheet, bold frozen header, column widths, auto-filter.
-    // ZIP entries are STORED (no compression) — valid for Excel, Google Sheets and Numbers.
+    // ── .xlsx without libraries (ZIP STORED). Professional layout: title, subtitle, styled header,
+    //    banded rows, borders, number formats, totals, frozen header, filter, landscape fit-to-width. ──
     const XLSX_CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
     function xlsxCrc32(bytes) { let c = 0xFFFFFFFF; for (let i = 0; i < bytes.length; i++) c = XLSX_CRC[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
     function xlsxZip(files) {
-      const enc = new TextEncoder(), parts = [], central = []; let offset = 0;
+      const enc = new TextEncoder(), parts = [], cd = []; let offset = 0, cdSize = 0;
       const u16 = (n) => [n & 0xFF, (n >>> 8) & 0xFF], u32 = (n) => [n & 0xFF, (n >>> 8) & 0xFF, (n >>> 16) & 0xFF, (n >>> 24) & 0xFF];
       files.forEach(f => {
         const name = enc.encode(f.name), data = enc.encode(f.data), crc = xlsxCrc32(data);
-        const head = [].concat(u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
-        parts.push(new Uint8Array(head), name, data);
-        central.push([].concat(u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset)), name);
+        const head = new Uint8Array([].concat(u32(0x04034b50), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0)));
+        parts.push(head, name, data);
+        const c = new Uint8Array([].concat(u32(0x02014b50), u16(20), u16(20), u16(0x0800), u16(0), u16(0), u16(0x21), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset)));
+        cd.push(c, name); cdSize += c.length + name.length;
         offset += head.length + name.length + data.length;
       });
-      let cdSize = 0; const cdParts = [];
-      central.forEach((c, i) => { if (i % 2 === 0) { const a = new Uint8Array(c); cdParts.push(a); cdSize += a.length; } else { cdParts.push(c); cdSize += c.length; } });
       const end = new Uint8Array([].concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(cdSize), u32(offset), u16(0)));
-      return new Blob([...parts, ...cdParts, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      return new Blob([...parts, ...cd, end], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     }
     function xlsxCol(i) { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
-    function buildXlsx(sheetName, headers, rows, widths) {
+    // Styles (cellXfs index): 0 default · 1 title · 2 subtitle · 3 header · 4 text · 5 text banded
+    // 6 0.00 · 7 0.00 banded · 8 0 · 9 0 banded · 10 0.0 · 11 0.0 banded · 12 totals label · 13 totals 0.00 · 14 totals text
+    const XLSX_STYLES = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+      + '<numFmts count="1"><numFmt numFmtId="164" formatCode="0.0"/></numFmts>'
+      + '<fonts count="5"><font><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="16"/><color rgb="FF3D5A1F"/><name val="Calibri"/></font><font><i/><sz val="10"/><color rgb="FF5F5E54"/><name val="Calibri"/></font><font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font><font><b/><sz val="10"/><name val="Calibri"/></font></fonts>'
+      + '<fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF3D5A1F"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF3F0E6"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE7DDBF"/><bgColor indexed="64"/></patternFill></fill></fills>'
+      + '<borders count="3"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD3CEBE"/></left><right style="thin"><color rgb="FFD3CEBE"/></right><top style="thin"><color rgb="FFD3CEBE"/></top><bottom style="thin"><color rgb="FFD3CEBE"/></bottom><diagonal/></border><border><left/><right/><top style="medium"><color rgb="FF3D5A1F"/></top><bottom style="medium"><color rgb="FF3D5A1F"/></bottom><diagonal/></border></borders>'
+      + '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="17">'
+      + '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+      + '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+      + '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>'
+      + '<xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
+      + '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+      + '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+      + '<xf numFmtId="2" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>'
+      + '<xf numFmtId="2" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>'
+      + '<xf numFmtId="1" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>'
+      + '<xf numFmtId="1" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>'
+      + '<xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>'
+      + '<xf numFmtId="164" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>'
+      + '<xf numFmtId="0" fontId="4" fillId="4" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>'
+      + '<xf numFmtId="2" fontId="4" fillId="4" borderId="2" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>'
+      + '<xf numFmtId="0" fontId="4" fillId="4" borderId="2" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>'
+      + '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+      + '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+      + '</cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>';
+    const CENTER_IDS = new Set(['date', 'dow', 'start', 'grit', 'time', 'pace', 'wpace', 'grade', 'decok', 'decm1']);
+    function buildReportXlsx(R, meta) {
       const x = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
-      const cell = (ref, c, style) => c.t === 'n' && c.v !== '' ? `<c r="${ref}"${style}><v>${c.v}</v></c>` : `<c r="${ref}" t="inlineStr"${style}><is><t xml:space="preserve">${x(c.v)}</t></is></c>`;
-      const lastCol = xlsxCol(headers.length - 1), lastRow = rows.length + 1;
-      const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-        + '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-        + '<sheetViews><sheetView workbookViewId="0"><pane xSplit="1" ySplit="1" topLeftCell="B2" activePane="bottomRight" state="frozen"/></sheetView></sheetViews>'
-        + '<cols>' + widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join('') + '</cols>'
-        + '<sheetData>'
-        + `<row r="1">${headers.map((h, i) => cell(xlsxCol(i) + '1', { v: h, t: 's' }, ' s="1"')).join('')}</row>`
-        + rows.map((r, ri) => `<row r="${ri + 2}">${r.map((c, ci) => cell(xlsxCol(ci) + (ri + 2), c, '')).join('')}</row>`).join('')
-        + '</sheetData>'
-        + `<autoFilter ref="A1:${lastCol}${lastRow}"/>`
+      const tcell = (ref, v, st) => `<c r="${ref}" t="inlineStr" s="${st}"><is><t xml:space="preserve">${x(v)}</t></is></c>`;
+      const ncell = (ref, v, st) => `<c r="${ref}" s="${st}"><v>${v}</v></c>`;
+      const nCols = R.headers.length, lastCol = xlsxCol(nCols - 1);
+      const HR = 4, first = HR + 1, last = HR + R.rows.length;
+      const styleFor = (k, band) => (k === 'mi' ? 6 : k === 'n0' ? 8 : k === 'n1' ? 10 : 4) + (band ? 1 : 0);
+      let xml = '';
+      xml += `<row r="1" ht="24" customHeight="1">${tcell('A1', meta.title, 1)}</row>`;
+      xml += `<row r="2">${tcell('A2', meta.subtitle, 2)}</row>`;
+      xml += `<row r="3">${tcell('A3', meta.generated, 2)}</row>`;
+      xml += `<row r="${HR}" ht="30" customHeight="1">${R.headers.map((h, i) => tcell(xlsxCol(i) + HR, h, 3)).join('')}</row>`;
+      R.rows.forEach((r, ri) => {
+        const rn = first + ri, band = ri % 2 === 1;
+        xml += `<row r="${rn}">${r.map((c, ci) => { const ref = xlsxCol(ci) + rn, st = styleFor(c.k, band); return c.v !== '' && c.k !== 's' && !isNaN(Number(c.v)) ? ncell(ref, Number(c.v), st) : tcell(ref, c.v, CENTER_IDS.has(R.cols[ci][0]) ? (band ? 16 : 15) : (band ? 5 : 4)); }).join('')}</row>`;
+      });
+      // Totals: distance (formula), time, and the run / ruck split for GRIT 100.
+      const tr = last + 2;
+      const distIdx = R.cols.findIndex(c => c[0] === 'dist'), timeIdx = R.cols.findIndex(c => c[0] === 'time');
+      const es = getLang() === 'es';
+      let trow = tcell('A' + tr, es ? 'TOTALES' : 'TOTALS', 12);
+      for (let ci = 1; ci < nCols; ci++) {
+        const ref = xlsxCol(ci) + tr;
+        if (ci === distIdx) trow += `<c r="${ref}" s="13"><f>SUM(${xlsxCol(ci)}${first}:${xlsxCol(ci)}${last})</f><v>${(R.totals.run + R.totals.ruck).toFixed(2)}</v></c>`;
+        else if (ci === timeIdx) trow += tcell(ref, secToHHMMSS(R.totals.sec), 14);
+        else trow += tcell(ref, '', 12);
+      }
+      xml += `<row r="${tr}">${trow}</row>`;
+      const f1 = (n) => (Math.round(n * 100) / 100).toFixed(2);
+      xml += `<row r="${tr + 1}">${tcell('A' + (tr + 1), (es ? 'Actividades: ' : 'Activities: ') + R.totals.n + (es ? '  ·  Correr: ' : '  ·  Run: ') + f1(R.totals.run) + ' mi' + (es ? '  ·  Marcha: ' : '  ·  Ruck: ') + f1(R.totals.ruck) + ' mi' + (es ? '  ·  Total: ' : '  ·  Total: ') + f1(R.totals.run + R.totals.ruck) + ' mi', 2)}</row>`;
+      if (meta.note) xml += `<row r="${tr + 2}">${tcell('A' + (tr + 2), meta.note, 2)}</row>`;
+      const widths = R.cols.map(c => c[4] === 's' ? Math.min(42, Math.max(12, (es ? c[1] : c[2]).length + 2, ...R.rows.map(r => String(r[R.cols.indexOf(c)].v).length + 2).slice(0, 200))) : Math.max(10, Math.min(16, (es ? c[1] : c[2]).length * 0.8)));
+      const sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        + '<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>'
+        + `<sheetViews><sheetView workbookViewId="0" showGridLines="0"><pane ySplit="${HR}" topLeftCell="A${first}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>`
+        + '<sheetFormatPr defaultRowHeight="15"/>'
+        + '<cols>' + widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${Math.round(w)}" customWidth="1"/>`).join('') + '</cols>'
+        + '<sheetData>' + xml + '</sheetData>'
+        + (R.rows.length ? `<autoFilter ref="A${HR}:${lastCol}${last}"/>` : '')
+        + '<printOptions horizontalCentered="1"/><pageMargins left="0.4" right="0.4" top="0.5" bottom="0.5" header="0.3" footer="0.3"/>'
+        + '<pageSetup orientation="landscape" fitToWidth="1" fitToHeight="0"/>'
+        + `<headerFooter><oddFooter>&amp;L${x(meta.footerLeft)}&amp;R${es ? 'Página' : 'Page'} &amp;P / &amp;N</oddFooter></headerFooter>`
         + '</worksheet>';
+      const sn = x(meta.sheet).slice(0, 31);
       const files = [
-        { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>' },
-        { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>' },
-        { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${x(sheetName).slice(0, 31)}" sheetId="1" r:id="rId1"/></sheets><definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${x(sheetName).slice(0, 31)}'!$A$1:$${lastCol}$${lastRow}</definedName></definedNames></workbook>` },
+        { name: '[Content_Types].xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/></Types>' },
+        { name: '_rels/.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>' },
+        { name: 'docProps/core.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${x(meta.title)}</dc:title><dc:creator>${x(meta.author)}</dc:creator></cp:coreProperties>` },
+        { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${sn}" sheetId="1" r:id="rId1"/></sheets><definedNames>${R.rows.length ? `<definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">'${sn}'!$A$${HR}:$${lastCol}$${last}</definedName>` : ''}<definedName name="_xlnm.Print_Titles" localSheetId="0">'${sn}'!$${HR}:$${HR}</definedName></definedNames></workbook>` },
         { name: 'xl/_rels/workbook.xml.rels', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>' },
-        { name: 'xl/styles.xml', data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF3D5A1F"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment wrapText="1" vertical="center"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' },
+        { name: 'xl/styles.xml', data: XLSX_STYLES },
         { name: 'xl/worksheets/sheet1.xml', data: sheet }
       ];
       return xlsxZip(files);
     }
     function exportXLSX(period) {
-      const R = buildActivityReport(period);
-      if (!R.rows.length) { showToast(getLang() === 'es' ? 'No hay actividades en ese periodo.' : 'No activities in that period.'); return; }
-      const blob = buildXlsx(getLang() === 'es' ? 'Actividades' : 'Activities', R.headers, R.rows, R.widths);
+      period = period || reportPeriod;
+      const es = getLang() === 'es';
+      const R = buildActivityReport(period, reportSelectedIds());
+      if (!R.rows.length) { showToast(es ? 'No hay actividades en ese periodo.' : 'No activities in that period.'); return; }
+      const p = state.profile || {};
+      const preset = reportPreset();
+      const kind = preset === 'grit' ? (es ? 'Registro de actividades GRIT 100' : 'GRIT 100 activity log') : (es ? 'Reporte de actividades' : 'Activity report');
+      const meta = {
+        title: kind + ' — ' + reportPeriodLabel(period),
+        subtitle: (es ? 'Atleta: ' : 'Athlete: ') + (p.name || '—') + (p.unit ? ' · ' + p.unit : '') + '  ·  ' + (es ? 'Periodo: ' : 'Period: ') + reportPeriodLabel(period),
+        generated: (es ? 'Generado con FitCoach Táctico el ' : 'Generated with FitCoach Táctico on ') + todayISO() + (es ? '  ·  Distancias en millas; temperatura del servicio de clima cuando está disponible.' : '  ·  Distances in miles; temperature from the weather service when available.'),
+        note: preset === 'grit' ? (es ? 'GRIT 100: cuentan las corridas y las marchas con chaleco (no la bicicleta). Marcha = actividad hecha con botas.' : 'GRIT 100: runs and vest marches count (not bike). Ruck = activity logged with boots.') : '',
+        footerLeft: 'FitCoach Táctico · ' + (p.name || ''),
+        sheet: preset === 'grit' ? 'GRIT 100' : (es ? 'Actividades' : 'Activities'),
+        author: p.name || 'FitCoach'
+      };
+      const blob = buildReportXlsx(R, meta);
       const url = URL.createObjectURL(blob), a = document.createElement('a');
-      a.href = url; a.download = `FitCoach_actividades_${period}_${todayISO()}.xlsx`;
+      a.href = url; a.download = reportFileName(period, 'xlsx');
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 2000);
-      showToast(getLang() === 'es' ? `✓ Excel: ${R.rows.length} actividades` : `✓ Excel: ${R.rows.length} activities`);
+      showToast(es ? `✓ Excel: ${R.rows.length} actividades` : `✓ Excel: ${R.rows.length} activities`);
     }
 
     function renderStatsReports() {
       const es = getLang() === 'es';
-      const periods = [['week', es ? '7 días' : '7 days'], ['month', es ? '30 días' : '30 days'], ['thismonth', es ? 'Este mes' : 'This month'], ['all', es ? 'Todo' : 'All']];
-      const btns = (fn) => periods.map(([k, l]) => `<button class="btn-small" style="flex:1; min-width:70px;" onclick="${fn}('${k}')">${l}</button>`).join('');
-      const nCols = buildActivityReport('week').headers.length;
+      const months = [...new Set((state.tcxSessions || []).map(a => (a.dateISO || '').slice(0, 7)).filter(Boolean))].sort().reverse();
+      const mLabel = (ym) => { const [y, m] = ym.split('-').map(Number); const s = new Date(y, m - 1, 1).toLocaleDateString(es ? 'es-PR' : 'en-US', { month: 'long', year: 'numeric' }); return s.charAt(0).toUpperCase() + s.slice(1); };
+      const opt = (v, l) => `<option value="${v}" ${reportPeriod === v ? 'selected' : ''}>${l}</option>`;
+      const preset = reportPreset();
+      const ids = reportSelectedIds();
+      const R = buildActivityReport(reportPeriod, ids);
+      const chip = (k, l) => `<button class="btn-small" style="flex:1; ${preset === k ? 'border-color:var(--coyote); color:var(--coyote); background:rgba(201,169,97,0.1);' : ''}" onclick="setReportPreset('${k}')">${l}</button>`;
+      const cols = reportColumns();
+      const custom = preset === 'custom' ? Object.keys(REPORT_GROUPS).map(g => {
+        const gc = cols.filter(c => c[5] === g); if (!gc.length) return '';
+        return `<div style="margin-top:10px;"><div class="form-label" style="margin-bottom:4px;">${REPORT_GROUPS[g][es ? 0 : 1]}</div><div style="display:flex; flex-wrap:wrap; gap:6px;">${gc.map(c => `<label class="checkbox-item" style="margin:0; padding:6px 8px; border:1px solid var(--field-line); font-size:12px;"><input type="checkbox" ${ids.includes(c[0]) ? 'checked' : ''} onchange="toggleReportCol('${c[0]}')" /> <span>${esc(es ? c[1] : c[2])}</span></label>`).join('')}</div></div>`;
+      }).join('') : '';
+      const f2 = (n) => (Math.round(n * 100) / 100).toFixed(2);
       return `
         <div class="card" style="margin-bottom:16px;">
           <div class="card-title">${es ? 'REPORTE DE ACTIVIDADES' : 'ACTIVITY REPORT'}</div>
-          <p style="font-size:12px; color:var(--paper-dim); margin-bottom:12px; line-height:1.5;">${es
-            ? `Una fila por actividad y ${nCols} columnas: fecha, tipo de actividad, distancia, tiempo, ritmos, FC, zonas (% y minutos), deriva, desacople (y si excluye la milla 1), cadencia, desnivel, zapato, fuente de FC, chaleco, clima, sueño, VFC, esfuerzo, dolor, notas y parciales por milla.`
-            : `One row per activity and ${nCols} columns: date, activity type, distance, time, paces, HR, zones (% and minutes), drift, decoupling (and whether it excludes mile 1), cadence, elevation, shoe, HR source, vest, weather, sleep, HRV, effort, pain, notes and mile splits.`}</p>
-          <div class="form-label" style="margin-bottom:6px;">${es ? 'Excel (.xlsx) — recomendado' : 'Excel (.xlsx) — recommended'}</div>
-          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">${btns('exportXLSX')}</div>
-          <div class="form-label" style="margin-bottom:6px;">CSV</div>
-          <div style="display:flex; gap:6px; flex-wrap:wrap;">${btns('exportCSV')}</div>
+          <div class="form-label" style="margin-bottom:6px;">1. ${es ? 'Periodo' : 'Period'}</div>
+          <select style="width:100%; margin-bottom:12px;" onchange="setReportPeriod(this.value)">
+            ${opt('thismonth', es ? 'Este mes' : 'This month')}${opt('week', es ? 'Últimos 7 días' : 'Last 7 days')}${opt('month', es ? 'Últimos 30 días' : 'Last 30 days')}
+            ${months.map(m => opt('m:' + m, mLabel(m))).join('')}${opt('all', es ? 'Todo el historial' : 'All history')}
+          </select>
+          <div class="form-label" style="margin-bottom:6px;">2. ${es ? 'Qué exportar' : 'What to export'}</div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap;">${chip('grit', 'GRIT 100')}${chip('full', es ? 'Completo' : 'Full')}${chip('custom', es ? 'Personalizado' : 'Custom')}</div>
+          <p style="font-size:11px; color:var(--paper-dim); margin-top:8px; line-height:1.5;">${preset === 'grit'
+            ? (es ? 'Para someter al GRIT 100: fecha, día, hora, tipo, categoría (correr/marcha), distancia, tiempo, ritmo, ubicación, calzado, sensor de FC, temperatura y peso del chaleco. Sin bicicleta.' : 'For GRIT 100 submission: date, day, time, type, category (run/ruck), distance, time, pace, location, footwear, HR sensor, temperature and vest weight. No bike.')
+            : preset === 'full' ? (es ? `Todas las columnas (${cols.length}).` : `All columns (${cols.length}).`) : (es ? `Marca las columnas que quieres (${ids.length} elegidas). Se recuerda tu selección.` : `Tick the columns you want (${ids.length} selected). Your choice is remembered.`)}</p>
+          ${custom}
+          <div style="margin:12px 0; padding:10px; border:1px solid var(--field-line); background:var(--field-surface); font-size:12px; color:var(--paper); line-height:1.6;">
+            <strong>${R.totals.n}</strong> ${es ? 'actividades' : 'activities'} · ${es ? 'Correr' : 'Run'} <strong>${f2(R.totals.run)}</strong> mi · ${es ? 'Marcha' : 'Ruck'} <strong>${f2(R.totals.ruck)}</strong> mi · Total <strong>${f2(R.totals.run + R.totals.ruck)}</strong> mi · ${R.headers.length} ${es ? 'columnas' : 'columns'}
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn btn-primary" style="flex:2;" onclick="exportXLSX()">${es ? 'DESCARGAR EXCEL' : 'DOWNLOAD EXCEL'}</button>
+            <button class="btn btn-secondary" style="flex:1;" onclick="exportCSV()">CSV</button>
+          </div>
           <p style="font-size:11px; color:var(--paper-dim); margin-top:10px; line-height:1.5;">${es
-            ? 'El .xlsx abre con columnas separadas, títulos fijos y filtro en Excel y Google Sheets. El CSV trae una primera línea "sep=," para que Excel en español también lo separe en columnas.'
-            : 'The .xlsx opens with separate columns, frozen headers and a filter in Excel and Google Sheets. The CSV starts with a "sep=," line so Excel in any language splits it into columns.'}</p>
+            ? 'El Excel sale con título, atleta y periodo, encabezado verde, filas alternadas, totales (correr / marcha / total) y listo para imprimir en horizontal. El CSV es solo datos.'
+            : 'Excel comes with title, athlete and period, green header, banded rows, totals (run / ruck / total) and ready to print in landscape. CSV is data only.'}</p>
         </div>`;
     }
 
@@ -9662,7 +9870,7 @@
             <div class="header-mark"></div>
             <div class="header-info">
               <p class="callsign">${state.profile ? esc(state.profile.name) : t('standby')}</p>
-              <p class="name">FITCOACH 5K</p>
+              <p class="name">FITCOACH TÁCTICO</p>
             </div>
           </div>
           <div class="header-right">
@@ -9692,7 +9900,8 @@
             `<button class="${parent === v ? 'active' : ''}" ${parent === v ? 'aria-current="page"' : ''} onclick="switchView('${v}')"><span class="nav-icon">${ic(icn, 20)}</span><span>${lbl}</span></button>`).join('') + `</nav>`;
         })()}
         ${overlayHtml}
-        ${mdModalContent ? renderMarkdownModal() : ''}`;
+        ${mdModalContent ? renderMarkdownModal() : ''}
+        ${vestQueue.length ? renderVestModal() : ''}`;
     }
 
     function renderMarkdownModal() {
@@ -10066,7 +10275,7 @@
       if (!act) return;
       if (!act.manualFields) act.manualFields = { aerobicTE: '', anaerobicTE: '', trainingLoad: '', humidity: '', wind: '', feelsLike: '', surface: '', sleepHours: '', sleepQuality: '', energyLevel: '', stressLevel: '', painNotes: '', bodyWeight: '', hrv: '', restingHR: '', rpe: '', athleteNotes: '', sessionGoal: '', trainingType: '', locationName: '' };
       act.manualFields[field] = value;
-      if (field === 'gearId') { delete act.manualFields.gearAuto; if (value) state.settings.lastGearId = value; }
+      if (field === 'gearId') { delete act.manualFields.gearAuto; if (value) state.settings.lastGearId = value; if (gearById(value)?.kind === 'boot' && !act.manualFields.vestLb) setTimeout(() => queueVestPrompt([act.id]), 0); }
       if (field === 'hrSource' && HR_SOURCES[value]) state.settings.lastHrSource = value;
       // The training-type tag is the other input to the grade, so a change here has to
       // propagate the same way a plan link does.
@@ -10311,6 +10520,7 @@
 
       let loaded = 0, duplicates = 0, errors = 0, reprocessed = 0;
       let lastParsed = null;
+      const _newMarchIds = [];
 
       for (let i = 0; i < files.length; i++) {
         try {
@@ -10340,6 +10550,7 @@
           }
           prefillGearHr(parsed);
           state.tcxSessions.unshift(parsed);
+          if (looksLikeMarch(parsed)) _newMarchIds.push(parsed.id);
           lastParsed = parsed;
           loaded++;
         } catch (err) {
@@ -10368,6 +10579,7 @@
       }
 
       event.target.value = '';
+      if (_newMarchIds.length) queueVestPrompt(_newMarchIds);
     }
 
     // ═══ MARKDOWN EXPORT ═══
@@ -11190,7 +11402,7 @@
 
       lines.push('---');
       lines.push('');
-      lines.push(`*Generado por FitCoach 5K — ${todayISO()}*`); // local date (toISOString is UTC and flips after 8 PM in PR)
+      lines.push(`*Generado por FitCoach Táctico — ${todayISO()}*`); // local date (toISOString is UTC and flips after 8 PM in PR)
 
       // Filter sections if in quick mode — keep only the essentials for a coach-facing summary
       if (reportMode === 'quick') {
@@ -11743,7 +11955,7 @@
 
         // Footer on both pages
         [page, page2].forEach(p => {
-          p.drawText(`FitCoach 5K — ${todayISO()}`, { x: marginX, y: 30, size: 7, font, color: colPaperDim });
+          p.drawText(`FitCoach Tactico — ${todayISO()}`, { x: marginX, y: 30, size: 7, font, color: colPaperDim });
         });
 
         const pdfBytes = await doc.save();
@@ -12053,7 +12265,7 @@
         y -= 30;
 
         // Footer
-        page.drawText(`FitCoach 5K Tactical · ${new Date().toLocaleDateString()}`, { x:marginX, y:30, size:7, font, color:colDim });
+        page.drawText(`FitCoach Tactico · ${new Date().toLocaleDateString()}`, { x:marginX, y:30, size:7, font, color:colDim });
 
         const bytes = await doc.save();
         downloadBlob(new Blob([bytes],{type:'application/pdf'}), `fitcoach_report_${period}_${todayISO()}.pdf`, 'application/pdf');
@@ -12127,7 +12339,7 @@
           <div style="border-top:1px solid var(--field-line); padding-top:10px; margin-bottom:6px;">
             <div style="font-size:11px; color:var(--paper-dim); margin-bottom:8px;">${es?'Exportar a hoja de cálculo':'Export to spreadsheet'}</div>
             <div style="display:flex; gap:6px; margin-bottom:8px;">
-              <button class="btn btn-secondary" style="flex:1; font-size:11px;" onclick="exportXLSX('all')">${es?'Actividades .xlsx':'Activities .xlsx'}</button>
+              <button class="btn btn-secondary" style="flex:1; font-size:11px;" onclick="switchView('stats'); switchStatsTab('reports');">${es?'Reporte de actividades':'Activity report'}</button>
               <button class="btn btn-secondary" style="flex:1; font-size:11px;" onclick="exportBodyMeasurementsExcel()">${es?'Medidas .xls':'Measures .xls'}</button>
             </div>
           </div>
@@ -12287,8 +12499,8 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.04-1';
-    console.log('%cFitCoach 5K build ' + APP_BUILD, 'font-weight:bold');
+    const APP_BUILD = '2026.11.05-1';
+    console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
     // Only works over http(s) (not file://). Caches the app shell so it opens offline.
