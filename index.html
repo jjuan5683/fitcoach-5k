@@ -516,6 +516,18 @@
     .session-card:hover { border-left-color: var(--coyote); background: var(--field-surface); }
     .session-card:active { border-left-color: var(--coyote); background: var(--field-surface2); } /* 2026.11.01: respuesta al tocar en el teléfono */
     .session-card.completed { opacity: 0.5; border-left-color: var(--olive-bright); }
+    /* 2026.11.07-1: AM / PM columns; the optional session is dashed and apart */
+    .fc-ampm { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: start; }
+    .fc-ampm .session-card { margin-bottom: 0 !important; }
+    .fc-ampm .session-info p { word-break: break-word; }
+    .fc-slot { min-width: 0; }
+    .fc-slot-h { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; color: var(--coyote-text); text-transform: uppercase; margin: 0 0 4px; }
+    .fc-slot-empty { border: 1px dashed var(--field-line); color: var(--paper-dim); text-align: center; padding: 14px 4px; font-size: 12px; }
+    .fc-opt-card { border: 1px dashed var(--coyote-dim); background: var(--field-dark); padding: 8px 10px; }
+    .fc-opt-tag { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; color: var(--coyote-text); margin-bottom: 4px; }
+    .fc-opt-text { font-size: 12.5px; line-height: 1.4; color: var(--paper); word-break: break-word; }
+    .fc-opt-foot { font-size: 10.5px; color: var(--paper-dim); margin-top: 4px; }
+    @media (max-width: 340px) { .fc-ampm { grid-template-columns: 1fr; } }
 
     .session-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .session-left { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
@@ -1989,13 +2001,16 @@
       { type: 'tempo', label: { en: 'Tempo', es: 'Tempo' }, durationMin: 20, factorFast: 1.02, factorSlow: 1.10, pctFast: 0.88, pctSlow: 0.83, zone: 'Z3-Z4' },
       { type: 'intervals', label: { en: 'Intervals', es: 'Intervalos' }, reps: '4-6×800m', factorFast: 0.90, factorSlow: 0.98, pctFast: 1.00, pctSlow: 0.95, zone: 'Z4-Z5' },
       { type: 'hill', label: { en: 'Hill Repeats', es: 'Repeticiones en Cuesta' }, reps: '6-8×1min', factorFast: 0.95, factorSlow: 1.05, zone: 'Z3-Z4', effortOnly: true },
-      { type: 'reps400', label: { en: 'Repeats 400m', es: 'Repeticiones 400m' }, reps: '4-8×400m', factorFast: 0.82, factorSlow: 0.90, pctFast: 1.10, pctSlow: 1.05, zone: 'Z5' }
+      { type: 'reps400', label: { en: 'Repeats 400m', es: 'Repeticiones 400m' }, reps: '4-8×400m', factorFast: 0.82, factorSlow: 0.90, pctFast: 1.10, pctSlow: 1.05, zone: 'Z5' },
+      // 2026.11.07-1: vest march — guided by HR (≤150), not by a 5K-derived pace. "Actual" = last 5 marches.
+      { type: 'ruck', label: { en: 'Vest march', es: 'Marcha con chaleco' }, reps: '2–3 mi · 20 lb', zone: 'FC ≤150', effortOnly: true, march: true,
+        paceLabel: { en: 'HR ≤150 · fixed route ~20–22/mi', es: 'FC ≤150 · ruta fija ~20–22/mi' } }
     ];
 
     // Options for the "Training type" dropdown when reviewing a TCX activity — feeds the
     // Training Pace Reference table's "Actual" column via matching `type`.
     const WORKOUT_TYPE_OPTIONS = [
-      ...PACE_REF_ROWS.map(r => ({ type: r.type, label: r.label })),
+      ...PACE_REF_ROWS.filter(r => !r.march).map(r => ({ type: r.type, label: r.label })), // marches are typed by the boots
       { type: 'race_sim', label: { en: 'Race Simulation', es: 'Simulacro de Carrera' } },
       { type: 'cross_training', label: { en: 'Cross Training', es: 'Entrenamiento Cruzado' } }
     ];
@@ -2089,7 +2104,7 @@
         const fastSec = band.fast;
         const slowSec = band.slow;
         const midSec = (fastSec + slowSec) / 2;
-        const paceStr = r.effortOnly
+        const paceStr = r.paceLabel ? (r.paceLabel[getLang()] || r.paceLabel.en) : r.effortOnly
           ? null
           : `${fmtPaceNoUnit(fastSec)}–${fmtPaceNoUnit(slowSec)}/mi`;
         const distanceMi = r.durationMin ? +(r.durationMin * 60 / midSec).toFixed(1) : null;
@@ -2100,6 +2115,7 @@
         // the overall avgPaceSecPerMi blends in walk-back recovery and understates true rep speed.
         const isRepBased = r.type === 'intervals' || r.type === 'hill' || r.type === 'reps400';
         const matches = state.tcxSessions.filter(s => {
+          if (r.march) return activityKind(s).key === 'march' && s.avgPaceSecPerMi > 0;
           const mfType = s.manualFields?.trainingType;
           const linkedType = s.linkedPlanDay ? state.plan.find(p => p.day === s.linkedPlanDay)?.type : null;
           const paceField = isRepBased ? (s.workPaceSecPerMi || s.avgPaceSecPerMi) : s.avgPaceSecPerMi;
@@ -6232,7 +6248,7 @@
         case 'route': return '<div id="fc-route-slot"></div>';
         case 'races': return renderRacesStrip();
         case 'taper': return renderTaperCard();
-        case 'today': return renderTodayHero();
+        case 'today': { const ts0 = state.plan.find(s => s.dateISO === todayISO()); return renderTodayHero() + (ts0 && ts0.opt ? `<div style="margin:-4px 0 12px;"><div class="fc-slot-h">${ts0.opt.slot}${getLang() === 'es' ? ' · opcional' : ' · optional'}</div>${optCardHtml(ts0.opt)}</div>` : ''); }
         case 'strength': { const ts = state.plan.find(s => s.dateISO === todayISO()); return ts ? renderStrengthRecCard(ts) : ''; }
         case 'grit': return renderGritCard();
         case 'prediction': return renderRacePredictionCard();
@@ -6788,7 +6804,7 @@
                 const sessionStr = r.durationMin
                   ? `${r.durationMin} min${r.distanceMi ? ` · ${r.distanceMi} mi` : ''}`
                   : (r.reps || '—');
-                const paceStr = r.effortOnly ? t('pace_ref_effort_only') : r.paceStr;
+                const paceStr = r.paceStr || (r.effortOnly ? t('pace_ref_effort_only') : '—');
                 const override = overrides[r.type];
                 const overrideStr = override ? fmtPaceNoUnit(override) : '—';
                 const overrideClick = `editPaceOverride('${r.type}', ${override || 0}, 600)`;
@@ -6855,10 +6871,22 @@
       };
 
       const sessions = {};
+      const optionals = {}; // 2026.11.07-1: "Vie AM opcional: …" lines, kept apart from the main session
+      const OPT_DAY = { lun: 0, mar: 1, mie: 2, 'mié': 2, jue: 3, vie: 4, sab: 5, 'sáb': 5, dom: 6, mon: 0, tue: 1, wed: 2, thu: 3, fri: 4, sat: 5, sun: 6 };
       const lines = text.split('\n').filter(l => l.trim());
 
       lines.forEach(line => {
         const lowerLine = line.toLowerCase();
+        const om = /^\s*(lun|mar|mi[eé]|jue|vie|s[aá]b|dom|mon|tue|wed|thu|fri|sat|sun)[a-záéíóú]*\.?\s+(am|pm)\s+(?:opcional|optional)\s*:\s*(.+)$/i.exec(line);
+        if (om) {
+          const k = om[1].toLowerCase();
+          const idx = OPT_DAY[k] != null ? OPT_DAY[k] : OPT_DAY[k.normalize('NFD').replace(/[\u0300-\u036f]/g, '')];
+          if (idx != null) {
+            const dm = om[3].match(/(\d+(?:\.\d+)?)\s*(?:miles?|millas?)\b/i);
+            optionals[idx] = { slot: om[2].toUpperCase(), text: om[3].trim(), distMi: dm ? parseFloat(dm[1]) : null };
+          }
+          return;
+        }
         let dayIndex = -1;
         let dayName = '';
 
@@ -6895,6 +6923,7 @@
         };
       });
 
+      Object.values(sessions).forEach(x => { x.opt = optionals[x.dayOfWeek] || null; });
       return Object.values(sessions).sort((a, b) => a.dayOfWeek - b.dayOfWeek);
     }
 
@@ -6959,6 +6988,7 @@
             existing.targetDurationMin = session.durationMin || 0;
             existing.substeps = buildSubsteps(session.type);
             existing.notes = session.notes;
+            existing.opt = session.opt || null; // re-import clears an optional that is no longer in the block
           } else {
             maxDay += 1;
             state.plan.push({
@@ -6971,7 +7001,8 @@
               completed: false, rating: null,
               substeps: buildSubsteps(session.type),
               linkedActivityId: null,
-              notes: session.notes
+              notes: session.notes,
+              opt: session.opt || null
             });
           }
         });
@@ -7889,6 +7920,7 @@
     }
     function strengthImgRemove(id) { if (strengthImgSave(id, null)) render(); }
     function strengthImgHtml(ex) {
+      return ''; // 2026.11.07-1: upload box removed at the athlete's request; the built-in illustrations stay
       if (!ex || !ex.id) return '';
       const es = getLang() === 'es', src = strengthImgGet(ex.id);
       return `<div style="margin-top:6px;">
@@ -8288,6 +8320,36 @@
       document.getElementById('claudePlanInput').value = '';
     }
 
+    // ═══ 2026.11.07-1: AM / PM columns. The main session goes in its slot (AM when the line says
+    // "al amanecer" or "en la mañana"); the optional one ("Vie AM opcional: …") sits apart, in
+    // its own column, and never counts toward adherence, progression or the GRIT base. ═══
+    function mainSlotOf(session) {
+      const n = String(session?.notes || '').toLowerCase();
+      return /amanecer|en la ma[ñn]ana|\bam\b|morning|dawn/.test(n) ? 'AM' : 'PM';
+    }
+    function optCardHtml(opt) {
+      const es = getLang() === 'es';
+      return `<div class="fc-opt-card">
+        <div class="fc-opt-tag">${es ? 'OPCIONAL' : 'OPTIONAL'}</div>
+        <div class="fc-opt-text">${esc(opt.text)}</div>
+        <div class="fc-opt-foot">${es ? 'Si no la haces, no afecta el plan.' : 'Skipping it does not affect the plan.'}</div>
+      </div>`;
+    }
+    function ampmHtml(session, mainCardHtml) {
+      const es = getLang() === 'es';
+      const main = mainSlotOf(session), opt = session.opt || null;
+      const cell = (slot) => {
+        const parts = [];
+        if (main === slot) parts.push(mainCardHtml);
+        if (opt && opt.slot === slot) parts.push(optCardHtml(opt));
+        return parts.length ? parts.join('') : `<div class="fc-slot-empty">—</div>`;
+      };
+      return `<div class="fc-ampm">
+        <div class="fc-slot"><div class="fc-slot-h">AM${opt && opt.slot === 'AM' && main !== 'AM' ? (es ? ' · opcional' : ' · optional') : ''}</div>${cell('AM')}</div>
+        <div class="fc-slot"><div class="fc-slot-h">PM${opt && opt.slot === 'PM' && main !== 'PM' ? (es ? ' · opcional' : ' · optional') : ''}</div>${cell('PM')}</div>
+      </div>`;
+    }
+
     function renderCalendarView() {
       const today = todayISO();
       const todayDate = parseISODateLocal(today);
@@ -8358,7 +8420,7 @@
             return `
               <div style="margin-bottom:14px;">
                 <div class="sitrep-label" style="${isToday ? 'color:var(--coyote);' : ''}">${d.dayName.toUpperCase()} ${d.dayNum}${isToday ? ` · ${getLang()==='es'?'HOY':'TODAY'}` : ''}</div>
-                <div class="session-card ${d.session.completed ? 'completed' : ''}" onclick="openSessionDetail(${d.session.day})" style="margin-bottom:6px;">
+                ${ampmHtml(d.session, `<div class="session-card ${d.session.completed ? 'completed' : ''}" onclick="openSessionDetail(${d.session.day})" style="margin-bottom:6px;">
                   <div class="session-header">
                     <div class="session-left">
                       <span class="session-tag">${sessionTag(d.session)}</span>
@@ -8370,7 +8432,7 @@
                     ${d.session.completed ? `<div class="badge">${t('badge_done')}</div>` : ''}
                     ${d.activity ? `<div class="badge day">TCX ✓</div>` : ''}
                   </div>
-                </div>
+                </div>`)}
                 ${strength.length > 0 ? `
                   <div style="background:var(--field-surface); border:1px solid var(--field-line); border-left:3px solid var(--coyote-dim); padding:10px 12px;">
                     <div style="font-family:var(--font-mono); font-size:10px; color:var(--coyote-text); letter-spacing:1px; text-transform:uppercase; margin-bottom:6px;">
@@ -12552,7 +12614,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.06-1';
+    const APP_BUILD = '2026.11.07-1';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
@@ -12716,7 +12778,7 @@
   var BOX = function (x, y, w, h) { return '<rect class="e" opacity=".55" x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '"/>'; };
   var UP = '40,20 40,40', LEGS = '40,40 40,55 40,70';
 
-  /* ---------- Guías: 12 ejercicios (técnica estándar de fuerza) ---------- */
+  /* ---------- Guías: 18 ejercicios (técnica estándar de fuerza; 6 de la v2 añadidas el 2026.11.07-1) ---------- */
   var G = [
     { en: 'Goblet squat, 3 s lowering', es: 'Sentadilla goblet, bajando en 3 s',
       p: [{ h: [40, 13], l: [UP, LEGS, '40,23 45,32 45,25'], x: DB(43, 21, 5, 8) },
@@ -12801,18 +12863,63 @@
       en_s: ['Hands slightly wider than shoulders, fingers forward. Body in one line from head to heels, glutes and abs tight.', 'Elbows about 45 degrees from your body, not flared out at 90.', 'Lower for about 2 seconds until the chest is almost touching the floor.', 'Push the floor away until your arms are straight, without shrugging.', 'Neck neutral. If you cannot hold the line, do them on your knees.'],
       en_m: ['Hips sagging or piking up.', 'Elbows flared wide.', 'Half repetitions.', 'Head jutting forward.'],
       es_s: ['Manos un poco más anchas que los hombros, dedos al frente. Cuerpo en una línea de la cabeza a los talones, glúteos y abdomen firmes.', 'Codos a unos 45 grados del cuerpo, no abiertos a 90.', 'Baja en unos 2 segundos hasta casi tocar el piso con el pecho.', 'Empuja el piso hasta estirar los brazos, sin encoger los hombros.', 'Cuello neutro. Si no puedes mantener la línea, hazlas apoyando las rodillas.'],
-      es_m: ['Caderas hundidas o levantadas.', 'Codos muy abiertos.', 'Repeticiones a medias.', 'Cabeza adelantada.'] }
+      es_m: ['Caderas hundidas o levantadas.', 'Codos muy abiertos.', 'Repeticiones a medias.', 'Cabeza adelantada.'] },
+    /* 2026.11.07-1: guías de la fuerza v2 (A1, A2, A3, A4, B1, B2). Sin foto todavía: se dibujan con figuras. */
+    { en: 'Pogo hops (short bounces, legs nearly straight)', es: 'Saltos de tobillo (rebotes cortos, piernas casi rectas)',
+      p: [{ h: [40, 13], l: [UP, '40,40 41,55 40,69', '40,23 45,31 49,27', '40,23 35,31 31,27'] },
+          { h: [40, 7], l: ['40,14 40,34', '40,34 41,49 41,63', '40,17 45,25 49,21', '40,17 35,25 31,21'], y: '<line class="d" x1="41" y1="64" x2="41" y2="70"/>' }],
+      en_s: ['Stand with feet hip-width, legs almost straight, weight on the balls of your feet.', 'Bounce in place with short, quick hops, driven mostly by your ankles (knees barely bend).', 'Spend as little time on the ground as possible: think of a hot floor.', 'Keep your chest tall and arms relaxed, with a small swing.', 'Stop the set if the rhythm breaks down or your Achilles hurts.'],
+      en_m: ['Bending the knees a lot (it turns into a squat jump).', 'Landing on the heels.', 'Jumping high and slow instead of low and quick.', 'Doing them tired or with calf pain.'],
+      es_s: ['Párate con los pies al ancho de las caderas, piernas casi rectas y el peso en la parte delantera del pie.', 'Rebota en el sitio con saltos cortos y rápidos, usando sobre todo los tobillos (las rodillas casi no se doblan).', 'Toca el piso lo menos posible: imagina que el piso quema.', 'Mantén el pecho alto y los brazos relajados, con un balanceo pequeño.', 'Termina la serie si pierdes el ritmo o te duele el tendón de Aquiles.'],
+      es_m: ['Doblar mucho las rodillas (se vuelve una sentadilla con salto).', 'Caer con el talón.', 'Saltar alto y lento en vez de bajo y rápido.', 'Hacerlos cansado o con dolor de pantorrilla.'] },
+    { en: 'Step jump (jump up, step down)', es: 'Salto al escalón (subes saltando, bajas caminando)',
+      p: [{ h: [32, 22], l: ['33,29 30,47', '30,47 40,55 36,70', '32,32 24,38 20,44'], x: BOX(55, 56, 32, 14) },
+          { h: [70, 19], l: ['70,26 67,40', '67,40 75,47 71,56', '69,29 78,34 82,30'], x: BOX(55, 56, 32, 14) }],
+      en_s: ['Stand facing the step, about one step away, feet hip-width.', 'Drop into a quarter squat and swing your arms back.', 'Jump up with a big arm swing and land on the step with both feet, softly, in a half squat.', 'Stand up tall on the step, then step down one foot at a time (never jump down).', 'Rest a few seconds between reps: every jump should be quick and clean.'],
+      en_m: ['Knees caving in on the landing.', 'Loud, stiff landing with no cushioning.', 'Jumping back down off the step.', 'A step so high that you land in a deep squat.'],
+      es_s: ['Párate frente al escalón, a un paso de distancia, con los pies al ancho de las caderas.', 'Baja a un cuarto de sentadilla y lleva los brazos atrás.', 'Salta hacia arriba con un buen balanceo de brazos y cae sobre el escalón con los dos pies, suave y en media sentadilla.', 'Ponte de pie arriba y baja caminando, un pie a la vez (nunca saltando).', 'Descansa unos segundos entre repeticiones: cada salto tiene que ser rápido y limpio.'],
+      es_m: ['Caer con las rodillas hacia adentro.', 'Caer ruidoso y rígido, sin amortiguar.', 'Bajar del escalón saltando.', 'Usar un escalón tan alto que caes en sentadilla profunda.'] },
+    { en: 'Bulgarian split squat, 3 s lowering', es: 'Sentadilla búlgara, bajando en 3 s',
+      p: [{ h: [44, 13], l: ['44,20 44,40', '44,40 54,55 56,70', '44,40 34,50 24,57', '44,23 44,33 44,43'], x: BOX(10, 58, 18, 12) + DB(41, 43) },
+          { h: [44, 25], l: ['44,32 44,52', '44,52 58,56 56,70', '44,52 34,64 24,57', '44,35 44,45 44,54'], x: BOX(10, 58, 18, 12) + DB(41, 54) }],
+      en_s: ['Put the top of your back foot on the step; front foot a long stride ahead, flat on the floor. Dumbbells at your sides.', 'Torso tall, abs braced, hips square.', 'Lower for 3 seconds straight down until the front thigh is almost parallel to the floor.', 'Front knee tracks over the toes; your weight stays on the front foot, not the back one.', 'Drive up through the whole front foot. Finish all reps on one leg, then switch.'],
+      en_m: ['Front foot too close to the step: the heel lifts.', 'Pushing with the back leg.', 'Front knee caving inward.', 'Dropping fast instead of controlling the 3 seconds.'],
+      es_s: ['Pon el empeine del pie de atrás sobre el escalón; el pie de adelante va a un paso largo, plano en el piso. Mancuernas a los lados.', 'Torso alto, abdomen firme y cadera de frente.', 'Baja en 3 segundos recto hacia abajo, hasta que el muslo de adelante quede casi paralelo al piso.', 'La rodilla de adelante sigue la línea de los dedos; el peso va en el pie de adelante, no en el de atrás.', 'Sube empujando con todo el pie de adelante. Termina las repeticiones de una pierna y cambia.'],
+      es_m: ['Pie de adelante muy cerca del escalón: el talón se levanta.', 'Empujar con la pierna de atrás.', 'Rodilla de adelante que cae hacia adentro.', 'Bajar rápido sin controlar los 3 segundos.'] },
+    { en: 'Single-leg Romanian deadlift', es: 'Peso muerto rumano a una pierna',
+      p: [{ h: [40, 13], l: [UP, '40,40 41,55 40,70', '40,40 37,54 34,64', '40,23 40,33 40,42'], x: DB(37, 42) },
+          { h: [19, 33], l: ['44,42 24,36', '44,42 45,56 44,70', '44,42 62,38 78,36', '25,37 25,47 25,55'], x: DB(22, 55) }],
+      en_s: ['Stand on one leg with a soft knee, a dumbbell in each hand in front of your thighs.', 'Push your hips back and tip your torso forward while the free leg rises straight behind you.', 'Lower until you feel the stretch in the hamstring with a flat back; the dumbbells travel close to the standing leg.', 'Keep your hips square to the floor: both sides at the same height.', 'Stand up by squeezing the glute of the standing leg. If you lose balance, tap the back toe down and keep going.'],
+      en_m: ['Opening the hip (the back leg rotates outward).', 'Rounding the back to reach lower.', 'Bending the standing knee into a squat.', 'Going fast and losing balance.'],
+      es_s: ['Párate en una pierna con la rodilla un poco flexionada y una mancuerna en cada mano frente a los muslos.', 'Lleva la cadera hacia atrás e inclina el tronco mientras la otra pierna sube recta hacia atrás.', 'Baja hasta sentir el estiramiento en el isquiotibial, con la espalda plana; las mancuernas bajan cerca de la pierna de apoyo.', 'Cadera cuadrada al piso: los dos lados a la misma altura.', 'Sube apretando el glúteo de la pierna de apoyo. Si pierdes el equilibrio, toca el piso con la punta del pie de atrás y sigue.'],
+      es_m: ['Abrir la cadera (la pierna de atrás rota hacia afuera).', 'Redondear la espalda para llegar más abajo.', 'Doblar la rodilla de apoyo como si fuera una sentadilla.', 'Ir rápido y perder el equilibrio.'] },
+    { en: 'A-skips (20 m)', es: 'Saltitos con rodilla alta (20 m)',
+      p: [{ h: [40, 12], l: ['40,19 40,39', '40,39 41,54 41,69', '40,39 51,42 49,55', '40,22 34,29 33,22', '40,22 46,29 49,35'] },
+          { h: [40, 11], l: ['40,18 40,38', '40,38 39,53 40,68', '40,38 50,41 48,54', '40,21 46,28 47,21', '40,21 34,28 31,34'] }],
+      en_s: ['Move forward with light, springy skips on the balls of your feet.', 'Drive one knee up to hip height with the ankle flexed (toes up).', 'Bring that foot down actively, under your hip, pawing the ground backward.', 'Arms like running: elbows at 90 degrees, opposite to the legs.', 'Rhythm: knee up, foot down, switch. Cover 20 m and walk back.'],
+      en_m: ['Leaning the torso back.', 'Landing with the foot out in front of the body.', 'Arms crossing the body.', 'Rushing and losing the technique: it is a technique drill, not a speed drill.'],
+      es_s: ['Avanza con saltitos suaves sobre la parte delantera del pie.', 'Sube una rodilla hasta la altura de la cadera, con el tobillo flexionado (punta hacia arriba).', 'Baja ese pie con fuerza, debajo de la cadera, como si arañaras el piso hacia atrás.', 'Brazos como al correr: codos a 90 grados y contrarios a la pierna.', 'Ritmo: rodilla arriba, pie abajo, cambio. Recorre 20 m y regresa caminando.'],
+      es_m: ['Inclinar el tronco hacia atrás.', 'Caer con el pie por delante del cuerpo.', 'Brazos que cruzan el cuerpo.', 'Ir de prisa y perder la técnica: es un ejercicio de técnica, no de velocidad.'] },
+    { en: 'Skater hop, 2 s stick', es: 'Salto lateral a una pierna (patinador), cayendo quieto 2 s',
+      p: [{ h: [58, 20], l: ['57,27 54,44', '54,44 60,56 60,70', '54,44 44,58 38,64', '56,30 66,37', '56,30 48,36'] },
+          { h: [42, 20], l: ['43,27 46,44', '46,44 40,56 40,70', '46,44 56,58 62,64', '44,30 34,37', '44,30 52,36'], y: '<line class="d" x1="60" y1="72" x2="42" y2="72"/>' }],
+      en_s: ['Stand on your right leg with a soft knee.', 'Jump sideways to the left and land on the left foot only; the right leg swings behind without touching down.', 'Land softly with the knee lined up over the toes and hold still for 2 seconds.', 'Jump back to the right and repeat. Count reps per side.', 'Start with short hops; go wider only if you land stable.'],
+      en_m: ['Knee caving inward on the landing.', 'Not holding the 2 seconds.', 'Landing on the heel or stiff-legged.', 'Jumping too far and losing control.'],
+      es_s: ['Párate sobre la pierna derecha con la rodilla un poco flexionada.', 'Salta de lado hacia la izquierda y cae solo sobre el pie izquierdo; la pierna derecha pasa por detrás sin tocar el piso.', 'Cae suave, con la rodilla alineada con los dedos, y quédate quieto 2 segundos.', 'Salta de regreso hacia la derecha y repite. Cuenta las repeticiones por lado.', 'Empieza con saltos cortos; alarga la distancia solo si caes estable.'],
+      es_m: ['Rodilla que cae hacia adentro al aterrizar.', 'No sostener los 2 segundos.', 'Caer con el talón o con la pierna rígida.', 'Saltar demasiado lejos y perder el control.'] }
   ];
   var MAP = {};
   G.forEach(function (g) { MAP[g.en.toLowerCase()] = g; MAP[g.es.toLowerCase()] = g; });
   // 2026.11.06-1: strength v2 variants that share the technique of an existing guide.
-  var ALIAS = { 'sentadilla goblet con pausa de 2 s abajo': 'goblet squat, 3 s lowering', 'goblet squat, 2 s pause': 'goblet squat, 3 s lowering',
-    'sentadilla búlgara, bajando en 3 s': 'dumbbell split squat', 'bulgarian split squat, 3 s lowering': 'dumbbell split squat' };
+  // 2026.11.07-1: the Bulgarian split squat now has its own guide (rear foot on the step).
+  var ALIAS = { 'sentadilla goblet con pausa de 2 s abajo': 'goblet squat, 3 s lowering', 'goblet squat, 2 s pause': 'goblet squat, 3 s lowering' };
   Object.keys(ALIAS).forEach(function (k) { if (MAP[ALIAS[k]]) MAP[k] = MAP[ALIAS[k]]; });
 
   function lang() { try { return getLang() === 'es' ? 'es' : 'en'; } catch (e) { return document.documentElement.lang === 'es' ? 'es' : 'en'; } }
 
-  var IMGKEY = { 'Goblet squat, 3 s lowering': '01-goblet', 'Dumbbell split squat': '02-split-squat', 'Dumbbell step-up': '03-step-up', 'Single-leg calf raise, slow lowering': '04-calf-raise', 'Banded lateral walk': '05-lateral-walk', 'Dumbbell row': '06-row', 'Dead bug': '07-dead-bug', 'Single-leg step-down (3–4 s)': '08-step-down', 'Romanian deadlift': '09-rdl', 'Single-leg glute bridge': '10-glute-bridge', 'Side plank': '11-side-plank', 'Push-ups': '12-push-up' };
+  var IMGKEY = { 'Goblet squat, 3 s lowering': '01-goblet', 'Dumbbell split squat': '02-split-squat', 'Dumbbell step-up': '03-step-up', 'Single-leg calf raise, slow lowering': '04-calf-raise', 'Banded lateral walk': '05-lateral-walk', 'Dumbbell row': '06-row', 'Dead bug': '07-dead-bug', 'Single-leg step-down (3–4 s)': '08-step-down', 'Romanian deadlift': '09-rdl', 'Single-leg glute bridge': '10-glute-bridge', 'Side plank': '11-side-plank', 'Push-ups': '12-push-up',
+    // 2026.11.07-1: slots for the v2 photos; until a photo is embedded the guide draws its figures.
+    'Pogo hops (short bounces, legs nearly straight)': '13-pogo', 'Step jump (jump up, step down)': '14-step-jump', 'Bulgarian split squat, 3 s lowering': '15-bulgarian', 'Single-leg Romanian deadlift': '16-sl-rdl', 'A-skips (20 m)': '17-a-skip', 'Skater hop, 2 s stick': '18-skater' };
   function figsHtml(g, nm, cap, es) {
     var src = window.__FC_IMG && window.__FC_IMG[IMGKEY[g.en]];
     if (src) return '<div class="fc-figs fc-has-img"><img class="fc-photo" loading="lazy" decoding="async" alt="' + nm + (es ? ' (inicio y final)' : ' (start and end)') + '" src="' + src + '"></div>';
