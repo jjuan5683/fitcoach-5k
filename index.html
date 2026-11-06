@@ -3563,7 +3563,8 @@
       if (pacingConsistency) {
         if (pacingConsistency.cvPct < 3) consistencyLabel = 'Excelente';
         else if (pacingConsistency.cvPct < 6) consistencyLabel = 'Buena';
-        else consistencyLabel = 'Variable';
+        else if (pacingConsistency.cvPct <= 10) consistencyLabel = 'Variable';
+        else consistencyLabel = 'Inconsistente';
       }
 
       // Cardiac drift interpretation
@@ -4682,7 +4683,17 @@
         const sport = sportRaw.includes('bik') ? 'biking' : sportRaw.includes('run') ? 'running' : (sportRaw || 'running');
 
         const id = doc.querySelector('Id')?.textContent || new Date().toISOString();
-        const lapEls = [...tagsNS(doc, 'Lap')];
+        // 2026.11.08-5: Garmin sometimes closes the file with an empty lap whose TotalTimeSeconds is
+        // 4294967 (0xFFFFFFFF ms = "invalid"). Summed, it turned 50:20 into 1193:53:07 and blew up
+        // TSS/CTL/ATL. Drop empty laps (no trackpoints, ~0 m); clamp the field if a lap with points has it.
+        const LAP_TIME_INVALID = 4294967;
+        const lapEls = [...tagsNS(doc, 'Lap')].filter(lap => {
+          const tt = parseFloat(tagsNS(lap, 'TotalTimeSeconds')[0]?.textContent || '0');
+          const dm = parseFloat(tagsNS(lap, 'DistanceMeters')[0]?.textContent || '0');
+          const hasPts = tagsNS(lap, 'Trackpoint').length > 0;
+          if (hasPts) return true;
+          return !(tt >= LAP_TIME_INVALID || (dm < 1 && tt > 0));
+        });
         if (!lapEls.length) return null;
 
         // TCX nests every <Trackpoint> inside a <Lap>, so parsing lap-by-lap yields the same
@@ -4714,7 +4725,7 @@
           let totalTimeSec = 0, distM = 0, cals = 0, avgHR = 0, maxHR = 0;
           for (let el = lap.firstElementChild; el; el = el.nextElementSibling) {
             switch (el.localName) {
-              case 'TotalTimeSeconds': totalTimeSec = parseFloat(el.textContent || '0'); break;
+              case 'TotalTimeSeconds': totalTimeSec = parseFloat(el.textContent || '0'); break; // clamped below if invalid
               case 'DistanceMeters': distM = parseFloat(el.textContent || '0'); break;
               case 'Calories': cals = parseFloat(el.textContent || '0'); break;
               case 'AverageHeartRateBpm': {
@@ -4734,6 +4745,10 @@
           // path ran another ~6 querySelector() calls per trackpoint here, duplicating work
           // parseTrackpoints() had already done for the same elements.
           const tps = lapPointSlices[i];
+          if (!(totalTimeSec < LAP_TIME_INVALID) || totalTimeSec < 0) {
+            const tA = tps.length ? tps[0].time : null, tB = tps.length ? tps[tps.length - 1].time : null;
+            totalTimeSec = (tA != null && tB != null) ? Math.max(0, (tB - tA) / 1000) : 0;
+          }
           let sumSpd = 0, spdCt = 0, sumCad = 0, cadCt = 0, minHR = 999, elevGain = 0, lastElev = null;
           let sumHR = 0, hrCt = 0;
           let hrZoneSecs = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -12111,6 +12126,13 @@
         lines.push(`*La variación de la sesión completa (${a.pacingConsistency ? a.pacingConsistency.cvPct + '%' : ND}) no aplica: mezcla esfuerzo, recuperaciones y calentamiento.*`);
         lines.push('');
         lines.push('> Referencia: < 3% = Excelente | 3-6% = Buena | 6-10% = Variable | > 10% = Inconsistente');
+      } else if (a.workSegment && a.workSegment.main && a.workSegment.main.cvPct != null) {
+        // 2026.11.08-5: the label comes from the work block, so the number must too.
+        lines.push(`**Coeficiente de Variación (bloque de trabajo, tramos de 2 min):** ${a.workSegment.main.cvPct}%`);
+        lines.push(`**Evaluación:** ${autoEval.consistencyLabel}`);
+        lines.push(`*La variación de la sesión completa (${a.pacingConsistency ? a.pacingConsistency.cvPct + '%' : ND}) no aplica: mezcla calentamiento, pausas y trote final.*`);
+        lines.push('');
+        lines.push('> Referencia: < 3% = Excelente | 3-6% = Buena | 6-10% = Variable | > 10% = Inconsistente');
       } else if (a.pacingConsistency) {
         lines.push(`**Coeficiente de Variación:** ${a.pacingConsistency.cvPct}%`);
         lines.push(`**Evaluación:** ${autoEval.consistencyLabel}`);
@@ -13444,7 +13466,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.08-4';
+    const APP_BUILD = '2026.11.08-5';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
