@@ -1457,6 +1457,16 @@
     html.fc-readable .grit-tab { min-height: 48px; font-size: 12px; }
     html.fc-readable .splits-table { font-size: 14px; }
     html.fc-readable .splits-table th { font-size: 12px; }
+    /* 2026.11.08-6: always-on reading mode is also bold. Text inherits 600; light 400/500 rules move up; 700 stays 700. */
+    html.fc-readable body { font-weight: 600; }
+    html.fc-readable :where(input, select, textarea, .plan-list, .form-label, .splits-table th, .session-info h3, .grit-big small, .dash-bar .dash-name small) { font-weight: 600; }
+    html.fc-readable nav button { font-weight: 700; }
+    /* 2026.11.08-6: race card (Profile, opened from More). The 90 px control column clipped the date and,
+       on iPhone, pushed the date picker past the card edge. */
+    .manual-field-row.fc-race-row { grid-template-columns: minmax(0, 1fr) minmax(0, 170px); }
+    .manual-field-row.fc-race-row > input, .manual-field-row.fc-race-row > select { width: 100%; max-width: 100% !important; min-width: 0; box-sizing: border-box; }
+    .manual-field-row.fc-race-row > input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-height: 40px; }
+    .manual-field-row.fc-race-row > input[type="date"]::-webkit-date-and-time-value { text-align: right; }
 
     @media (max-width: 700px) {
       .view-container { max-width: 100%; padding: 18px 14px; padding-bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
@@ -2093,7 +2103,8 @@
       trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
       ruler: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
       flag: '<path d="M5 21V4h11l-2 4 2 4H5"/>',
-      target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>'
+      target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
+      refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>'
     };
     function ic(name, size) {
       const sz = size || 16;
@@ -2384,21 +2395,21 @@
         return `<div style="border:1px solid ${isActive ? 'var(--olive-bright)' : 'var(--field-line)'}; border-radius:2px; padding:10px; margin-bottom:10px; ${past ? 'opacity:.7;' : ''}">
           <div style="font-size:11px; letter-spacing:.08em; color:${isActive ? 'var(--olive-bright)' : 'var(--paper-dim)'}; margin-bottom:6px;">
             ${isActive ? (es ? '▶ CARRERA ACTIVA (próxima)' : '▶ ACTIVE RACE (next)') : (past ? (es ? 'COMPLETADA' : 'COMPLETED') : (es ? 'PROGRAMADA' : 'SCHEDULED'))}</div>
-          <div class="manual-field-row"><label for="rn-${id}">${es ? 'Nombre' : 'Name'}</label>
+          <div class="manual-field-row fc-race-row"><label for="rn-${id}">${es ? 'Nombre' : 'Name'}</label>
             <input type="text" id="rn-${id}" value="${esc(r.name)}" placeholder="Orocovis 5K" onchange="updateRace('${id}','name',this.value)" style="max-width:170px; text-align:right;" /></div>
-          <div class="manual-field-row"><label for="rd-${id}">${es ? 'Fecha' : 'Date'}</label>
+          <div class="manual-field-row fc-race-row"><label for="rd-${id}">${es ? 'Fecha' : 'Date'}</label>
             <input type="date" id="rd-${id}" value="${esc(r.dateISO)}" onchange="updateRace('${id}','dateISO',this.value)" style="max-width:150px; text-align:right;" /></div>
-          <div class="manual-field-row"><label for="rk-${id}">${es ? 'Distancia' : 'Distance'}</label>
+          <div class="manual-field-row fc-race-row"><label for="rk-${id}">${es ? 'Distancia' : 'Distance'}</label>
             <select id="rk-${id}" onchange="updateRace('${id}','distanceKey',this.value)" style="max-width:150px; text-align:right;">
               ${RACE_DISTANCES.map(d => `<option value="${d.key}" ${r.distanceKey === d.key ? 'selected' : ''}>${d.label[getLang()] || d.label.en}</option>`).join('')}
             </select></div>
-          <div class="manual-field-row"><label for="rg-${id}">${es ? 'Meta (MM:SS o H:MM:SS)' : 'Goal (MM:SS or H:MM:SS)'}</label>
+          <div class="manual-field-row fc-race-row"><label for="rg-${id}">${es ? 'Meta (MM:SS o H:MM:SS)' : 'Goal (MM:SS or H:MM:SS)'}</label>
             <input type="text" id="rg-${id}" value="${fmtRaceTime(r.goalSec)}" placeholder="30:00" onchange="updateRace('${id}','goalSec',this.value)" style="max-width:100px; text-align:right;" /></div>
-          ${past ? `<div class="manual-field-row"><label for="rr-${id}">${es ? 'Resultado' : 'Result'}</label>
+          ${past ? `<div class="manual-field-row fc-race-row"><label for="rr-${id}">${es ? 'Resultado' : 'Result'}</label>
             <input type="text" id="rr-${id}" value="${fmtRaceTime(r.resultSec)}" placeholder="—" onchange="updateRace('${id}','resultSec',this.value)" style="max-width:100px; text-align:right;" /></div>` : ''}
           <label class="checkbox-item" style="margin-top:6px;"><input type="checkbox" ${r.inBoots ? 'checked' : ''} onchange="updateRace('${id}','inBoots',this.checked)" />
             <span style="font-size:13px;">${es ? 'Corro en botas + OCP' : 'Race in boots + OCP'}</span></label>
-          <div class="manual-field-row"><label for="rt-${id}">${es ? 'Nota (terreno, etc.)' : 'Note (terrain, etc.)'}</label>
+          <div class="manual-field-row fc-race-row"><label for="rt-${id}">${es ? 'Nota (terreno, etc.)' : 'Note (terrain, etc.)'}</label>
             <input type="text" id="rt-${id}" value="${esc(r.note)}" placeholder="${es ? '~70% bajada' : '~70% downhill'}" onchange="updateRace('${id}','note',this.value)" style="max-width:170px; text-align:right;" /></div>
           <button class="btn btn-secondary" style="width:100%; margin-top:8px;" onclick="deleteRace('${id}')">${es ? 'Eliminar carrera' : 'Delete race'}</button>
         </div>`;
@@ -10788,7 +10799,8 @@
             </div>
           </div>
           <div class="header-right">
-            <button type="button" id="fc-a11y-toggle" class="status-pill fc-a11y-toggle" onclick="toggleReadableMode()" aria-pressed="false" aria-label="${getLang() === 'es' ? 'Activar texto ampliado' : 'Enable larger text'}" title="${getLang() === 'es' ? 'Alternar texto ampliado' : 'Toggle larger text'}">A+</button>
+            <!-- 2026.11.08-6: force refresh replaces the A+/A− toggle; larger bold text is always on -->
+            <button type="button" id="fc-refresh-btn" class="status-pill fc-a11y-toggle" onclick="forceRefreshApp()" aria-label="${getLang() === 'es' ? 'Forzar actualización (no borra tus datos)' : 'Force refresh (keeps your data)'}" title="${getLang() === 'es' ? 'Forzar actualización · versión ' : 'Force refresh · version '}${APP_BUILD}">${ic('refresh', 18)}</button>
             <button type="button" id="fc-sun-toggle" class="status-pill fc-a11y-toggle" onclick="toggleSunMode()" aria-pressed="${document.documentElement.classList.contains('fc-sun')}" aria-label="${getLang() === 'es' ? 'Modo sol: tema claro para leer al aire libre' : 'Sun mode: light theme for outdoor reading'}" title="${getLang() === 'es' ? 'Modo sol (tema claro)' : 'Sun mode (light theme)'}">${ic('sun', 18)}</button>
             <div class="status-pill" onclick="switchView('profile')">${getLang() === 'es' ? 'PERFIL' : 'PROFILE'}</div>
           </div>
@@ -13466,7 +13478,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.08-5';
+    const APP_BUILD = '2026.11.08-6';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
@@ -14319,8 +14331,9 @@
 (function () {
   'use strict';
   var KEY = 'fc_accessible_reading_mode_v1';
-  var enabled = false;
-  try { enabled = localStorage.getItem(KEY) === '1'; } catch (e) {}
+  // 2026.11.08-6: larger bold text is always on (the athlete's choice); the A+/A− toggle is gone.
+  var enabled = true;
+  try { localStorage.setItem(KEY, '1'); } catch (e) {}
 
   function sync() {
     var es = document.documentElement.lang !== 'en';
