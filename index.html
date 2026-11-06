@@ -531,6 +531,25 @@
     /* 2026.11.07-3: GRIT 100 coin progress */
     .grit-coin-wrap { display: flex; flex-direction: column; align-items: center; margin: 4px 0 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
     .grit-coin { position: relative; width: 150px; max-width: 46vw; aspect-ratio: 300 / 380; }
+    /* 2026.11.08-3: GRIT panel */
+    .grit-hero { display: grid; grid-template-columns: 128px 1fr; gap: 12px; align-items: center; margin: 2px 0 8px; }
+    .grit-hero .grit-coin { width: 120px; }
+    .grit-hero .grit-coin-wrap { margin: 0; }
+    .grit-hero .grit-coin-label, .grit-hero .grit-coin-hint { display: none; }
+    .grit-big { font-family: var(--font-mono); font-size: 34px; line-height: 1; color: var(--coyote); font-weight: 700; }
+    .grit-big small { font-size: 13px; color: var(--paper-dim); font-weight: 400; }
+    .grit-chip { display: inline-block; margin: 8px 0 6px; padding: 2px 8px; border: 1px solid; font-family: var(--font-mono); font-size: 11px; letter-spacing: .5px; }
+    .grit-kv { font-size: 12px; color: var(--paper-dim); line-height: 1.55; }
+    .grit-kv b { color: var(--paper); font-family: var(--font-mono); font-size: 13px; }
+    .grit-tabs { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--field-line); margin: 4px 0 6px; }
+    .grit-tab { background: transparent; border: 0; border-right: 1px solid var(--field-line); color: var(--paper-dim); font-family: var(--font-mono); font-size: 11px; letter-spacing: 1px; padding: 9px 0; min-height: 36px; cursor: pointer; }
+    .grit-tab:last-child { border-right: 0; }
+    .grit-tab.on { background: var(--field-surface); color: var(--coyote); font-weight: 700; box-shadow: inset 0 -2px 0 var(--coyote); }
+    .grit-chart { width: 100%; height: auto; display: block; }
+    .grit-legend { display: flex; gap: 12px; font-size: 10px; color: var(--paper-dim); margin-top: 2px; }
+    .grit-legend i { display: inline-block; width: 9px; height: 9px; margin-right: 4px; vertical-align: -1px; }
+    .grit-legend i.dash { border: 1px dashed var(--paper-dim); width: 8px; height: 8px; }
+    .grit-detail { font-size: 11.5px; color: var(--paper); margin: 4px 0 6px; min-height: 16px; }
     .grit-coin img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; user-select: none; -webkit-user-select: none; }
     .grit-coin-grey { filter: grayscale(1) brightness(0.45) contrast(1.05); }
     .grit-coin-line { position: absolute; left: 8%; right: 8%; height: 1px; background: var(--coyote); opacity: .55; box-shadow: 0 0 6px var(--coyote); }
@@ -5870,12 +5889,13 @@
       weeklyPreMi: 20, // weekly volume to hold BEFORE Nov 1 (rolling 7 days)
       // Plan aprobado 27-oct-2026 (Fase 4): 22 + 24 + 26 + 28 = 100 al 28-nov; 29–30 nov = colchón (0).
       // run/ruck = reparto planificado de cada bloque (81 running / 19 marcha con chaleco).
+      // 2026.11.08-3: ramp = bloques v2 del 4-nov (semana 1 ajustada por el resfriado). 19.7+24+24+26+7.5 = 101.2.
       ramp: [
-        { from: '2026-11-01', to: '2026-11-07', mi: 22, run: 20, ruck: 2 },
+        { from: '2026-11-01', to: '2026-11-07', mi: 19.7, run: 17.7, ruck: 2 },
         { from: '2026-11-08', to: '2026-11-14', mi: 24, run: 19, ruck: 5 },
-        { from: '2026-11-15', to: '2026-11-21', mi: 26, run: 20, ruck: 6 },
-        { from: '2026-11-22', to: '2026-11-28', mi: 28, run: 22, ruck: 6 },
-        { from: '2026-11-29', to: '2026-11-30', mi: 0,  run: 0,  ruck: 0 }
+        { from: '2026-11-15', to: '2026-11-21', mi: 24, run: 18, ruck: 6 },
+        { from: '2026-11-22', to: '2026-11-28', mi: 26, run: 20, ruck: 6 },
+        { from: '2026-11-29', to: '2026-11-30', mi: 7.5, run: 7.5, ruck: 0 }
       ]
     };
 
@@ -5980,6 +6000,132 @@
       </div>`;
     }
 
+    // ═══ 2026.11.08-3: GRIT 100 panel — coin + Daily / Weekly / Cumulative views (inline SVG, works offline) ═══
+    function gritPlannedMi(iso) {
+      const s = (state.plan || []).find(x => x.dateISO === iso);
+      if (!s || s.type === 'rest') return 0;
+      const d = Number(s.dist);
+      if (d > 0) return d;
+      const m = String(s.notes || '').match(/(\d+(?:\.\d+)?)\s*miles?\b/i);
+      return m ? parseFloat(m[1]) : 0;
+    }
+    function gritDays() {
+      const out = [];
+      for (let iso = GRIT.start; iso <= GRIT.end; iso = addDaysISO(iso, 1)) {
+        const m = gritMilesBetween(iso, iso);
+        out.push({ iso, run: m.run, ruck: m.ruck, total: m.total, plan: gritPlannedMi(iso) });
+      }
+      return out;
+    }
+    function gritStreak(days, today) {
+      // Consecutive training days up to today (or yesterday if today is still empty). Rest days and
+      // Sundays with nothing planned do not break it.
+      let n = 0, i = days.findIndex(d => d.iso === today);
+      if (i < 0) i = days.length - 1;
+      if (days[i] && days[i].total <= 0) i--;
+      for (; i >= 0; i--) {
+        const d = days[i], dow = parseISODateLocal(d.iso).getDay();
+        if (d.total > 0) { n++; continue; }
+        if (d.plan === 0 && (dow === 0 || ((state.plan || []).find(x => x.dateISO === d.iso) || {}).type === 'rest')) continue;
+        break;
+      }
+      return n;
+    }
+    let gritSelDay = null;
+    function gritPick(iso) { gritSelDay = gritSelDay === iso ? null : iso; render(); }
+    function gritSetView(v) { state.settings.gritView = v; saveState(); render(); }
+    function gritChartHtml(g) {
+      const es = getLang() === 'es';
+      const view = (state.settings && state.settings.gritView) || 'day';
+      const days = gritDays(), today = g.today;
+      const W = 320, H = 132, L = 24, B = 18, T = 8, R = 4, cw = W - L - R, ch = H - B - T;
+      const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+      const md = (iso) => parseISODateLocal(iso).toLocaleDateString(es ? 'es-PR' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+      const RUN = 'var(--olive-bright)', RUCK = 'var(--coyote)', GRID = 'var(--field-line)', DIM = 'var(--paper-dim)';
+      let svg = '', detail = '';
+      const yAxis = (max, step) => { let s = ''; for (let v = 0; v <= max + 0.001; v += step) { const y = T + ch - v / max * ch; s += `<line x1="${L}" x2="${W - R}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="${GRID}" stroke-width="0.5"/><text x="${L - 3}" y="${(y + 3).toFixed(1)}" font-size="8" text-anchor="end" fill="${DIM}">${v}</text>`; } return s; };
+      if (view === 'day') {
+        const max = Math.max(4, Math.ceil(Math.max(...days.map(d => Math.max(d.total, d.plan))) / 2) * 2);
+        const bw = cw / days.length;
+        svg += yAxis(max, max > 8 ? 4 : 2);
+        days.forEach((d, i) => {
+          const x = L + i * bw + bw * 0.14, w = bw * 0.72, yr = d.run / max * ch, yk = d.ruck / max * ch, yp = d.plan / max * ch, base = T + ch;
+          const sel = gritSelDay === d.iso, isT = d.iso === today, fut = d.iso > today;
+          if (d.plan > 0) svg += `<rect x="${x.toFixed(1)}" y="${(base - yp).toFixed(1)}" width="${w.toFixed(1)}" height="${yp.toFixed(1)}" fill="none" stroke="${DIM}" stroke-width="0.8" stroke-dasharray="2 1.5" opacity="${fut ? 0.9 : 0.6}"/>`;
+          if (d.run > 0) svg += `<rect x="${x.toFixed(1)}" y="${(base - yr).toFixed(1)}" width="${w.toFixed(1)}" height="${yr.toFixed(1)}" fill="${RUN}"/>`;
+          if (d.ruck > 0) svg += `<rect x="${x.toFixed(1)}" y="${(base - yr - yk).toFixed(1)}" width="${w.toFixed(1)}" height="${yk.toFixed(1)}" fill="${RUCK}"/>`;
+          if (isT) svg += `<path d="M${(x + w / 2 - 3).toFixed(1)} ${H - 2} l3 -4 l3 4z" fill="var(--coyote)"/>`;
+          if (sel) svg += `<rect x="${(x - 1).toFixed(1)}" y="${T}" width="${(w + 2).toFixed(1)}" height="${ch}" fill="none" stroke="var(--paper)" stroke-width="0.8"/>`;
+          svg += `<rect x="${(L + i * bw).toFixed(1)}" y="${T}" width="${bw.toFixed(1)}" height="${ch + B}" fill="transparent" style="cursor:pointer" onclick="gritPick('${d.iso}')"><title>${d.iso}</title></rect>`;
+          const dn = parseISODateLocal(d.iso).getDate();
+          if ([1, 8, 15, 22, 29].includes(dn)) svg += `<text x="${(x + w / 2).toFixed(1)}" y="${H - 6}" font-size="8" text-anchor="middle" fill="${DIM}">${dn}</text>`;
+        });
+        const sd = days.find(d => d.iso === gritSelDay);
+        detail = sd ? `<b>${md(sd.iso)}</b> · ${f1(sd.total)} mi${sd.total ? ` (${es ? 'corrida' : 'run'} ${f1(sd.run)} · ${es ? 'marcha' : 'ruck'} ${f1(sd.ruck)})` : ''} · ${es ? 'plan' : 'plan'} ${sd.plan ? f1(sd.plan) + ' mi' : (es ? 'descanso' : 'rest')}`
+                    : (es ? 'Toca una barra para ver el día. Contorno = lo que pide el plan.' : 'Tap a bar to see the day. Outline = what the plan asks.');
+      } else if (view === 'week') {
+        const blocks = GRIT.ramp;
+        const data = blocks.map(b => { const m = gritMilesBetween(b.from, b.to); return { b, run: m.run, ruck: m.ruck, total: m.total }; });
+        const max = Math.max(10, Math.ceil(Math.max(...data.map(d => Math.max(d.total, d.b.mi))) / 5) * 5);
+        const gw = cw / blocks.length;
+        svg += yAxis(max, max > 20 ? 10 : 5);
+        data.forEach((d, i) => {
+          const x = L + i * gw + gw * 0.2, w = gw * 0.6, base = T + ch, yt = d.b.mi / max * ch, yr = d.run / max * ch, yk = d.ruck / max * ch;
+          const ok = d.b.mi > 0 && d.total >= d.b.mi - 0.05, cur = today >= d.b.from && today <= d.b.to;
+          svg += `<rect x="${x.toFixed(1)}" y="${(base - yt).toFixed(1)}" width="${w.toFixed(1)}" height="${yt.toFixed(1)}" fill="none" stroke="${DIM}" stroke-width="1" stroke-dasharray="3 2"/>`;
+          if (d.run > 0) svg += `<rect x="${x.toFixed(1)}" y="${(base - yr).toFixed(1)}" width="${w.toFixed(1)}" height="${yr.toFixed(1)}" fill="${RUN}"/>`;
+          if (d.ruck > 0) svg += `<rect x="${x.toFixed(1)}" y="${(base - yr - yk).toFixed(1)}" width="${w.toFixed(1)}" height="${yk.toFixed(1)}" fill="${RUCK}"/>`;
+          const topY = base - Math.max(yt, yr + yk) - 3;
+          svg += `<text x="${(x + w / 2).toFixed(1)}" y="${topY.toFixed(1)}" font-size="8.5" text-anchor="middle" fill="${ok ? 'var(--olive-bright)' : 'var(--paper)'}">${f1(d.total)}/${d.b.mi}${ok ? ' ✓' : ''}</text>`;
+          const a = parseISODateLocal(d.b.from).getDate(), z = parseISODateLocal(d.b.to).getDate();
+          svg += `<text x="${(x + w / 2).toFixed(1)}" y="${H - 6}" font-size="8" text-anchor="middle" fill="${cur ? 'var(--coyote)' : DIM}" ${cur ? 'font-weight="700"' : ''}>${a}–${z}</text>`;
+        });
+        const curB = data.find(d => today >= d.b.from && today <= d.b.to);
+        detail = curB ? (es ? `Esta semana: ${f1(curB.total)} de ${curB.b.mi} mi (corrida ${f1(curB.run)} · marcha ${f1(curB.ruck)}).` : `This week: ${f1(curB.total)} of ${curB.b.mi} mi (run ${f1(curB.run)} · ruck ${f1(curB.ruck)}).`) : '';
+      } else {
+        const max = 110, X = (i) => L + i / (days.length - 1) * cw, Y = (v) => T + ch - Math.min(v, max) / max * ch;
+        svg += yAxis(max, 25).replace(/>100</, '>100<');
+        svg += `<line x1="${L}" x2="${W - R}" y1="${Y(100).toFixed(1)}" y2="${Y(100).toFixed(1)}" stroke="var(--coyote)" stroke-width="0.8" stroke-dasharray="4 3"/>`;
+        let planPts = '', act = '', cum = 0, lastI = -1;
+        days.forEach((d, i) => {
+          planPts += `${X(i).toFixed(1)},${Y(gritRampExpected(d.iso)).toFixed(1)} `;
+          if (d.iso <= today) { cum += d.total; act += `${X(i).toFixed(1)},${Y(cum).toFixed(1)} `; lastI = i; }
+        });
+        svg += `<polyline points="${planPts.trim()}" fill="none" stroke="${DIM}" stroke-width="1.2" stroke-dasharray="3 2"/>`;
+        if (lastI >= 0) {
+          svg += `<polyline points="${X(0).toFixed(1)},${Y(0).toFixed(1)} ${act.trim()} ${X(lastI).toFixed(1)},${Y(0).toFixed(1)}" fill="var(--olive-bright)" opacity="0.15" stroke="none"/>`;
+          svg += `<polyline points="${act.trim()}" fill="none" stroke="var(--olive-bright)" stroke-width="2"/>`;
+          svg += `<circle cx="${X(lastI).toFixed(1)}" cy="${Y(cum).toFixed(1)}" r="3" fill="var(--olive-bright)"/>`;
+        }
+        [1, 8, 15, 22, 29].forEach(dn => { const i = dn - 1; svg += `<text x="${X(i).toFixed(1)}" y="${H - 6}" font-size="8" text-anchor="middle" fill="${DIM}">${dn}</text>`; });
+        const exp = g.expected, diff = cum - exp; // same reference as the hero chip: plan through yesterday
+        detail = es ? `Llevas ${f1(cum)} mi; el plan pedía ${f1(exp)} hasta ayer (${diff >= 0 ? '+' : ''}${f1(diff)}). Línea punteada = plan.`
+                    : `You have ${f1(cum)} mi; the plan asked ${f1(exp)} through yesterday (${diff >= 0 ? '+' : ''}${f1(diff)}). Dotted line = plan.`;
+      }
+      const tab = (v, l) => `<button class="grit-tab ${view === v ? 'on' : ''}" onclick="gritSetView('${v}')" aria-pressed="${view === v}">${l}</button>`;
+      const legend = view === 'cum' ? '' : `<div class="grit-legend"><span><i style="background:var(--olive-bright)"></i>${es ? 'Corrida' : 'Run'}</span><span><i style="background:var(--coyote)"></i>${es ? 'Marcha' : 'Ruck'}</span><span><i class="dash"></i>${es ? 'Plan' : 'Plan'}</span></div>`;
+      return `<div class="grit-tabs" role="group">${tab('day', es ? 'DIARIO' : 'DAILY')}${tab('week', es ? 'SEMANAL' : 'WEEKLY')}${tab('cum', es ? 'ACUMULADO' : 'TOTAL')}</div>
+        <svg viewBox="0 0 ${W} ${H}" class="grit-chart" role="img" aria-label="GRIT 100">${svg}</svg>
+        ${legend}
+        <p class="grit-detail">${detail}</p>`;
+    }
+    function gritHeroHtml(g, pct) {
+      const es = getLang() === 'es';
+      const f1 = (n) => (Math.round(n * 10) / 10).toFixed(1);
+      const diff = g.all.total - g.expected, ahead = diff >= -0.05;
+      const streak = gritStreak(gritDays(), g.today);
+      return `<div class="grit-hero">
+        <div class="grit-hero-coin">${gritCoinHtml(pct, g.all.total)}</div>
+        <div class="grit-hero-stats">
+          <div class="grit-big">${f1(g.all.total)}<small> / ${GRIT.target} mi</small></div>
+          <div class="grit-chip" style="color:${ahead ? 'var(--olive-bright)' : 'var(--signal-amber)'}; border-color:currentColor;">${ahead ? (es ? '▲ ' : '▲ ') + '+' + f1(Math.max(0, diff)) + (es ? ' adelantado' : ' ahead') : '▼ ' + f1(-diff) + (es ? ' atrasado' : ' behind')}</div>
+          <div class="grit-kv"><b>${f1(g.perDay)}</b> ${es ? 'mi/día necesarias' : 'mi/day needed'}</div>
+          <div class="grit-kv"><b>${g.daysLeft}</b> ${es ? 'días (con hoy)' : 'days (incl. today)'}</div>
+          <div class="grit-kv"><b>${streak}</b> ${es ? (streak === 1 ? 'día de racha' : 'días de racha') : (streak === 1 ? 'day streak' : 'day streak')}</div>
+        </div>
+      </div>`;
+    }
+
     function renderGritCard() {
       if (!state.profile) return '';
       const es = getLang() === 'es';
@@ -6028,8 +6174,7 @@
       return `
         <div class="card" style="border-left:3px solid var(--coyote);">
           <div class="card-title">GRIT 100 · ${es ? 'NOVIEMBRE' : 'NOVEMBER'}</div>
-          <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">${boxes}</div>
-          ${gritCoinHtml(pct, g.all.total)}
+          ${g.started && !g.finished ? gritHeroHtml(g, pct) + gritChartHtml(g) : `<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">${boxes}</div>${gritCoinHtml(pct, g.all.total)}${g.finished ? gritChartHtml(g) : ''}`}
           <p style="font-size:11px; color:var(--paper-dim);">${line1}</p>
           ${line2 ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:2px;">${line2}</p>` : ''}
           <p style="font-size:11px; color:${color}; margin-top:4px; font-weight:600;">${status}</p>
@@ -6316,6 +6461,13 @@
       state.settings.dashCollapsed = [...c]; saveState(); render();
     }
     function dashOrder() {
+      // 2026.11.08-3: put the GRIT panel first once; after that the athlete's own order rules.
+      if (state.settings && !state.settings.gritTopV1) {
+        state.settings.gritTopV1 = true;
+        if (Array.isArray(state.settings.dashOrder) && state.settings.dashOrder.length) state.settings.dashOrder = ['grit', ...state.settings.dashOrder.filter(k => k !== 'grit')];
+        else state.settings.dashOrder = ['grit', ...DASH_WIDGETS.map(w => w[0]).filter(k => k !== 'grit')];
+        try { saveState(); } catch (e) {}
+      }
       const known = DASH_WIDGETS.map(w => w[0]);
       const saved = Array.isArray(state.settings?.dashOrder) ? state.settings.dashOrder.filter(k => known.includes(k)) : [];
       const out = saved.slice();
@@ -7332,7 +7484,7 @@
             <button class="detail-back" onclick="closeDetail()">←</button>
             <div class="detail-header-title">${getLang() === 'es' ? 'ACTIVIDAD' : 'ACTIVITY'} · ${act.dateISO}</div>
             <div style="display:flex; gap:6px;">
-              <button class="btn-small" onclick="exportGritUploadCSV('m:${GRIT.start.slice(0, 7)}')" title="${getLang() === 'es' ? 'CSV del mes para subir al GRIT 100' : 'Month CSV for the GRIT 100 upload'}">GRIT100</button>
+              <button class="btn-small" onclick="exportGritActivityCSV('${esc(act.id)}')" title="${getLang() === 'es' ? 'CSV de esta actividad para subir al GRIT 100 (en inglés)' : 'This activity as a GRIT 100 upload CSV'}">GRIT100</button>
               <button class="btn-small" onclick="exportActivityMarkdown('${esc(act.id)}')">${t('export_md')}</button>
             </div>
           </div>
@@ -9199,6 +9351,32 @@
       });
       return rows.sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start));
     }
+    // 2026.11.08-2: GRIT 100 CSV for ONE activity, always in English (the challenge site is in English).
+    function gritCommentEN(a) {
+      if (isMarchAct(a)) { const lb = a.manualFields?.vestLb; return 'Ruck march' + (lb ? ' ' + lb + ' lb vest' : ''); /* no comma: keeps the CSV cell unquoted */ }
+      const plan = a.linkedPlanDay != null ? (state.plan || []).find(p => p.day === a.linkedPlanDay) : null;
+      const ty = normalizeSessionType(plan?.type || a.manualFields?.trainingType || '') || '';
+      const notes = String(plan?.notes || '').toLowerCase();
+      if (ty === 'intervals') return /cuesta|hill/.test(notes) ? 'Hill repeats' : 'Interval run';
+      if (ty === 'tempo') return /espec[ií]fico|recorrido|course/.test(notes) ? 'Race course tempo run' : 'Tempo run';
+      if (ty === 'long') return 'Long run';
+      if (ty === 'race_sim') return 'Race simulation';
+      if (ty === 'easy') return 'Easy run';
+      return 'Run';
+    }
+    function exportGritActivityCSV(id) {
+      const a = (state.tcxSessions || []).find(x => x.id === id);
+      if (!a || !(Number(a.totalDistMi) > 0)) { showToast('No distance in this activity.'); return; }
+      if (a.sport === 'biking') { showToast('Bike rides do not count for GRIT 100.'); return; }
+      const sec = Math.max(0, Math.round(Number(a.totalTimeSec) || 0));
+      const hms = [Math.floor(sec / 3600), Math.floor(sec % 3600 / 60), sec % 60].map(v => String(v).padStart(2, '0')).join(':');
+      const q = (x) => { const v = String(x == null ? '' : x); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+      const row = [a.dateISO, a.elevGainFt != null ? Math.round(a.elevGainFt) : '', hms, isMarchAct(a) ? 'Ruck' : 'Run', gritCommentEN(a), (Math.round(Number(a.totalDistMi) * 100) / 100).toFixed(2)];
+      const csv = GRIT_UPLOAD_HEADERS.join(',') + '\r\n' + row.map(q).join(',') + '\r\n';
+      downloadBlob(csv, 'GRIT100_' + a.dateISO + '_' + (isMarchAct(a) ? 'ruck' : 'run') + '.csv', 'text/csv;charset=utf-8');
+      showToast('✓ GRIT 100 CSV: ' + a.dateISO + ' · ' + row[5] + ' mi');
+    }
+
     function exportGritUploadCSV(period) {
       period = period || reportPeriod;
       const rows = buildGritUploadRows(period);
@@ -12777,7 +12955,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.08-1';
+    const APP_BUILD = '2026.11.08-3';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
