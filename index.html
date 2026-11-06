@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>FitCoach Táctico</title>
-  <meta name="theme-color" content="#0a0d08">
+  <meta name="theme-color" content="#10150f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="FitCoach Táctico">
@@ -1232,6 +1232,268 @@
     .cmp-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
     .cmp-table th:first-child, .cmp-table td:first-child { position:sticky; left:0; background:var(--field-dark); z-index:1; white-space:nowrap; }
     .cmp-table td { white-space:nowrap; }
+  
+
+    /* ═══ FITCOACH · ACCESIBILIDAD VISUAL / REFRESCO DE INTERFAZ ═══ */
+    :root {
+      --paper-dim: #c1c0b5;
+      --coyote-text: #dec78e;
+      --olive-text: #a7d477;
+      --blue-text: #9bc9e8;
+      --rust-text: #ff9b91;
+      --field-line: #526148;
+      --field-surface: #192016;
+      --field-surface2: #232d1d;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      font-size: 15px;
+      line-height: 1.55;
+      background-image:
+        repeating-linear-gradient(0deg, transparent, transparent 47px, rgba(120, 150, 94, 0.045) 47px, rgba(120, 150, 94, 0.045) 48px),
+        repeating-linear-gradient(90deg, transparent, transparent 47px, rgba(120, 150, 94, 0.045) 47px, rgba(120, 150, 94, 0.045) 48px);
+    }
+
+    .fc-skip-link {
+      position: fixed;
+      z-index: 5000;
+      top: 8px;
+      left: 8px;
+      transform: translateY(-150%);
+      padding: 12px 16px;
+      border-radius: 8px;
+      background: var(--coyote);
+      color: var(--black-olive);
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 4px 18px rgba(0,0,0,.35);
+    }
+    .fc-skip-link:focus { transform: translateY(0); }
+
+    header {
+      min-height: 68px;
+      height: auto;
+      padding: 8px 20px;
+      background: rgba(17, 21, 13, .98);
+      box-shadow: 0 4px 18px rgba(0,0,0,.18);
+    }
+    .header-mark { border-radius: 5px; }
+    .header-info .callsign { font-size: 11px; }
+    .header-info .name { font-size: 16px; }
+    .header-right { gap: 6px; }
+    .status-pill {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 11px;
+      letter-spacing: .4px;
+    }
+    .fc-a11y-toggle {
+      min-width: 44px;
+      min-height: 44px;
+      padding: 6px 9px;
+      color: var(--paper);
+      border-color: var(--coyote-dim);
+      font: 700 14px/1 var(--font-mono);
+      cursor: pointer;
+    }
+    .fc-a11y-toggle[aria-pressed="true"] {
+      color: var(--black-olive);
+      background: var(--coyote);
+      border-color: var(--coyote);
+    }
+
+    main { scroll-padding-top: 16px; }
+    main:focus { outline: none; }
+    .view-container {
+      max-width: 980px;
+      padding: 24px 22px;
+      padding-bottom: calc(118px + env(safe-area-inset-bottom, 0px));
+    }
+    .detail-body {
+      max-width: 980px;
+      padding: 22px;
+    }
+
+    .card, .mission-clock, .tcx-analysis, .onboarding-card, .md-modal-card {
+      border-radius: 12px;
+    }
+    .card, .tcx-analysis { padding: 20px; }
+    .mission-clock { border-radius: 14px; }
+    .session-card, .activity-list-item {
+      border-radius: 10px;
+      min-height: 58px;
+      padding: 15px 16px;
+    }
+    .card-title {
+      font-size: 12px;
+      letter-spacing: 1.1px;
+      margin-bottom: 16px;
+    }
+    .card-title::before { border-radius: 2px; }
+    .session-info h3, .session-info .h3 { font-size: 16px; }
+    .session-info p { font-size: 12px; line-height: 1.45; }
+    .plan-list { font-size: 14px; line-height: 1.6; }
+    .plan-list.compact { font-size: 12px; }
+    .form-label, .manual-field-row label { font-size: 12px; }
+    .form-hint { font-size: 12px; line-height: 1.5; }
+    .clock-label, .clock-coords, .clock-stat-label { font-size: 11px; }
+    .clock-number { font-size: clamp(58px, 8vw, 76px); }
+
+    input[type="text"], input[type="number"], input[type="date"], input[type="time"],
+    input[type="search"], textarea, select {
+      min-height: 46px;
+      border-radius: 8px;
+      border-color: #66745a;
+      padding: 11px 13px;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    textarea { min-height: 104px; }
+    input[type="checkbox"] { width: 22px; height: 22px; flex: 0 0 22px; }
+    .checkbox-item { min-height: 44px; gap: 12px; }
+
+    .btn, .btn-small, .detail-back, .dash-bar button,
+    .section-toggle button, .grit-tab, .fc-btns button {
+      min-height: 44px;
+      border-radius: 8px;
+      letter-spacing: .35px;
+    }
+    .btn { padding: 12px 16px; font-size: 13px; }
+    .btn-small { padding: 10px 13px; font-size: 11px; }
+    .btn-primary { background: #dfbd72; color: #11150d; }
+    .btn-primary:hover { background: #f0d18d; }
+    .btn-secondary { border-color: #657257; }
+    button, [role="button"], summary { touch-action: manipulation; }
+    button:disabled { opacity: .55; }
+
+    nav {
+      min-height: 72px;
+      height: calc(72px + env(safe-area-inset-bottom, 0px));
+      border-top-color: #5a674d;
+      box-shadow: 0 -8px 24px rgba(0,0,0,.22);
+      padding-top: 4px;
+    }
+    nav button {
+      min-height: 64px;
+      gap: 5px;
+      font-size: 11px;
+      letter-spacing: .4px;
+      font-weight: 600;
+    }
+    nav button.active {
+      background: rgba(201,169,97,.08);
+      color: #e4c77f;
+    }
+    nav button.active::before { height: 3px; width: 32px; border-radius: 4px; }
+    nav button .nav-icon, nav .nav-icon svg.ic { width: 23px; height: 23px; }
+
+    .dash-head {
+      min-height: 46px;
+      font-size: 11px;
+      border-radius: 7px 7px 0 0;
+    }
+    .dash-bar { border-radius: 8px; padding: 8px; }
+    .badge, .session-tag { border-radius: 6px; }
+    .status-pill:focus-visible, .btn:focus-visible, .btn-small:focus-visible,
+    nav button:focus-visible, .session-card:focus-visible,
+    .activity-list-item:focus-visible, .fc-a11y-toggle:focus-visible {
+      outline: 3px solid #f0cf83 !important;
+      outline-offset: 3px;
+    }
+    :focus-visible { outline: 3px solid #f0cf83 !important; outline-offset: 3px; }
+    input:focus-visible, select:focus-visible, textarea:focus-visible {
+      border-color: #f0cf83 !important;
+      box-shadow: 0 0 0 3px rgba(240,207,131,.18);
+    }
+    .empty-state { border-radius: 12px; }
+    .toast { border-radius: 9px; font-size: 13px; }
+    .splits-table th { font-size: 11px; }
+    .splits-table td { font-size: 13px; }
+
+    /* A two-column dashboard on wide screens removes the long single-column scroll. */
+    @media (min-width: 1000px) {
+      .view-container { max-width: 1160px; padding: 28px 28px; }
+      .view-container[data-dash="1"] {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        column-gap: 22px;
+        row-gap: 8px;
+        align-items: start;
+      }
+      .view-container[data-dash="1"] > .mission-clock,
+      .view-container[data-dash="1"] > .dash-w[data-w="route"],
+      .view-container[data-dash="1"] > .dash-w[data-w="races"],
+      .view-container[data-dash="1"] > .dash-w[data-w="today"],
+      .view-container[data-dash="1"] > .dash-w[data-w="grit"],
+      .view-container[data-dash="1"] > .dash-w[data-w="prediction"],
+      .view-container[data-dash="1"] > .dash-tools {
+        grid-column: 1 / -1;
+      }
+      .view-container[data-dash="1"] > .dash-w { min-width: 0; }
+      .detail-body { max-width: 1040px; }
+    }
+
+    /* User-activated larger-text mode. The preference is stored locally on this device. */
+    html.fc-readable body { font-size: 17px; }
+    html.fc-readable .view-container,
+    html.fc-readable .detail-body { font-size: 17px; line-height: 1.65; }
+    html.fc-readable .card-title { font-size: 14px !important; }
+    html.fc-readable .form-label,
+    html.fc-readable .manual-field-row label,
+    html.fc-readable .session-info p,
+    html.fc-readable .clock-label,
+    html.fc-readable .clock-coords,
+    html.fc-readable .clock-stat-label,
+    html.fc-readable .sitrep-label,
+    html.fc-readable .fc-slot-h { font-size: 13px !important; }
+    html.fc-readable .plan-list { font-size: 15px !important; }
+    html.fc-readable .plan-list.compact { font-size: 13px !important; }
+    html.fc-readable .form-hint,
+    html.fc-readable .session-info p,
+    html.fc-readable .grit-kv,
+    html.fc-readable .finding-line { line-height: 1.65; }
+    html.fc-readable .btn-small,
+    html.fc-readable .section-toggle button,
+    html.fc-readable .grit-tab { min-height: 48px; font-size: 12px; }
+    html.fc-readable .splits-table { font-size: 14px; }
+    html.fc-readable .splits-table th { font-size: 12px; }
+
+    @media (max-width: 700px) {
+      .view-container { max-width: 100%; padding: 18px 14px; padding-bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
+      .detail-body { padding: 16px 14px; }
+      .card, .tcx-analysis { padding: 16px; }
+      .clock-main { padding: 8px 16px 16px; }
+      .clock-top { padding: 13px 16px 0; }
+    }
+    @media (max-width: 420px) {
+      header { padding: 6px 9px; min-height: 62px; }
+      .header-left { gap: 8px; }
+      .header-mark { width: 29px; height: 29px; }
+      .header-info .callsign { font-size: 9px; letter-spacing: 1px; }
+      .header-info .name { font-size: 13px; letter-spacing: 0; }
+      .header-right { gap: 4px; }
+      .status-pill { min-height: 38px; padding: 5px 7px; font-size: 9px; }
+      .fc-a11y-toggle { min-width: 38px; min-height: 40px; font-size: 13px; }
+      nav { min-height: 68px; height: calc(68px + env(safe-area-inset-bottom, 0px)); }
+      nav button { min-height: 60px; font-size: 10px; }
+      .btn-group { gap: 8px; }
+      .btn { font-size: 12px; }
+      .fc-ampm { gap: 8px; }
+    }
+    @media (prefers-contrast: more) {
+      :root { --field-line: #829075; --paper-dim: #e1dfd3; --coyote-text: #f0d99e; }
+      .card, .session-card, .activity-list-item, input, select, textarea { border-width: 2px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .view.active { animation: none; }
+    }
+
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
@@ -10321,6 +10583,7 @@
         : '';
 
       return `
+        <a class="fc-skip-link" href="#main-content">${getLang() === 'es' ? 'Saltar al contenido' : 'Skip to content'}</a>
         <header>
           <div class="header-left">
             <div class="header-mark"></div>
@@ -10330,6 +10593,7 @@
             </div>
           </div>
           <div class="header-right">
+            <button type="button" id="fc-a11y-toggle" class="status-pill fc-a11y-toggle" onclick="toggleReadableMode()" aria-pressed="false" aria-label="${getLang() === 'es' ? 'Activar texto ampliado' : 'Enable larger text'}" title="${getLang() === 'es' ? 'Alternar texto ampliado' : 'Toggle larger text'}">A+</button>
             <div class="status-pill" role="button" tabindex="0" title="${getLang() === 'es' ? 'Forzar actualización (no borra tus datos)' : 'Force refresh (keeps your data)'}" aria-label="${getLang() === 'es' ? 'Forzar actualización, versión ' : 'Force refresh, version '}${APP_BUILD}" onclick="forceRefreshApp()" style="flex-direction:column; gap:0; line-height:1.15; padding:3px 8px; white-space:nowrap;"><span style="font-size:13px;">↻</span><span style="font-size:9px; letter-spacing:.3px;">${APP_BUILD.replace(/^20\d\d\./, '')}</span></div>
             <div class="status-pill" onclick="switchView('profile')">${getLang() === 'es' ? 'PERFIL' : 'PROFILE'}</div>
             <div class="status-pill" onclick="toggleLang()">
@@ -10337,7 +10601,7 @@
             </div>
           </div>
         </header>
-        <main>
+        <main id="main-content" tabindex="-1" aria-label="${getLang() === 'es' ? 'Contenido principal' : 'Main content'}">
           <div class="view ${currentView === 'home' ? 'active' : ''}">${renderDashboard()}</div>
           <div class="view ${currentView === 'tcx' ? 'active' : ''}">${renderTCX()}</div>
           <div class="view ${currentView === 'calendar' ? 'active' : ''}">${currentView === 'calendar' ? renderCalendarView() : ''}</div>
@@ -13810,5 +14074,42 @@
 })();
 
 </script>
+
+<script id="fc-accessibility-controller">
+(function () {
+  'use strict';
+  var KEY = 'fc_accessible_reading_mode_v1';
+  var enabled = false;
+  try { enabled = localStorage.getItem(KEY) === '1'; } catch (e) {}
+
+  function sync() {
+    var es = document.documentElement.lang !== 'en';
+    document.documentElement.classList.toggle('fc-readable', enabled);
+    var button = document.getElementById('fc-a11y-toggle');
+    if (!button) return;
+    button.textContent = enabled ? 'A−' : 'A+';
+    button.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    button.setAttribute('aria-label', enabled
+      ? (es ? 'Desactivar texto ampliado' : 'Turn off larger text')
+      : (es ? 'Activar texto ampliado' : 'Enable larger text'));
+    button.title = enabled
+      ? (es ? 'Desactivar texto ampliado' : 'Turn off larger text')
+      : (es ? 'Activar texto ampliado' : 'Enable larger text');
+  }
+
+  window.toggleReadableMode = function () {
+    enabled = !enabled;
+    try { localStorage.setItem(KEY, enabled ? '1' : '0'); } catch (e) {}
+    sync();
+  };
+
+  var app = document.getElementById('app');
+  if (app && window.MutationObserver) {
+    new MutationObserver(sync).observe(app, { childList: true, subtree: true });
+  }
+  sync();
+})();
+</script>
+
 </body>
 </html>
