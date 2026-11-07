@@ -1,31 +1,35 @@
-// FitCoach 5K — service worker
-// Build: 2026.09.26-1
+// FitCoach Táctico — service worker
+// Build: 2026.11.08-6 (pairs with index.html APP_BUILD 2026.11.08-6)
 //
 // WHY THIS FILE LOOKS LIKE THIS
 // A cache-first service worker is the standard PWA recipe and it is the wrong recipe for a
 // single-file app that gets redeployed often: index.html is served from cache, so a new deploy
-// is invisible until the service worker itself changes. The app pins itself to a stale build
-// and no amount of pull-to-refresh fixes it.
+// is invisible until the service worker itself changes.
 //
-// Strategy here:
+// Strategy:
 //   • Navigations / HTML  → NETWORK FIRST, cache as offline fallback.
-//     Online you always get the build that is actually on the server. Offline you get the last
-//     one that worked.
 //   • Everything else     → cache first, refreshed in the background (stale-while-revalidate).
 //   • CACHE_VERSION bump  → every old cache is deleted on activate.
+//
+// 2026.11.08-6:
+//   • HTML is stored under ONE key ('./index.html'). The header ↻ button reloads with
+//     '?fresh=<timestamp>'; before, every press saved another copy of the 1.2 MB page.
+//   • Only OK (200) responses are cached, so a failed deploy (404/500) never replaces the
+//     last good offline copy.
+//   • manifest.json is precached for offline install.
 //
 // After editing this file, bump CACHE_VERSION. That byte change is what tells the browser a new
 // worker exists.
 
-const CACHE_VERSION = 'fitcoach-v2026.10.18-1';
-const SHELL = ['./', './index.html'];
+const CACHE_VERSION = 'fitcoach-v2026.11.08-6';
+const SHELL = ['./', './index.html', './manifest.json'];
+const HTML_KEY = './index.html';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_VERSION)
-      .then((cache) => cache.addAll(SHELL))
-      // A missing optional file must not abort the install and leave the app uncached.
-      .catch((err) => console.warn('[sw] shell precache incomplete:', err))
+      // One at a time: a missing optional file must not abort the whole precache.
+      .then((cache) => Promise.all(SHELL.map((u) => cache.add(u).catch((err) => console.warn('[sw] precache skipped:', u, err)))))
   );
 });
 
@@ -38,8 +42,7 @@ self.addEventListener('activate', (event) => {
   })());
 });
 
-// The page asks for this when it detects a waiting worker, so an update does not sit idle
-// until the user closes every tab.
+// The page asks for this when it detects a waiting worker.
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
@@ -51,7 +54,7 @@ const isHTMLRequest = (request) =>
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Only GET is cacheable, and cross-origin requests (weather API, fonts) pass straight through.
+  // Only GET is cacheable; cross-origin requests (weather API, fonts) pass straight through.
   if (request.method !== 'GET') return;
   if (new URL(request.url).origin !== self.location.origin) return;
 
@@ -60,14 +63,15 @@ self.addEventListener('fetch', (event) => {
     event.respondWith((async () => {
       try {
         const fresh = await fetch(request, { cache: 'no-store' });
-        const cache = await caches.open(CACHE_VERSION);
-        cache.put(request, fresh.clone());
+        if (fresh && fresh.ok) {
+          const cache = await caches.open(CACHE_VERSION);
+          await cache.put(HTML_KEY, fresh.clone());
+        }
         return fresh;
       } catch (err) {
-        const cached = await caches.match(request);
+        const cache = await caches.open(CACHE_VERSION);
+        const cached = (await cache.match(HTML_KEY)) || (await cache.match(request, { ignoreSearch: true })) || (await cache.match('./'));
         if (cached) return cached;
-        const shell = await caches.match('./index.html');
-        if (shell) return shell;
         throw err;
       }
     })());
@@ -77,13 +81,14 @@ self.addEventListener('fetch', (event) => {
   // Static assets: serve from cache for speed, refresh in the background for next time.
   event.respondWith((async () => {
     const cache = await caches.open(CACHE_VERSION);
-    const cached = await cache.match(request);
+    const cached = await cache.match(request, { ignoreSearch: true });
     const network = fetch(request)
       .then((response) => {
         if (response && response.ok) cache.put(request, response.clone());
         return response;
       })
       .catch(() => null);
-    return cached || (await network) || Response.error();
+    if (cached) { event.waitUntil(network); return cached; }
+    return (await network) || Response.error();
   })());
 });
