@@ -1485,6 +1485,10 @@
     .fc-q-actions .btn { flex: 1; font-size: 11px; min-width: 90px; }
     /* 2026.11.09-2: logo más grande y ajustable desde Más (32–76 px). El encabezado crece con él; el logo nunca se sale. */
     :root { --fc-logo: 52px; }
+    /* 2026.11.09-4: accesibilidad */
+    .fc-sr-only { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+    .fc-linkbtn { display: block; width: 100%; min-height: 44px; margin-top: 8px; padding: 8px 0; background: none; border: 0; text-align: left; font-size: 11px; color: var(--paper-dim); font-family: inherit; cursor: pointer; }
+    .fc-linkbtn:focus-visible { outline: 2px solid var(--coyote); outline-offset: 2px; }
     .fc-home-logo { width: var(--fc-logo); height: var(--fc-logo); border-radius: 10px; }
     .fc-home-logo img { width: 100%; height: 100%; object-fit: contain; }
     .fc-home-logo .header-mark { width: calc(var(--fc-logo) * 0.66); height: calc(var(--fc-logo) * 0.66); }
@@ -5815,6 +5819,14 @@
     // old templates). When the line cannot be converted exactly, returns one open step flagged
     // steps.planParsed = 'approx' so the UI can say so instead of inventing a structure.
     const MI_M = 1609.344;
+    // 2026.11.09-4: ritmo de "esfuerzo de 5K" para el reloj: el ritmo del 5K del perfil ±10 s/mi.
+    function fcFiveKEffortPace() {
+      const fiveK = Number(state.profile && state.profile.currentFiveKSec) || 0;
+      if (!(fiveK > 900 && fiveK < 3600)) return null;
+      const c = fiveK / 3.10686;
+      const fast = Math.round(c - 10), slow = Math.round(c + 10);
+      return { fast, slow, text: `${fmtPaceNoUnit(fast)}–${fmtPace(slow)}` };
+    }
     function planLineTargets(session) {
       const txt = String(session?.notes || '').toLowerCase();
       if (!txt) return null;
@@ -5850,14 +5862,16 @@
           for (let i = 1; i <= n; i++) {
             st({ durationType: 'time', durationValue: sec, intensity: 'active', label: `Aceleración ${i}/${n}`,
               cue: 'Rápido y suelto, no a tope.', fitName: `Acel ${i}/${n}` });
-            st({ durationType: 'open', durationValue: 0, intensity: 'rest', label: 'Trote suave',
-              cue: 'Libre: pulsa Vuelta en el reloj cuando estés listo.', fitName: 'Trote suave' });
+            // 2026.11.09-4: regla del proyecto — pausa caminando de 1 min (antes era libre, con el botón de vuelta).
+            st({ durationType: 'time', durationValue: 60, intensity: 'rest', label: 'Pausa caminando',
+              cue: '1 min caminando.', fitName: 'Pausa caminando' });
           }
         }
       };
       const cooldown = () => {
-        if (coolM) st({ durationType: 'time', durationValue: +coolM[1] * 60, intensity: 'cooldown', ...hr(100, 148),
-          label: 'Trote final', cue: 'Baja la FC; camina si hace falta.', fitName: 'Trote final' });
+        // 2026.11.09-4: trote final en Z1 con techo de 140 (regla del proyecto; antes 148).
+        if (coolM) st({ durationType: 'time', durationValue: +coolM[1] * 60, intensity: 'cooldown', ...hr(100, 140),
+          label: 'Trote final', cue: 'Z1: si pasa de 140, camina hasta 130 y vuelve a trotar.', fitName: 'Trote final' });
       };
 
       // 1) Sustained-pace (tempo) with "N min a FC a b" — first 2 min at 12:00–12:30/mi (project rule).
@@ -5888,11 +5902,14 @@
           const recM = /con\s+(\d+)\s*min\s+de\s+trote/.exec(set.tail);
           const effort = /esfuerzo\s+(?:de\s+)?(\d+\s*a\s*\d+|5k)/.exec(set.tail);
           const what = up ? 'Subida' : down ? 'Bajada' : 'Repetición';
+          // 2026.11.09-4: "esfuerzo de 5K" en plano lleva objetivo de ritmo: el ritmo del 5K del perfil ±10 s/mi
+          // (31:06 → 9:51–10:11/mi). La FC no sirve de objetivo en 3 min: tarda en subir.
+          const fivePace = effort && /5k/.test(effort[1]) && !up && !down ? fcFiveKEffortPace() : null;
           for (let i = 1; i <= set.n; i++) {
-            st({ durationType: 'time', durationValue: set.sec, intensity: 'active',
+            st(Object.assign({ durationType: 'time', durationValue: set.sec, intensity: 'active',
               label: `${what} ${i}/${set.n}`,
-              cue: effort ? `Esfuerzo ${effort[1].replace('5k', 'de 5K')}.` : (down ? 'Ritmo de carrera, zancada corta y cadencia alta.' : ''),
-              fitName: `${what.slice(0, 6)} ${i}/${set.n}` });
+              cue: effort ? `Esfuerzo ${effort[1].replace('5k', 'de 5K')}${fivePace ? ` (${fivePace.text}); la FC al final, ~174–184` : ''}.` : (down ? 'Ritmo de carrera, zancada corta y cadencia alta.' : ''),
+              fitName: `${what.slice(0, 6)} ${i}/${set.n}` }, fivePace ? { targetType: 'speed', targetLow: MI_M / fivePace.slow, targetHigh: MI_M / fivePace.fast, paceText: fivePace.text } : {}));
             const last = si === sets.length - 1 && i === set.n;
             if (last) continue;
             if (recM) st({ durationType: 'time', durationValue: +recM[1] * 60, intensity: 'rest',
@@ -5902,6 +5919,25 @@
               cue: 'Libre: pulsa Vuelta en el reloj cuando estés listo.', fitName: 'Recuperacion' });
           }
         });
+        cooldown();
+        steps.planParsed = 'exact';
+        return steps;
+      }
+
+      // 2026.11.09-4: D1/D2 en el recorrido → calentamiento, aceleraciones, milla 1, millas 2–5, milla 6 y trote final.
+      if (/recorrido/.test(txt) && /tempo espec[ií]fico|simulaci/.test(txt)) {
+        const m1 = /milla\s*1\s+a\s+fc\s+(\d{3})\s*a\s*(\d{3})/.exec(txt);
+        const m6 = /milla\s*6\s+fuerte\s+hasta\s+fc\s+(\d{3})/.exec(txt);
+        const cap = /techo\s+de\s+fc\s+(\d{3})/.exec(txt);
+        const courseM = /recorrido\s+completo\s+de\s+(\d+(?:\.\d+)?)/.exec(txt);
+        const courseMi = courseM ? +courseM[1] : 6.3;
+        warmup();
+        st({ durationType: 'distance', durationValue: 1 * MI_M, intensity: 'active', ...hr(m1 ? +m1[1] : 165, m1 ? +m1[2] : 172),
+          label: 'Recorrido: milla 1 (subida)', cue: 'Controlada: no salgas pasado en la subida.', fitName: 'Rec milla 1' });
+        st({ durationType: 'distance', durationValue: Math.max(0.5, courseMi - 2) * MI_M, intensity: 'active', ...hr(140, cap ? +cap[1] : 174),
+          label: `Recorrido: millas 2–5 (bajada)`, cue: 'Esfuerzo de carrera por sensación (7/10); pasos cortos y cadencia de 170 o más. El rango solo avisa si pasas del techo.', fitName: 'Rec millas 2-5' });
+        st({ durationType: 'distance', durationValue: 1 * MI_M, intensity: 'active', ...hr(170, m6 ? +m6[1] : 180),
+          label: 'Recorrido: milla 6 (repechos)', cue: 'Aprieta en los repechos; si pasas de 180 más de 30 s, afloja hasta bajar de 175.', fitName: 'Rec milla 6' });
         cooldown();
         steps.planParsed = 'exact';
         return steps;
@@ -6409,7 +6445,7 @@
       }
       const linked = todaySess.linkedActivityId;
       return `
-        <div class="card" style="border:1px solid var(--coyote); ${todaySess.completed?'':'background:linear-gradient(135deg, rgba(201,169,97,0.10), rgba(61,90,31,0.06));'}" onclick="openSessionDetail(${todaySess.day})">
+        <div class="card" data-fcrole="skip" style="border:1px solid var(--coyote); ${todaySess.completed?'':'background:linear-gradient(135deg, rgba(201,169,97,0.10), rgba(61,90,31,0.06));'}" onclick="openSessionDetail(${todaySess.day})">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
             <span style="font-size:11px; letter-spacing:1px; color:var(--paper-dim);">${es?'HOY · QUÉ TOCA':'TODAY · WHAT IS ON'}</span>
             ${todaySess.completed ? `<span class="badge">${t('badge_done')}</span>` : `<span class="session-tag">${sessionTag(todaySess)}</span>`}
@@ -6425,7 +6461,7 @@
             <div style="font-size:13px; color:var(--paper); margin-top:6px;">${sessionTitleHtml(todaySess)}</div>
           </details>` : ''}
           ${renderGearRecLine(todaySess)}
-          <p style="font-size:11px; color:var(--paper-dim); margin-top:8px;">${es?'Toca para ver la sesión completa y los segmentos':'Tap to see the full session and segments'} →</p>
+          <button type="button" class="fc-linkbtn" onclick="event.stopPropagation(); openSessionDetail(${todaySess.day})">${es?'Ver la sesión completa y los segmentos':'See the full session and segments'} →</button>
         </div>`;
     }
 
@@ -6656,7 +6692,7 @@
       const tab = (v, l) => `<button class="grit-tab ${view === v ? 'on' : ''}" onclick="gritSetView('${v}')" aria-pressed="${view === v}">${l}</button>`;
       const legend = view === 'cum' ? '' : `<div class="grit-legend"><span><i style="background:var(--olive-bright)"></i>${es ? 'Corrida' : 'Run'}</span><span><i style="background:var(--coyote)"></i>${es ? 'Marcha' : 'Ruck'}</span><span><i class="dash"></i>${es ? 'Plan' : 'Plan'}</span></div>`;
       return `<div class="grit-tabs" role="group">${tab('day', es ? 'DIARIO' : 'DAILY')}${tab('week', es ? 'SEMANAL' : 'WEEKLY')}${tab('cum', es ? 'ACUMULADO' : 'TOTAL')}</div>
-        <svg viewBox="0 0 ${W} ${H}" class="grit-chart" role="img" aria-label="GRIT 100">${svg}</svg>
+        <svg viewBox="0 0 ${W} ${H}" class="grit-chart" role="group" aria-label="GRIT 100">${svg}</svg>
         ${legend}
         <p class="grit-detail">${detail}</p>`;
     }
@@ -9203,7 +9239,7 @@
       const linkedN = state.plan.filter(s => s.dateISO && s.linkedActivityId).length;
       return `
         <div class="card" style="margin-bottom:12px; border:1px solid var(--field-line);">
-          <div class="card-title" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center;" onclick="togglePlanManager()">
+          <div class="card-title" style="cursor:pointer; display:flex; justify-content:space-between; align-items:center; min-height:44px;" onclick="togglePlanManager()">
             <span>${getLang() === 'es' ? 'GESTIONAR SESIONES' : 'MANAGE SESSIONS'} (${sorted.length})</span>
             <span style="font-size:11px; color:var(--coyote);">${planManagerOpen ? '▲' : '▼'}</span>
           </div>
@@ -13714,7 +13750,9 @@
       try {
         document.documentElement.lang = es ? 'es' : 'en';
         document.querySelectorAll('[onclick]').forEach(el => {
-          if (/^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(el.tagName)) return;
+          // 2026.11.09-4: los desplegables (details) y las tarjetas marcadas data-fcrole="skip" (tienen controles
+          // adentro y su propio botón) no se convierten en botón: un botón con controles dentro confunde al lector.
+          if (/^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY|DETAILS)$/.test(el.tagName) || el.getAttribute('data-fcrole') === 'skip') return;
           if (!el.hasAttribute('role')) el.setAttribute('role', 'button');
           if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '0');
         });
@@ -13824,7 +13862,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.09-3';
+    const APP_BUILD = '2026.11.09-4';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
@@ -14599,6 +14637,16 @@
   function a11y() {
     var L = lang();
     if (document.documentElement.lang !== L) document.documentElement.setAttribute('lang', L);
+    // 2026.11.09-4: título principal (h1) oculto a la vista, para que el lector de pantalla pueda saltar al contenido.
+    try {
+      var h1 = document.getElementById('fc-h1');
+      if (!h1) { h1 = document.createElement('h1'); h1.id = 'fc-h1'; h1.className = 'fc-sr-only'; }
+      var mainEl = document.querySelector('main');
+      if (mainEl && mainEl.firstChild !== h1) mainEl.insertBefore(h1, mainEl.firstChild);
+      var act = document.querySelector('nav button.active');
+      var h1t = 'FitCoach Táctico' + (act && act.textContent.trim() ? ' — ' + act.textContent.trim() : '');
+      if (h1.textContent !== h1t) h1.textContent = h1t;
+    } catch (e) {}
     document.querySelectorAll('nav button').forEach(function (b) {
       if (b.classList.contains('active')) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
     });
@@ -14608,7 +14656,8 @@
       if (t) i.setAttribute('aria-label', t.replace(/\s+/g, ' ').slice(0, 60));
     });
     document.querySelectorAll('[onclick]').forEach(function (e) {
-      if (/^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY)$/.test(e.tagName) || e.getAttribute('role') || e.hasAttribute('data-fcrole')) return;
+      // 2026.11.09-4: no se marcan como botón los desplegables (details) ni las barras dentro de las gráficas.
+      if (/^(BUTTON|A|INPUT|SELECT|TEXTAREA|SUMMARY|DETAILS)$/.test(e.tagName) || e.getAttribute('role') || e.hasAttribute('data-fcrole')) return;
       e.setAttribute('role', 'button'); e.setAttribute('data-fcrole', '1'); if (e.tabIndex < 0) e.tabIndex = 0;
       e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); e.click(); } });
     });
