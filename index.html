@@ -1467,6 +1467,31 @@
     .manual-field-row.fc-race-row > input, .manual-field-row.fc-race-row > select { width: 100%; max-width: 100% !important; min-width: 0; box-sizing: border-box; }
     .manual-field-row.fc-race-row > input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-height: 40px; }
     .manual-field-row.fc-race-row > input[type="date"]::-webkit-date-and-time-value { text-align: right; }
+    /* 2026.11.08-7: el logo es el botón de Inicio; logo y fondo propios. El fondo va en una capa fija
+       detrás de #app, así las tarjetas, el encabezado y la barra de abajo no cambian. */
+    .fc-home-logo { width: 40px; height: 40px; padding: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; border-radius: 8px; }
+    .fc-home-logo:focus-visible { outline: 2px solid var(--coyote); outline-offset: 3px; }
+    .fc-home-logo img { width: 40px; height: 40px; object-fit: contain; display: block; }
+    .fc-home-logo .header-mark { pointer-events: none; }
+    #fc-bg-layer { position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0; transition: opacity .3s; overflow: hidden; }
+    #fc-bg-layer img, #fc-bg-layer video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    #app { position: relative; z-index: 1; }
+    .fc-media-preview { width: 64px; height: 64px; object-fit: contain; border: 1px solid var(--field-line); border-radius: 6px; background: var(--field-dark); flex-shrink: 0; }
+    .fc-media-row { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+    .fc-q-item { border: 1px solid var(--field-line); border-radius: 4px; padding: 10px; margin-top: 10px; }
+    .fc-q-item.fc-q-applied { opacity: .75; }
+    .fc-q-days { font-family: var(--font-mono); font-size: 11px; color: var(--paper-dim); margin: 6px 0 8px; line-height: 1.6; }
+    .fc-q-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .fc-q-actions .btn { flex: 1; font-size: 11px; min-width: 90px; }
+    /* 2026.11.09-2: logo más grande y ajustable desde Más (32–76 px). El encabezado crece con él; el logo nunca se sale. */
+    :root { --fc-logo: 52px; }
+    .fc-home-logo { width: var(--fc-logo); height: var(--fc-logo); border-radius: 10px; }
+    .fc-home-logo img { width: 100%; height: 100%; object-fit: contain; }
+    .fc-home-logo .header-mark { width: calc(var(--fc-logo) * 0.66); height: calc(var(--fc-logo) * 0.66); }
+    header .header-left { min-width: 0; }
+    header .header-info { min-width: 0; }
+    header .header-info .name { overflow-wrap: anywhere; }
+    .fc-day-add { color: var(--coyote-text); font-size: 14px; }
 
     @media (max-width: 700px) {
       .view-container { max-width: 100%; padding: 18px 14px; padding-bottom: calc(124px + env(safe-area-inset-bottom, 0px)); }
@@ -2104,7 +2129,8 @@
       ruler: '<path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/>',
       flag: '<path d="M5 21V4h11l-2 4 2 4H5"/>',
       target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
-      refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>'
+      refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>',
+      image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 9"/>'
     };
     function ic(name, size) {
       const sz = size || 16;
@@ -2978,27 +3004,36 @@
       return out;
     }
 
+    // 2026.11.09-3: el desacople de la sesión completa salía en −0.0 % en el fácil del 7-nov (real: +1.8 a +2.6 %).
+    // Causas: (1) promediaba las millas sin pesar el tiempo, así un tramo final corto (0.40 mi en bajada) valía
+    // igual que una milla completa; (2) con 3 millas completas no quitaba la milla 1 (calentamiento).
+    // Ahora: quita la milla 1 si quedan ≥2 completas, descarta el tramo final de menos de 0.5 mi, parte las
+    // mitades por tiempo y pesa ritmo y FC por el tiempo de cada milla.
     function calcAerobicDecoupling(splits) {
       let usable = (splits || []).filter(sp => sp.avgHR != null && sp.avgHR > 0 && sp.paceSecPerUnit > 0);
-      // Mile 1 is warm-up: HR is still climbing, so it inflates the first-half efficiency and
-      // overstates decoupling. Drop it whenever at least 3 full miles remain (project rule).
-      const excludedFirst = usable.filter(sp => !sp.partial).length >= 4;
+      const excludedFirst = usable.filter(sp => !sp.partial).length >= 3;
       if (excludedFirst) usable = usable.slice(1);
+      const tSec = sp => sp.timeSec > 0 ? sp.timeSec : sp.paceSecPerUnit * ((sp.distM || 1609.344) / 1609.344);
+      const dM = sp => sp.distM > 0 ? sp.distM : (sp.timeSec > 0 ? sp.timeSec / sp.paceSecPerUnit * 1609.344 : 1609.344);
+      usable = usable.filter(sp => !sp.partial || dM(sp) >= 804);
       if (usable.length < 2) {
         return { value: null, valid: false, reasonEs: 'datos insuficientes', reasonEn: 'insufficient data' };
       }
-      const mid = Math.floor(usable.length / 2);
-      const first = usable.slice(0, mid), second = usable.slice(mid);
-
-      const avgHR1 = first.reduce((a, sp) => a + sp.avgHR, 0) / first.length;
-      const avgPace1 = first.reduce((a, sp) => a + sp.paceSecPerUnit, 0) / first.length;
-      const avgHR2 = second.reduce((a, sp) => a + sp.avgHR, 0) / second.length;
-      const avgPace2 = second.reduce((a, sp) => a + sp.paceSecPerUnit, 0) / second.length;
+      const totT = usable.reduce((a, sp) => a + tSec(sp), 0);
+      let cut = 1, bestGap = Infinity, acc = 0;
+      for (let i = 1; i < usable.length; i++) { acc += tSec(usable[i - 1]); const gap = Math.abs(acc - totT / 2); if (gap < bestGap) { bestGap = gap; cut = i; } }
+      const first = usable.slice(0, cut), second = usable.slice(cut);
+      const agg = arr => {
+        const T = arr.reduce((a, sp) => a + tSec(sp), 0), D = arr.reduce((a, sp) => a + dM(sp), 0);
+        return { pace: D > 0 ? T / (D / 1609.344) : 0, hr: arr.reduce((a, sp) => a + sp.avgHR * tSec(sp), 0) / (T || 1) };
+      };
+      const A1 = agg(first), A2 = agg(second);
+      const avgHR1 = A1.hr, avgPace1 = A1.pace, avgHR2 = A2.hr, avgPace2 = A2.pace;
 
       // Efficiency factor = speed / HR; pace is sec-per-unit, so speed is its reciprocal.
       const ef1 = (1 / avgPace1) / avgHR1;
       const ef2 = (1 / avgPace2) / avgHR2;
-      const value = ef1 > 0 ? ((ef1 - ef2) / ef1) * 100 : null;
+      const value = ef1 > 0 ? Math.round(((ef1 - ef2) / ef1) * 1000) / 10 : null;
 
       const netElev = (arr) => arr.reduce((sum, sp) => sum + ((sp.elevGainM || 0) - (sp.elevLossM || 0)), 0);
       const elevSkewM = Math.abs(netElev(second) - netElev(first));
@@ -3787,6 +3822,85 @@
     }
 
     // Finds the work block of a tempo (arranque + sustained portion) and analyses it.
+    // ═══ 2026.11.09-3: D1/D2 en el recorrido — se mide solo el recorrido (~6.3 mi), sin calentamiento ni trote final ═══
+    function renderCourseSegmentCard(c) {
+      const es = getLang() === 'es';
+      const z = c.timeInZones && c.timeInZones.pct || {};
+      return `
+        <div class="sitrep-label">${es ? 'RECORRIDO DE LA CARRERA (D1/D2)' : 'RACE COURSE (D1/D2)'}</div>
+        <div class="card">
+          <p style="font-size:11px; color:var(--paper-dim); margin-bottom:8px;">${es ? `Solo el recorrido: ${c.lapFrom === c.lapTo ? 'vuelta ' + (c.lapFrom + 1) : 'vueltas ' + (c.lapFrom + 1) + '–' + (c.lapTo + 1)} del reloj, sin el calentamiento (${secToMMSS(c.warmupSec)}) ni el trote final (${secToMMSS(c.cooldownSec)}).` : `Course only: watch ${c.lapFrom === c.lapTo ? 'lap ' + (c.lapFrom + 1) : 'laps ' + (c.lapFrom + 1) + '–' + (c.lapTo + 1)}, without the warm-up (${secToMMSS(c.warmupSec)}) or cool-down (${secToMMSS(c.cooldownSec)}).`}</p>
+          <div class="stat-grid">
+            <div class="stat-box"><div class="value">${c.distMi.toFixed(2)} mi</div><div class="label">${es ? 'DISTANCIA' : 'DISTANCE'}</div></div>
+            <div class="stat-box"><div class="value">${secToMMSS(c.durSec)}</div><div class="label">${es ? 'TIEMPO' : 'TIME'}</div></div>
+            <div class="stat-box"><div class="value">${fmtPace(c.paceSecPerMi)}</div><div class="label">${es ? 'RITMO' : 'PACE'}</div></div>
+            <div class="stat-box"><div class="value">${secToMMSS(c.projected10KSec)}</div><div class="label">${es ? 'EQUIVALENTE 10K' : '10K EQUIVALENT'}</div></div>
+            <div class="stat-box"><div class="value">${c.avgHR || '—'} / ${c.maxHR || '—'}</div><div class="label">${es ? 'FC MEDIA / MÁX' : 'AVG / MAX HR'}</div></div>
+            <div class="stat-box"><div class="value">${z.z4 || 0}% · ${z.z5 || 0}%</div><div class="label">${es ? 'EN Z4 · EN Z5' : 'IN Z4 · IN Z5'}</div></div>
+          </div>
+          <table class="splits-table" style="margin-top:10px;">
+            <thead><tr><th>${es ? 'Milla' : 'Mile'}</th><th>${es ? 'Ritmo' : 'Pace'}</th><th>FC</th><th>${es ? 'Desnivel' : 'Elev'}</th></tr></thead>
+            <tbody>${c.miles.map(m => `<tr><td>${m.mile}${m.partial ? '*' : ''}</td><td>${fmtPace(m.paceSecPerMi)}</td><td>${m.avgHR || '—'}/${m.maxHR || '—'}</td><td>+${m.upM}/−${m.downM} m</td></tr>`).join('')}</tbody>
+          </table>
+          <p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${es ? `Milla 1: ${c.miles[0] && c.miles[0].bandPct != null ? c.miles[0].bandPct + ' % en 165–172' : '—'}. El equivalente 10K escala el tiempo a 6.21 mi.` : `Mile 1: ${c.miles[0] && c.miles[0].bandPct != null ? c.miles[0].bandPct + '% in 165–172' : '—'}. The 10K equivalent scales the time to 6.21 mi.`}</p>
+        </div>`;
+    }
+
+    function isCourseSession(session) {
+      const t = String(session && session.notes || '').toLowerCase();
+      return !!session && /recorrido/.test(t) && (/tempo espec[ií]fico|simulaci/.test(t) || session.type === 'race_sim');
+    }
+    // El recorrido son las vueltas seguidas que suman 5.8–6.9 mi con el ritmo más rápido: una vuelta larga si se
+    // armó el entrenamiento con un paso "recorrido", o varias vueltas de 1 mi si el reloj marcó por milla.
+    function detectCourseSegment(act, lthr) {
+      lthr = lthr || 174;
+      const samples = sessionSamples(act);
+      const laps = lapTimeline(act).filter(l => l.dur >= 3);
+      if (!samples || !laps.length) return null;
+      const LO = 5.8 * 1609.344, HI = 6.9 * 1609.344;
+      let best = null;
+      for (let i = 0; i < laps.length; i++) {
+        let dm = 0, ds = 0;
+        for (let j = i; j < laps.length; j++) {
+          dm += laps[j].distM; ds += laps[j].dur;
+          if (dm > HI) break;
+          if (dm >= LO) { const sp = dm / ds; if (!best || sp > best.sp) best = { i, j, dm, ds, sp }; }
+        }
+      }
+      if (!best) return null;
+      const start = laps[best.i].start, end = laps[best.j].end;
+      const w = analyzeWindow(samples, start, end, lthr, Math.round(lthr * 0.948), lthr - 2);
+      if (!w) return null;
+      const L = samples.list.filter(x => x.t >= start && x.t <= end);
+      const d0 = L[0].d, miles = [];
+      let k0 = 0;
+      for (let m = 1; m <= Math.ceil(best.dm / 1609.344); m++) {
+        let k1 = L.findIndex((x, idx) => idx > k0 && x.d - d0 >= m * 1609.344);
+        if (k1 < 0) k1 = L.length - 1;
+        const W = L.slice(k0, k1 + 1);
+        if (W.length >= 2) {
+          const dd = W[W.length - 1].d - W[0].d, tt = W[W.length - 1].t - W[0].t;
+          const hs = W.filter(x => x.hr > 0).map(x => x.hr);
+          let up = 0, dn = 0;
+          for (let q = 1; q < W.length; q++) { if (W[q].alt != null && W[q - 1].alt != null) { const da = W[q].alt - W[q - 1].alt; if (da > 0) up += da; else dn -= da; } }
+          const inBand = hs.filter(h => h >= 165 && h <= 172).length;
+          miles.push({ mile: m, distMi: dd / 1609.344, paceSecPerMi: dd > 0 ? tt / (dd / 1609.344) : 0,
+            avgHR: hs.length ? Math.round(hs.reduce((a, b) => a + b, 0) / hs.length) : null, maxHR: hs.length ? Math.max(...hs) : null,
+            bandPct: hs.length ? Math.round(inBand / hs.length * 100) : null, upM: Math.round(up), downM: Math.round(dn), partial: dd < 1500 });
+        }
+        k0 = k1;
+        if (k1 >= L.length - 1) break;
+      }
+      const distMi = best.dm / 1609.344;
+      return {
+        kind: 'course', lapFrom: best.i, lapTo: best.j, distMi, durSec: best.ds,
+        paceSecPerMi: best.ds / distMi, avgHR: w.avgHR, maxHR: w.maxHR, avgCad: w.avgCad,
+        timeInZones: w.timeInZones, miles,
+        projected10KSec: Math.round(best.ds * 6.2137 / distMi),
+        warmupSec: Math.round(start), cooldownSec: Math.round(Math.max(0, (laps[laps.length - 1].end) - end))
+      };
+    }
+
     function detectWorkSegment(act, session, lthr) {
       lthr = lthr || 174;
       const type = normalizeSessionType((session && session.type) || act?.manualFields?.trainingType);
@@ -5427,7 +5541,7 @@
         title: { en: 'Identity & Physical Profile', es: 'Identidad y Perfil Físico' },
         subtitle: { en: 'Baseline data for mission calibration.', es: 'Datos base para calibrar la misión.' },
         fields: [
-          { key: 'name', type: 'text', label: { en: 'Full name / callsign', es: 'Nombre completo / indicativo' }, hint: { en: 'e.g. SSG Smith', es: 'ej. SSG Pérez' }, required: true },
+          { key: 'name', type: 'text', label: { en: 'Name', es: 'Nombre' }, hint: { en: 'Your name', es: 'Tu nombre' }, required: true },
           { key: 'age', type: 'number', label: { en: 'Age', es: 'Edad' }, min: 18, max: 70, required: true },
           { key: 'weightLb', type: 'number', label: { en: 'Current weight (lb)', es: 'Peso actual (lb)' }, min: 100, max: 350, required: true },
           { key: 'goalWeightLb', type: 'number', label: { en: 'Target weight (lb)', es: 'Peso meta (lb)' }, hint: { en: '~180', es: '~180' } },
@@ -5465,7 +5579,6 @@
         title: { en: 'Terrain Context', es: 'Contexto de Terreno' },
         subtitle: { en: 'Mission-specific load factors.', es: 'Factores de carga específicos de la misión.' },
         fields: [
-          { key: 'unit', type: 'text', label: { en: 'Unit (optional)', es: 'Unidad (opcional)' }, hint: { en: 'e.g. 1-1 IN BN', es: 'ej. 1-1 IN BN' } },
           { key: 'terrain', type: 'select', label: { en: 'Primary training terrain', es: 'Terreno principal de entrenamiento' }, options: [{ en: 'Flat / garrison', es: 'Plano / guarnición' }, { en: 'Mountain', es: 'Montaña' }, { en: 'Mixed', es: 'Mixto' }], required: true }
         ]
       },
@@ -7622,12 +7735,14 @@
     }
 
     // Import plan from Claude/ChatGPT and merge into current plan
-    function importClaudePlan(planText) {
+    // 2026.11.08-7: anchorISO = domingo de la semana destino (semanas programadas); sin él, la semana actual.
+    function importClaudePlan(planText, anchorISO, opts) {
+      opts = opts || {};
       try {
         const newSessions = parseClaudePlan(planText);
         if (!newSessions || newSessions.length === 0) {
-          showToast(t('claude_import_error'));
-          return;
+          if (!opts.silent) showToast(t('claude_import_error'));
+          return false;
         }
 
         // Anchor to the Monday of THIS calendar week (same logic renderCalendarView uses),
@@ -7635,7 +7750,7 @@
         // regardless of where that date falls in the auto-generated plan's day-of-program counter.
         // 2026.11.08-1: the week runs Sunday → Saturday (same as the GRIT 100 blocks). "Dom:" is the
         // Sunday that opens this week; "Lun:" … "Sáb:" follow it. `monday` keeps its name but is that Sunday.
-        const todayDate = parseISODateLocal(todayISO());
+        const todayDate = parseISODateLocal(anchorISO || todayISO());
         const monday = new Date(todayDate);
         monday.setDate(todayDate.getDate() - todayDate.getDay());
 
@@ -7703,11 +7818,12 @@
 
         state.plan.sort((a, b) => (a.dateISO || '').localeCompare(b.dateISO || ''));
         saveState();
-        render();
-        showToast(t('claude_import_success'));
+        if (!opts.silent) { render(); showToast(t('claude_import_success')); }
+        return true;
       } catch (e) {
         console.error('Plan import error:', e);
-        showToast(t('claude_import_error'));
+        if (!opts.silent) showToast(t('claude_import_error'));
+        return false;
       }
     }
 
@@ -7987,6 +8103,8 @@
               <div class="stat-box"><div class="value">${(a.vdot || 0).toFixed(1)}</div><div class="label">${t('stat_vdot')}</div></div>
             </div>
 
+            ${a.courseSegment ? renderCourseSegmentCard(a.courseSegment) : ''}
+
             <div class="sitrep-label">${getLang()==='es' ? 'RUTA EVALUADA' : 'ROUTE ANALYSIS'}</div>
             <div class="card">
               ${act.activityName ? `<div style="font-family:var(--font-display);font-size:14px;color:var(--coyote);margin-bottom:10px;">${act.activityName}</div>` : ''}
@@ -7994,7 +8112,7 @@
                 <label>${getLang()==='es' ? 'Ubicación' : 'Location'}</label>
                 <div style="display:flex;gap:6px;align-items:center;">
                   <span style="font-size:12px;color:var(--paper);">${mf.locationName || (act.firstGPS ? (getLang()==='es'?'GPS disponible':'GPS available') : (getLang()==='es'?'Sin GPS':'No GPS'))}</span>
-                  ${act.firstGPS && !mf.locationName ? `<button class="btn-small" style="font-size:11px;" onclick="fetchLocationFromGPS('${act.id}')">${getLang()==='es'?'Obtener':'Fetch'}</button>` : ''}
+                  ${act.firstGPS ? `<button class="btn-small" style="font-size:11px;" onclick="fetchLocationFromGPS('${act.id}')" title="${getLang()==='es'?'Buscar la ubicación con el GPS del archivo':'Look up the location from the file GPS'}">${mf.locationName ? '↻' : (getLang()==='es'?'Obtener':'Fetch')}</button>` : ''}
                 </div>
               </div>
               ${act.firstGPS ? `<div class="form-hint" style="margin-top:2px;">GPS: ${act.firstGPS.lat?.toFixed(5)}, ${act.firstGPS.lon?.toFixed(5)}</div>` : ''}
@@ -8439,6 +8557,8 @@
 
             ${renderStrengthRecCard(s, true)}
 
+            ${renderSessionEditCard(s)}
+
             ${s.notes ? `
             <div class="sitrep-label">${getLang() === 'es' ? 'INSTRUCCIÓN DEL PLAN' : 'PLAN INSTRUCTION'}</div>
             <div class="card" style="border-left: 3px solid var(--coyote);">
@@ -8814,7 +8934,6 @@
       const load = getCurrentLoadStatus();
 
       return `
-        <div class="sitrep-label">${getLang()==='es' ? 'CARGA DE ENTRENAMIENTO' : 'TRAINING LOAD'}</div>
         <div class="card">
           ${load ? `
             <div class="stat-grid" style="margin-bottom:14px;">
@@ -8916,9 +9035,140 @@
     }
 
     // Claude/ChatGPT training plan import card
-    function renderClaudeImportCard() {
+    // 2026.11.09-1: tarjetas de Semana que se minimizan, con el mismo estilo y memoria que las del tablero.
+    function wkSec(key, title, html) {
+      if (!String(html || '').trim()) return '';
+      const k = 'wk-' + key;
+      const shut = dashCollapsed().has(k);
+      return `<div class="dash-w${shut ? ' is-shut' : ''}" data-w="${k}" style="margin-bottom:12px;">
+        <button type="button" class="dash-head" aria-expanded="${!shut}" onclick="dashCollapse('${k}')"><span>${esc(title)}</span><span class="dash-chev">${shut ? '▸' : '▾'}</span></button>
+        ${shut ? '' : `<div class="dash-body">${html}</div>`}
+      </div>`;
+    }
+
+    // ═══ 2026.11.09-2: editar una sesión del plan con la misma línea de los bloques ═══
+    // Se escribe igual que en los bloques ("carrera fácil 4.5 miles, FC 130 a 148"); la opcional va en otra
+    // línea ("PM opcional: …"). Pasa por el mismo importador, así el tipo, la distancia y los objetivos salen iguales.
+    const FC_DAY_PREFIX = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sab'];
+    const FC_PREFIX_RE = /^\s*(lun|mar|mi[eé]|jue|vie|s[aá]b|dom)(?=[\s:.])[\s:.]*/i;
+    function fcSessionLineText(s) {
+      let main = String(s.notes || '').replace(FC_PREFIX_RE, '').trim();
+      if (!main) {
+        const words = { easy: 'carrera fácil', tempo: 'tempo', intervals: 'intervalos', long: 'carreras largas', rest: 'descanso total', cross_training: 'entrenamiento cruzado', race_sim: 'tempo específico' };
+        const mi = parseFloat(String(s.dist || ''));
+        main = (words[s.type] || s.type || 'descanso total') + (mi > 0 ? ` ${mi.toFixed(1)} miles` : '');
+      }
+      return main + (s.opt && s.opt.text ? `\n${s.opt.slot || 'PM'} opcional: ${s.opt.text}` : '');
+    }
+    function renderSessionEditCard(s) {
+      const es = getLang() === 'es';
       return `
-        <div class="card" style="margin-bottom:12px; border:1px solid var(--field-line); background:var(--field-dark);">
+        <div class="sitrep-label">${es ? 'EDITAR SESIÓN' : 'EDIT SESSION'}</div>
+        <div class="card">
+          <p style="font-size:11px; color:var(--paper-dim); margin-bottom:8px; line-height:1.5;">${es
+            ? 'Escríbela igual que en los bloques: el tipo (fácil, tempo, intervalos, largas, descanso o cruzado), la distancia como "4.5 miles" y las instrucciones. La opcional va en otra línea: "PM opcional: …". El día no se escribe: es el de la fecha de arriba.'
+            : 'Write it like a block line: the type (fácil, tempo, intervalos, largas, descanso or cruzado), the distance as "4.5 miles" and the instructions. The optional goes on its own line: "PM opcional: …". No day prefix: it uses the date above.'}</p>
+          <textarea id="fcEditLine-${s.day}" rows="4" style="width:100%; font-size:12px; padding:8px; border:1px solid var(--field-line); border-radius:2px; background:var(--field-dark); color:var(--paper); font-family:var(--font-mono); line-height:1.5;">${esc(fcSessionLineText(s))}</textarea>
+          <button type="button" class="btn btn-primary" style="width:100%; margin-top:8px;" onclick="fcSaveSessionEdit(${s.day})">${es ? 'GUARDAR CAMBIOS' : 'SAVE CHANGES'}</button>
+          ${s.linkedActivityId ? `<p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${es ? 'La actividad vinculada se vuelve a evaluar con la sesión nueva.' : 'The linked activity is re-scored against the new session.'}</p>` : ''}
+        </div>`;
+    }
+    function fcBuildDayLines(text, dateISO) {
+      const pref = FC_DAY_PREFIX[parseISODateLocal(dateISO).getDay()];
+      return String(text || '').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+        const rest = l.replace(FC_PREFIX_RE, '').replace(/^[:\s]+/, '');
+        return /^(am|pm)\s+opcional\b/i.test(rest) ? `${pref} ${rest}` : `${pref}: ${rest}`;
+      }).join('\n');
+    }
+    function fcSaveSessionEdit(day) {
+      const es = getLang() === 'es';
+      const s = state.plan.find(p => p.day === day);
+      const el = document.getElementById('fcEditLine-' + day);
+      if (!s || !el) return;
+      const lines = fcBuildDayLines(el.value, s.dateISO);
+      if (!lines || !importClaudePlan(lines, s.dateISO, { silent: true })) {
+        showToast(es ? '✕ No reconocí la línea: incluye el tipo (fácil, tempo, intervalos, largas, descanso o cruzado)' : '✕ Line not recognized: include the type (fácil, tempo, intervalos, largas, descanso or cruzado)');
+        return;
+      }
+      const s2 = state.plan.find(p => p.dateISO === s.dateISO) || s;
+      if (s2.linkedActivityId) {
+        const act = state.tcxSessions.find(a => a.id === s2.linkedActivityId);
+        try { if (act) rescoreSession(act); } catch (e) { console.warn('rescore after edit', e); }
+        saveState();
+      }
+      render();
+      showToast(es ? '✓ Sesión actualizada' : '✓ Session updated');
+    }
+    // Un día vacío de la semana: crea un descanso y abre la sesión para editarla.
+    function fcAddSessionOn(dateISO) {
+      if (!importClaudePlan(`${FC_DAY_PREFIX[parseISODateLocal(dateISO).getDay()]}: descanso total`, dateISO, { silent: true })) return;
+      const s = state.plan.find(p => p.dateISO === dateISO);
+      if (s) openSessionDetail(s.day);
+    }
+
+    // ═══ 2026.11.09-2: organizar las tarjetas de Semana (igual que "Organizar tablero" en Hoy) ═══
+    const WK_WIDGETS = [
+      ['load', 'Carga de entrenamiento', 'Training load'],
+      ['import', 'Importar plan desde Claude', 'Import plan from Claude'],
+      ['queue', 'Semanas programadas', 'Scheduled weeks'],
+      ['manage', 'Gestionar sesiones', 'Manage sessions'],
+      ['week', 'Semana actual', 'Current week'],
+      ['strength', 'Rutinas de fuerza', 'Strength routines']
+    ];
+    let wkEdit = false;
+    function wkOrder() {
+      const known = WK_WIDGETS.map(w => w[0]);
+      const saved = Array.isArray(state.settings?.wkOrder) ? state.settings.wkOrder.filter(k => known.includes(k)) : [];
+      const out = saved.slice();
+      known.forEach((k, i) => { if (!out.includes(k)) { const prev = known.slice(0, i).reverse().find(x => out.includes(x)); out.splice(prev ? out.indexOf(prev) + 1 : 0, 0, k); } });
+      return out;
+    }
+    function wkHidden() { return new Set(Array.isArray(state.settings?.wkHidden) ? state.settings.wkHidden : []); }
+    function toggleWkEdit() { wkEdit = !wkEdit; render(); }
+    function wkMove(key, dir) {
+      const order = wkOrder(), i = order.indexOf(key), j = i + dir;
+      if (i < 0 || j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]];
+      state.settings.wkOrder = order; saveState(); render();
+      requestAnimationFrame(() => { const el = document.querySelector(`.wk-arr[data-w="${key}"]`); if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' }); });
+    }
+    function wkToggle(key) {
+      const h = wkHidden(); h.has(key) ? h.delete(key) : h.add(key);
+      state.settings.wkHidden = [...h]; saveState(); render();
+    }
+    function wkReset() { delete state.settings.wkOrder; delete state.settings.wkHidden; saveState(); render(); }
+    // htmlByKey: el contenido de cada tarjeta. En modo normal pasa por wkSec (minimizable); "manage" y
+    // "strength" ya traen su propio formato y van tal cual.
+    function renderWeekArranged(htmlByKey) {
+      const es = getLang() === 'es';
+      const order = wkOrder(), hidden = wkHidden();
+      const name = k => { const w = WK_WIDGETS.find(x => x[0] === k); return w ? (es ? w[1] : w[2]) : k; };
+      const raw = { manage: true, strength: true };
+      const parts = order.map((k, i) => {
+        const off = hidden.has(k);
+        const html = htmlByKey[k] || '';
+        if (!wkEdit) {
+          if (off) return '';
+          return raw[k] ? html : wkSec(k, name(k), html);
+        }
+        const bar = `
+          <div class="dash-bar">
+            <span class="dash-name">${esc(name(k))}${off ? ` <small>${es ? 'Oculto' : 'Hidden'}</small>` : ''}</span>
+            <button type="button" onclick="wkMove('${k}', -1)" ${i === 0 ? 'disabled' : ''} aria-label="${es ? 'Subir' : 'Move up'} ${esc(name(k))}">▲</button>
+            <button type="button" onclick="wkMove('${k}', 1)" ${i === order.length - 1 ? 'disabled' : ''} aria-label="${es ? 'Bajar' : 'Move down'} ${esc(name(k))}">▼</button>
+            <button type="button" onclick="wkToggle('${k}')" aria-label="${off ? (es ? 'Mostrar' : 'Show') : (es ? 'Ocultar' : 'Hide')} ${esc(name(k))}" title="${off ? (es ? 'Mostrar' : 'Show') : (es ? 'Ocultar' : 'Hide')}">${off ? ic('eye', 16) : '✕'}</button>
+          </div>`;
+        return `<div class="dash-w wk-arr${off ? ' is-off' : ''}" data-w="${k}">${bar}</div>`;
+      }).join('');
+      const tools = `
+        <div class="dash-tools">
+          <button type="button" class="btn btn-secondary" style="flex:1;" onclick="toggleWkEdit()">${wkEdit ? (es ? '✓ LISTO' : '✓ DONE') : (es ? '✎ ORGANIZAR SEMANA' : '✎ ARRANGE WEEK')}</button>
+          ${wkEdit ? `<button type="button" class="btn btn-secondary" onclick="wkReset()">${es ? 'RESTABLECER' : 'RESET'}</button>` : ''}
+        </div>`;
+      return (wkEdit ? tools : '') + parts + tools;
+    }
+    function renderClaudeImportInner() {
+      return `<div class="card" style="margin-bottom:12px; border:1px solid var(--field-line); background:var(--field-dark);">
           <div class="card-title">${t('claude_import_title')}</div>
           <p style="font-size:11px; color:var(--paper-dim); margin-bottom:10px;">${t('claude_import_sub')}</p>
           <textarea id="claudePlanInput" placeholder="${t('claude_import_placeholder')}" style="width:100%; min-height:80px; font-size:11px; padding:8px; border:1px solid var(--field-line); border-radius:2px; font-family:var(--font-mono); color:var(--paper); background:var(--field-surface);" spellcheck="false"></textarea>
@@ -8927,7 +9177,14 @@
             <button class="btn btn-primary" style="flex:1; font-size:11px;" onclick="handleClaudeImport()">${t('claude_import_btn')}</button>
           </div>
           <input type="file" accept=".txt,.md" id="claudePlanFileInput" style="display:none;" onchange="handleClaudePlanFileUpload(event)" />
-        </div>
+        </div>`;
+    }
+
+    function renderClaudeImportCard() {
+      const es = getLang() === 'es';
+      return `
+        ${wkSec('import', t('claude_import_title'), renderClaudeImportInner())}
+        ${wkSec('queue', es ? 'Semanas programadas' : 'Scheduled weeks', renderPlanQueueCard())}
         ${renderPlanManagementCard()}`;
     }
 
@@ -9099,11 +9356,12 @@
       return `
         <div class="view-container">
 
-          ${renderTrainingLoadSection()}
-
-          ${renderClaudeImportCard()}
-
-          <div class="sitrep-label">${getLang() === 'es' ? 'SEMANA ACTUAL' : 'CURRENT WEEK'}</div>
+          ${renderWeekArranged({
+            load: renderTrainingLoadSection(),
+            import: renderClaudeImportInner(),
+            queue: renderPlanQueueCard(),
+            manage: renderPlanManagementCard(),
+            week: `
 
           <!-- WEEK STRIP -->
           <div style="display:grid; grid-template-columns: repeat(7, 1fr); gap:4px; margin-bottom:16px;">
@@ -9111,12 +9369,12 @@
               const color = d.session ? TYPE_COLORS[d.session.type] : 'var(--field-line)';
               const done = d.session?.completed;
               return `
-              <div onclick="${d.session ? `openSessionDetail(${d.session.day})` : ''}" style="text-align:center; cursor:${d.session ? 'pointer' : 'default'};">
+              <div onclick="${d.session ? `openSessionDetail(${d.session.day})` : `fcAddSessionOn('${d.iso}')`}" title="${d.session ? '' : (getLang()==='es' ? 'Añadir sesión' : 'Add session')}" style="text-align:center; cursor:pointer;">
                 <div style="font-family:var(--font-mono); font-size:11px; color:${d.isToday ? 'var(--coyote)' : 'var(--paper-dim)'}; letter-spacing:0.5px; margin-bottom:3px;">${d.dayName.toUpperCase()}</div>
                 <div style="background:${d.isToday ? 'rgba(201,169,97,0.1)' : 'var(--field-dark)'}; border:1px solid ${d.isToday ? 'var(--coyote)' : 'var(--field-line)'}; border-bottom: 3px solid ${color}; padding:8px 4px;">
                   <div style="font-family:var(--font-display); font-size:18px; color:${d.isToday ? 'var(--coyote)' : 'var(--paper)'};">${d.dayNum}</div>
                   <div style="font-family:var(--font-mono); font-size:10px; color:${color}; letter-spacing:0.3px; margin-top:2px;">
-                    ${d.session ? sessionTag(d.session) : '—'}
+                    ${d.session ? sessionTag(d.session) : '<span class="fc-day-add">+</span>'}
                   </div>
                   ${done ? '<div style="font-size:11px; color:var(--olive-text);">✓</div>' : (d.activity ? '<div style="font-size:11px; color:var(--blue-text);">↑</div>' : '<div style="height:10px;"></div>')}
                 </div>
@@ -9145,11 +9403,13 @@
               </div>
             `;
           }).join('')}
-
+          `,
+            strength: `
           <div class="card" style="cursor:pointer; text-align:center;" onclick="switchView('strength')">
             <div style="font-size:13px; color:var(--coyote); font-weight:600;">${ic('dumbbell', 16)} ${getLang()==='es'?'Ver rutinas de fuerza A y B':'View strength routines A and B'}</div>
             <p style="font-size:11px; color:var(--paper-dim); margin-top:4px;">${getLang()==='es'?'Con series, carga y para qué sirve cada ejercicio':'With sets, load and purpose of each exercise'}</p>
-          </div>
+          </div>`
+          })}
 
         </div>`;
     }
@@ -10013,7 +10273,7 @@
       const kind = preset === 'grit' ? (es ? 'Registro de actividades GRIT 100' : 'GRIT 100 activity log') : (es ? 'Reporte de actividades' : 'Activity report');
       const meta = {
         title: kind + ' — ' + reportPeriodLabel(period),
-        subtitle: (es ? 'Atleta: ' : 'Athlete: ') + (p.name || '—') + (p.unit ? ' · ' + p.unit : '') + '  ·  ' + (es ? 'Periodo: ' : 'Period: ') + reportPeriodLabel(period),
+        subtitle: (es ? 'Atleta: ' : 'Athlete: ') + (p.name || '—') + '  ·  ' + (es ? 'Periodo: ' : 'Period: ') + reportPeriodLabel(period),
         generated: (es ? 'Generado con FitCoach Táctico el ' : 'Generated with FitCoach Táctico on ') + todayISO() + (es ? '  ·  Distancias en millas; temperatura del servicio de clima cuando está disponible.' : '  ·  Distances in miles; temperature from the weather service when available.'),
         note: preset === 'grit' ? (es ? 'GRIT 100: cuentan las corridas y las marchas con chaleco (no la bicicleta). Marcha = actividad hecha con botas.' : 'GRIT 100: runs and vest marches count (not bike). Ruck = activity logged with boots.') : '',
         footerLeft: 'FitCoach Táctico · ' + (p.name || ''),
@@ -10580,7 +10840,7 @@
 
           <div class="card">
             <div class="card-title">${L('IDENTIDAD Y FÍSICO','IDENTITY & PHYSICAL')}</div>
-            ${field('name', L('Nombre / indicativo','Name / callsign'), p.name, {type:'text', ph:'SSG Smith'})}
+            ${field('name', L('Nombre','Name'), p.name, {type:'text', ph:L('Tu nombre','Your name')})}
             ${field('age', L('Edad','Age'), p.age, {min:18, max:70})}
             ${field('heightIn', L('Estatura (pulgadas)','Height (inches)'), p.heightIn, {step:0.5, min:48, max:84, ph:'70'})}
             ${field('weightLb', L('Peso actual (lb)','Current weight (lb)'), p.weightLb, {min:100, max:350})}
@@ -10635,7 +10895,6 @@
 
           <div class="card">
             <div class="card-title">${L('TERRENO Y MISIÓN','TERRAIN & MISSION')}</div>
-            ${field('unit', L('Unidad','Unit'), p.unit, {type:'text', ph:'1-1 IN BN'})}
             ${selectField('terrain', L('Terreno principal','Primary terrain'), p.terrain, [
               {val:'', label:L('— elige —','— select —')},
               {val:'Flat', label:L('Plano / guarnición','Flat / garrison')},
@@ -10740,6 +10999,7 @@
           </div>`],
         ['body', 'ruler', es ? 'Medidas corporales' : 'Body measurements', () => renderBodyMeasurementsCard()],
         ['gear', 'shoe', es ? 'Calzado y sensor de FC' : 'Footwear & HR sensor', () => renderGearManagementCard()],
+        ['look', 'image', es ? 'Logo y fondo' : 'Logo & background', () => renderLookCard()],
         ['data', 'file', es ? 'Gestión de datos y respaldo' : 'Data & backup', () => renderDataManagementCard()],
         ['settings', 'more', es ? 'Ajustes' : 'Settings', () => `
           <div class="card">
@@ -10781,8 +11041,24 @@
         </div>`;
     }
 
+    // 2026.11.09-1: sin preguntas al inicio. Si no hay perfil, se crea uno básico y todo se completa en PERFIL.
+    function fcEnsureProfile() {
+      if (state.profile && state.profile.onboardingComplete) return false;
+      if (state === DEFAULT_STATE) state = JSON.parse(JSON.stringify(DEFAULT_STATE));
+      const p = buildProfile({});
+      p.name = '';
+      p.raceInBoots = false;
+      try { p.raceDateISO = addDaysISO(todayISO(), 56); } catch (e) {}
+      state.profile = p;
+      if (!Array.isArray(state.plan)) state.plan = [];
+      try { syncActiveRace(); } catch (e) {}
+      saveState();
+      return true;
+    }
+
     function renderAppShell() {
-      if (currentView === 'onboarding') return renderOnboarding();
+      if (!state.profile || !state.profile.onboardingComplete) fcEnsureProfile();
+      if (currentView === 'onboarding') currentView = 'home';
 
       const overlayHtml = detailOverlay
         ? (detailOverlay.type === 'session' ? renderSessionDetail(detailOverlay.id) : renderActivityDetail(detailOverlay.id))
@@ -10792,10 +11068,11 @@
         <a class="fc-skip-link" href="#main-content">${getLang() === 'es' ? 'Saltar al contenido' : 'Skip to content'}</a>
         <header>
           <div class="header-left">
-            <div class="header-mark"></div>
+            <!-- 2026.11.08-7: el logo es el botón de Inicio (la pestaña HOY de abajo se quitó) -->
+            <button type="button" class="fc-home-logo" onclick="fcGoHome()" aria-label="${getLang() === 'es' ? 'Inicio: ir a Hoy' : 'Home: go to Today'}" title="${getLang() === 'es' ? 'Inicio' : 'Home'}">${(window.fcMedia && window.fcMedia.logoURL) ? `<img src="${window.fcMedia.logoURL}" alt="">` : '<div class="header-mark"></div>'}</button>
             <div class="header-info">
-              <p class="callsign">${state.profile ? esc(state.profile.name) : t('standby')}</p>
-              <p class="name">FITCOACH TÁCTICO</p>
+              <!-- 2026.11.09-1: solo el nombre del perfil; el logo identifica la app -->
+              ${state.profile && String(state.profile.name || '').trim() ? `<p class="name">${esc(state.profile.name)}</p>` : ''}
             </div>
           </div>
           <div class="header-right">
@@ -10819,7 +11096,7 @@
           // 2026.11.03: 5 pestañas. Fuerza vive en Semana; Calc y Perfil en Más (el botón PERFIL del encabezado sigue).
           const es = getLang() === 'es';
           const parent = { home: 'home', calendar: 'calendar', strength: 'calendar', tcx: 'tcx', stats: 'stats', more: 'more', calc: 'more', profile: 'more' }[currentView] || currentView;
-          const tabs = [['home', 'home', es ? 'HOY' : 'TODAY'], ['calendar', 'week', es ? 'SEMANA' : 'WEEK'], ['tcx', 'upload', es ? 'SUBIR' : 'UPLOAD'], ['stats', 'progress', es ? 'PROGRESO' : 'PROGRESS'], ['more', 'more', es ? 'MÁS' : 'MORE']];
+          const tabs = [['calendar', 'week', es ? 'SEMANA' : 'WEEK'], ['tcx', 'upload', es ? 'SUBIR' : 'UPLOAD'], ['stats', 'progress', es ? 'PROGRESO' : 'PROGRESS'], ['more', 'more', es ? 'MÁS' : 'MORE']];
           return `<nav aria-label="${es ? 'Navegación principal' : 'Main navigation'}">` + tabs.map(([v, icn, lbl]) =>
             `<button class="${parent === v ? 'active' : ''}" ${parent === v ? 'aria-current="page"' : ''} onclick="switchView('${v}')"><span class="nav-icon">${ic(icn, 20)}</span><span>${lbl}</span></button>`).join('') + `</nav>`;
         })()}
@@ -11007,6 +11284,9 @@
       a.workSegment = null; a.repMatch = null;
       try {
         if (typeKey === 'tempo') a.workSegment = detectWorkSegment(activity, linked, lthr);
+        // 2026.11.09-3: D1/D2 — si es el recorrido, se mide el recorrido y no un "bloque de ritmo sostenido".
+        a.courseSegment = null;
+        if (isCourseSession(linked)) { a.courseSegment = detectCourseSegment(activity, lthr); if (a.courseSegment) a.workSegment = null; }
         else if (typeKey === 'intervals' || typeKey === 'hill') a.repMatch = matchPlannedReps(activity, linked, lthr);
       } catch (e) { console.warn('structured analysis failed', e); }
 
@@ -11348,30 +11628,54 @@
 
     // ── Reverse geocoding via OpenStreetMap Nominatim (no API key required) ──
     // Rate limit: 1 req/sec. Only called when user explicitly clicks "Get Location".
+    // 2026.11.09-2: "Obtener ubicación" más robusto: sin encabezados extra (evita bloqueos del navegador),
+    // límite de 8 s, segundo servicio si OpenStreetMap falla y nombre con el estado ("Orocovis, Puerto Rico").
+    async function fcGeoJson(url) {
+      const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const tm = ctl ? setTimeout(() => ctl.abort(), 8000) : null;
+      try {
+        const r = await fetch(url, ctl ? { signal: ctl.signal } : undefined);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return await r.json();
+      } finally { if (tm) clearTimeout(tm); }
+    }
+    async function fcReverseGeocode(lat, lon) {
+      const lang = getLang() === 'es' ? 'es' : 'en';
+      try {
+        const d = await fcGeoJson(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=jsonv2&zoom=12&accept-language=${lang}`);
+        const ad = d.address || {};
+        const place = ad.city || ad.town || ad.village || ad.municipality || ad.county || ad.suburb || '';
+        const region = ad.state || ad.country || '';
+        const out = [place, region].filter(Boolean).join(', ') || (d.display_name || '').split(',').slice(0, 2).join(',').trim();
+        if (out) return out;
+      } catch (e) { console.warn('OpenStreetMap lookup failed, trying the second service:', e); }
+      const d2 = await fcGeoJson(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=${lang}`);
+      const out2 = [d2.city || d2.locality || '', d2.principalSubdivision || d2.countryName || ''].filter(Boolean).join(', ');
+      if (!out2) throw new Error('empty result');
+      return out2;
+    }
     async function fetchLocationFromGPS(activityId) {
+      const es = getLang() === 'es';
       const act = state.tcxSessions.find(a => a.id === activityId);
       if (!act?.firstGPS?.lat) {
-        showToast(getLang()==='es' ? '✕ Sin datos GPS en este archivo' : '✕ No GPS data in this file');
+        showToast(es ? '✕ Sin datos GPS en este archivo' : '✕ No GPS data in this file');
         return;
       }
-      showToast(getLang()==='es' ? 'Buscando ubicación...' : 'Looking up location...');
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        showToast(es ? '✕ Sin conexión: conéctate y vuelve a tocar' : '✕ Offline: connect and tap again');
+        return;
+      }
+      showToast(es ? 'Buscando ubicación...' : 'Looking up location...');
       try {
-        const url = `https://nominatim.openstreetmap.org/reverse?lat=${act.firstGPS.lat}&lon=${act.firstGPS.lon}&format=json&zoom=14`;
-        const resp = await fetch(url, { headers: { 'Accept-Language': getLang() === 'es' ? 'es' : 'en' } });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
-        const city = data.address?.city || data.address?.town || data.address?.village || data.address?.suburb || '';
-        const municipality = data.address?.county || data.address?.municipality || '';
-        const country = data.address?.country || '';
-        const locationStr = [city || municipality, country].filter(Boolean).join(', ');
+        const locationStr = await fcReverseGeocode(act.firstGPS.lat, act.firstGPS.lon);
         if (!act.manualFields) act.manualFields = {};
-        act.manualFields.locationName = locationStr || data.display_name?.split(',').slice(0,2).join(',').trim();
+        act.manualFields.locationName = locationStr;
         saveState();
         render();
-        showToast(getLang()==='es' ? '✓ Ubicación obtenida' : '✓ Location found');
+        showToast(es ? '✓ Ubicación obtenida' : '✓ Location found');
       } catch (err) {
         console.error('Geocoding error:', err);
-        showToast(getLang()==='es' ? '✕ Error al obtener ubicación' : '✕ Location lookup failed');
+        showToast(es ? '✕ No se pudo obtener la ubicación (los dos servicios fallaron)' : '✕ Location lookup failed (both services)');
       }
     }
 
@@ -11801,6 +12105,19 @@
       });
       lines.push('');
       if (seg) lines.push('> Sesión completa (incluye calentamiento, aceleraciones, pausas y trote final). La evaluación usa el bloque de trabajo de abajo.', '');
+
+      // ── RECORRIDO D1/D2 (2026.11.09-3) ─────────────────────────────────
+      if (a.courseSegment) {
+        const c = a.courseSegment, z = c.timeInZones && c.timeInZones.pct || {};
+        lines.push('---', '', '## Recorrido de la Carrera (D1/D2)', '');
+        lines.push(`**Detección:** ${c.lapFrom === c.lapTo ? 'vuelta ' + (c.lapFrom + 1) : 'vueltas ' + (c.lapFrom + 1) + '–' + (c.lapTo + 1)} del reloj (el tramo de 5.8–6.9 mi más rápido); sin calentamiento (${secToMMSS(c.warmupSec)}) ni trote final (${secToMMSS(c.cooldownSec)})`);
+        lines.push(`**Recorrido:** ${c.distMi.toFixed(2)} mi en ${secToMMSS(c.durSec)} · ${fmtPace(c.paceSecPerMi)} · FC ${c.avgHR}/${c.maxHR} · cadencia ${c.avgCad || 'N/D'} spm`);
+        lines.push(`**Equivalente 10K (6.21 mi):** ${secToMMSS(c.projected10KSec)}`);
+        lines.push(`**Zonas del recorrido:** Z1 ${z.z1 || 0}% · Z2 ${z.z2 || 0}% · Z3 ${z.z3 || 0}% · Z4 ${z.z4 || 0}% · Z5 ${z.z5 || 0}%`);
+        lines.push('', '| Milla | Ritmo | FC Prom | FC Máx | % en 165–172 | Desnivel |', '|---|---|---|---|---|---|');
+        c.miles.forEach(m => lines.push(`| ${m.mile}${m.partial ? '*' : ''} | ${fmtPace(m.paceSecPerMi)} | ${m.avgHR || 'N/D'} | ${m.maxHR || 'N/D'} | ${m.bandPct != null ? m.bandPct + '%' : 'N/D'} | +${m.upM}/−${m.downM} m |`));
+        lines.push('', '*La nota general sigue calculándose sobre la sesión completa; para la D1/D2 cuentan el tiempo del recorrido y el equivalente 10K.*', '');
+      }
 
       // ── BLOQUE DE TRABAJO (ritmo sostenido) ─────────────────────────────
       if (seg) {
@@ -12964,12 +13281,22 @@
     }
 
     // ── 1. FULL BACKUP (JSON) — the single most important safeguard ──
-    function exportFullBackup() {
+    // 2026.11.09-2: el logo viaja en el respaldo (como data URL en payload.media.logo). El fondo no.
+    async function exportFullBackup() {
+      let media = null;
+      try {
+        const lg = await fcMediaGet('logo');
+        if (lg && lg.blob) media = { logo: { dataURL: await fcBlobToDataURL(lg.blob), name: lg.name || 'logo.png' } };
+        // 2026.11.09-3: el fondo también viaja si es imagen; un video no (puede pesar hasta 80 MB).
+        const bg = await fcMediaGet('bg');
+        if (bg && bg.blob && bg.kind !== 'video') { media = media || {}; media.bg = { dataURL: await fcBlobToDataURL(bg.blob), name: bg.name || 'fondo.png' }; }
+      } catch (e) { console.warn('Media not added to backup:', e); }
       const payload = {
         app: 'FitCoach5K_Tactical',
         schemaVersion: SCHEMA_VERSION,
         exportedAt: new Date().toISOString(),
-        state: state
+        state: state,
+        media: media
       };
       const json = JSON.stringify(payload, null, 2);
       downloadBlob(json, `fitcoach_backup_${todayISO()}.json`, 'application/json');
@@ -13004,6 +13331,24 @@
         state.settings = { ...DEFAULT_STATE.settings, ...(incoming.settings || {}) };
         ensureGear();
         saveState();
+        // 2026.11.09-2: si el respaldo trae logo, se restaura; si no, se queda el logo actual.
+        try {
+          const lg = parsed.media && parsed.media.logo;
+          const blob = lg && lg.dataURL ? fcDataURLToBlob(lg.dataURL) : null;
+          if (blob) {
+            await fcMediaPut('logo', { blob, name: lg.name || 'logo.png', kind: 'image', trimmed: true });
+            if (fcMedia.logoURL) URL.revokeObjectURL(fcMedia.logoURL);
+            fcMedia.logoURL = URL.createObjectURL(blob);
+          }
+          const bgm = parsed.media && parsed.media.bg;
+          const bgBlob = bgm && bgm.dataURL ? fcDataURLToBlob(bgm.dataURL) : null;
+          if (bgBlob) {
+            await fcMediaPut('bg', { blob: bgBlob, name: bgm.name || 'fondo.png', kind: 'image' });
+            if (fcMedia.bgURL) URL.revokeObjectURL(fcMedia.bgURL);
+            fcMedia.bgURL = URL.createObjectURL(bgBlob); fcMedia.bgKind = 'image';
+            fcApplyBg();
+          }
+        } catch (e) { console.warn('Logo/background restore skipped:', e); }
         currentView = state.profile?.onboardingComplete ? 'home' : 'onboarding';
         detailOverlay = null;
         _scrollToTopNextRender = true;
@@ -13442,6 +13787,7 @@
     }
 
     function render() {
+      fcApplyLogoSize(); // 2026.11.09-2
       const mainEl = document.querySelector('main');
       const detailEl = document.querySelector('.detail-body');
       const savedMain = mainEl ? mainEl.scrollTop : 0;
@@ -13478,7 +13824,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.08-6';
+    const APP_BUILD = '2026.11.09-3';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
@@ -13546,6 +13892,17 @@
     // ── Migration: repair grades computed before type-aware scoring ──────────
     // Runs before the first render so the activity list never flashes stale grades. Guarded by a
     // schema marker so it costs nothing on subsequent loads.
+    // 2026.11.09-3: se recalculan una vez las sesiones guardadas con el desacople nuevo y el recorrido D1/D2.
+    (function migrateDecoupling1109() {
+      const MARKER = 'rescore_2026.11.09-3';
+      try {
+        if (state.migrations?.[MARKER]) return;
+        rescoreAllSessions();
+        state.migrations = state.migrations || {};
+        state.migrations[MARKER] = new Date().toISOString();
+        saveState();
+      } catch (e) { console.warn('migration 11.09-3', e); }
+    })();
     (function migrateSessionGrades() {
       // 2026.11.02-2: new marker so saved sessions are re-graded once with lap-exact rep pace,
       // rep-based category grades, the Z3 rule and the execution alerts.
@@ -13568,6 +13925,411 @@
       } catch (err) { console.warn('Grade migration skipped:', err); }
     })();
 
+    // ══ 2026.11.08-7: logo y fondo propios + semanas programadas ══════════════════════════════
+    // El logo y el fondo se guardan en IndexedDB (un video no cabe en localStorage). No entran en el
+    // respaldo JSON: si cambias de teléfono o borras los datos del navegador, se vuelven a elegir.
+    var fcMedia = { logoURL: null, bgURL: null, bgKind: null };
+    var FC_MEDIA_DB = 'fitcoach5k_media';
+    function fcMediaDB() {
+      return new Promise((res, rej) => {
+        const r = indexedDB.open(FC_MEDIA_DB, 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('media');
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+    }
+    async function fcMediaGet(key) {
+      const db = await fcMediaDB();
+      return new Promise((res, rej) => {
+        const q = db.transaction('media', 'readonly').objectStore('media').get(key);
+        q.onsuccess = () => res(q.result || null);
+        q.onerror = () => rej(q.error);
+      });
+    }
+    async function fcMediaPut(key, val) {
+      const db = await fcMediaDB();
+      return new Promise((res, rej) => {
+        const tx = db.transaction('media', 'readwrite');
+        const st = tx.objectStore('media');
+        if (val == null) st.delete(key); else st.put(val, key);
+        tx.oncomplete = () => res(true);
+        tx.onerror = () => rej(tx.error);
+        tx.onabort = () => rej(tx.error);
+      });
+    }
+    function fcBgOpacity() {
+      const v = Number(state.settings && state.settings.bgOpacity);
+      return Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.3;
+    }
+    function fcApplyBg() {
+      let layer = document.getElementById('fc-bg-layer');
+      if (!layer) {
+        layer = document.createElement('div');
+        layer.id = 'fc-bg-layer';
+        layer.setAttribute('aria-hidden', 'true');
+        document.body.insertBefore(layer, document.body.firstChild);
+      }
+      if (!fcMedia.bgURL) { layer.innerHTML = ''; layer.dataset.src = ''; layer.style.opacity = '0'; return; }
+      if (layer.dataset.src !== fcMedia.bgURL) {
+        layer.dataset.src = fcMedia.bgURL;
+        const still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        layer.innerHTML = fcMedia.bgKind === 'video'
+          ? `<video src="${fcMedia.bgURL}" ${still ? '' : 'autoplay loop'} muted playsinline preload="auto"></video>`
+          : `<img src="${fcMedia.bgURL}" alt="">`;
+        const v = layer.querySelector('video');
+        if (v && !still) { v.muted = true; const pr = v.play(); if (pr && pr.catch) pr.catch(() => {}); }
+      }
+      layer.style.opacity = String(fcBgOpacity());
+    }
+    async function fcLoadMedia() {
+      try {
+        const logo = await fcMediaGet('logo');
+        const bg = await fcMediaGet('bg');
+        if (logo && logo.blob && !logo.trimmed) {
+          // 2026.11.09-2: los logos guardados antes se recortan una vez.
+          try { logo.blob = await fcTrimPng(logo.blob); logo.trimmed = true; await fcMediaPut('logo', logo); } catch (e) {}
+        }
+        if (logo && logo.blob) fcMedia.logoURL = URL.createObjectURL(logo.blob);
+        if (bg && bg.blob) { fcMedia.bgURL = URL.createObjectURL(bg.blob); fcMedia.bgKind = bg.kind || 'image'; }
+      } catch (e) { console.warn('Media load skipped:', e); }
+      fcApplyBg();
+      if (fcMedia.logoURL) render();
+    }
+    // Achica un PNG grande y conserva la transparencia; si es pequeño, lo deja igual.
+    function fcShrinkPng(file, max) {
+      return new Promise((res) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          const s = Math.min(1, max / Math.max(img.width, img.height));
+          if (s >= 1) { URL.revokeObjectURL(url); res(file); return; }
+          const c = document.createElement('canvas');
+          c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+          c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+          URL.revokeObjectURL(url);
+          c.toBlob((b) => res(b || file), 'image/png');
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); res(null); };
+        img.src = url;
+      });
+    }
+    var fcIsPng = (f) => f && (f.type === 'image/png' || /\.png$/i.test(f.name || ''));
+    var fcIsVideo = (f) => f && ((f.type || '').startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(f.name || ''));
+    async function fcPickLogo(ev) {
+      const es = getLang() === 'es';
+      const f = ev.target.files && ev.target.files[0];
+      ev.target.value = '';
+      if (!f) return;
+      if (!fcIsPng(f)) { showToast(es ? 'El logo tiene que ser una imagen .png' : 'The logo must be a .png image'); return; }
+      try {
+        const shrunk = await fcShrinkPng(f, 512);
+        if (!shrunk) { showToast(es ? 'No se pudo leer la imagen' : 'Could not read the image'); return; }
+        const blob = await fcTrimPng(shrunk);
+        await fcMediaPut('logo', { blob, name: f.name, kind: 'image', trimmed: true });
+        if (fcMedia.logoURL) URL.revokeObjectURL(fcMedia.logoURL);
+        fcMedia.logoURL = URL.createObjectURL(blob);
+        render();
+        showToast(es ? '✓ Logo guardado' : '✓ Logo saved');
+      } catch (e) { console.warn(e); showToast(es ? '✕ No se pudo guardar el logo' : '✕ Could not save the logo'); }
+    }
+    async function fcPickBg(ev) {
+      const es = getLang() === 'es';
+      const f = ev.target.files && ev.target.files[0];
+      ev.target.value = '';
+      if (!f) return;
+      const vid = fcIsVideo(f), png = fcIsPng(f);
+      if (!vid && !png) { showToast(es ? 'Usa una imagen .png o un video (.mp4, .webm o .mov)' : 'Use a .png image or a video (.mp4, .webm or .mov)'); return; }
+      if (vid && f.size > 80 * 1024 * 1024) { showToast(es ? 'El video pasa de 80 MB: recórtalo o comprímelo' : 'The video is over 80 MB: trim or compress it'); return; }
+      try {
+        const blob = png ? await fcShrinkPng(f, 2400) : f;
+        if (!blob) { showToast(es ? 'No se pudo leer la imagen' : 'Could not read the image'); return; }
+        await fcMediaPut('bg', { blob, name: f.name, kind: vid ? 'video' : 'image' });
+        if (fcMedia.bgURL) URL.revokeObjectURL(fcMedia.bgURL);
+        fcMedia.bgURL = URL.createObjectURL(blob);
+        fcMedia.bgKind = vid ? 'video' : 'image';
+        fcApplyBg();
+        render();
+        showToast(es ? '✓ Fondo guardado' : '✓ Background saved');
+      } catch (e) { console.warn(e); showToast(es ? '✕ No se pudo guardar el fondo (¿falta espacio?)' : '✕ Could not save the background (out of space?)'); }
+    }
+    async function fcClearMedia(key) {
+      const es = getLang() === 'es';
+      if (!confirm(es ? (key === 'logo' ? '¿Quitar tu logo y volver al rombo?' : '¿Quitar el fondo?') : (key === 'logo' ? 'Remove your logo?' : 'Remove the background?'))) return;
+      try { await fcMediaPut(key, null); } catch (_) {}
+      if (key === 'logo') { if (fcMedia.logoURL) URL.revokeObjectURL(fcMedia.logoURL); fcMedia.logoURL = null; }
+      else { if (fcMedia.bgURL) URL.revokeObjectURL(fcMedia.bgURL); fcMedia.bgURL = null; fcMedia.bgKind = null; fcApplyBg(); }
+      render();
+    }
+    function fcSetBgOpacity(v) {
+      state.settings = state.settings || {};
+      state.settings.bgOpacity = Math.round(Number(v)) / 100;
+      fcApplyBg();
+      const o = document.getElementById('fcBgOpVal');
+      if (o) o.textContent = Math.round(Number(v)) + ' %';
+    }
+    function fcGoHome() { switchView('home'); }
+    // 2026.11.09-2: tamaño del logo (se guarda en settings y viaja en el respaldo).
+    function fcLogoSize() { const v = Number(state.settings && state.settings.logoSize); return v >= 32 && v <= 76 ? v : 52; }
+    function fcApplyLogoSize() { try { document.documentElement.style.setProperty('--fc-logo', fcLogoSize() + 'px'); } catch (e) {} }
+    function fcSetLogoSize(v) {
+      state.settings = state.settings || {};
+      state.settings.logoSize = Math.max(32, Math.min(76, Math.round(Number(v)) || 52));
+      fcApplyLogoSize();
+      const o = document.getElementById('fcLogoSizeVal');
+      if (o) o.textContent = state.settings.logoSize + ' px';
+    }
+    // Quita los márgenes transparentes del PNG para que el dibujo llene el espacio del logo.
+    function fcTrimPng(blob) {
+      return new Promise((res) => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          try {
+            const w = img.naturalWidth, h = img.naturalHeight;
+            const c = document.createElement('canvas'); c.width = w; c.height = h;
+            const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+            const d = g.getImageData(0, 0, w, h).data;
+            let x0 = w, y0 = h, x1 = -1, y1 = -1;
+            for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+              if (d[(y * w + x) * 4 + 3] > 8) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+            }
+            URL.revokeObjectURL(url);
+            if (x1 < 0) { res(blob); return; }
+            const pad = Math.round(Math.max(x1 - x0, y1 - y0) * 0.02);
+            x0 = Math.max(0, x0 - pad); y0 = Math.max(0, y0 - pad); x1 = Math.min(w - 1, x1 + pad); y1 = Math.min(h - 1, y1 + pad);
+            const cw = x1 - x0 + 1, ch = y1 - y0 + 1;
+            if (cw >= w * 0.97 && ch >= h * 0.97) { res(blob); return; }
+            const o = document.createElement('canvas'); o.width = cw; o.height = ch;
+            o.getContext('2d').drawImage(c, x0, y0, cw, ch, 0, 0, cw, ch);
+            o.toBlob((b) => res(b || blob), 'image/png');
+          } catch (e) { URL.revokeObjectURL(url); res(blob); }
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); res(blob); };
+        img.src = url;
+      });
+    }
+    function fcBlobToDataURL(blob) {
+      return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+    }
+    function fcDataURLToBlob(dataURL) {
+      const m = String(dataURL || '').match(/^data:([^;,]+)?(;base64)?,(.*)$/);
+      if (!m) return null;
+      const bin = m[2] ? atob(m[3]) : decodeURIComponent(m[3]);
+      const u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return new Blob([u], { type: m[1] || 'image/png' });
+    }
+    function renderLookCard() {
+      const es = getLang() === 'es';
+      const op = Math.round(fcBgOpacity() * 100);
+      const logoPrev = fcMedia.logoURL
+        ? `<img class="fc-media-preview" src="${fcMedia.logoURL}" alt="${es ? 'Tu logo' : 'Your logo'}">`
+        : `<div class="fc-media-preview" style="display:flex;align-items:center;justify-content:center;"><div class="header-mark"></div></div>`;
+      const bgPrev = !fcMedia.bgURL
+        ? `<div class="fc-media-preview" style="display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--paper-dim);">${es ? 'SIN FONDO' : 'NONE'}</div>`
+        : (fcMedia.bgKind === 'video'
+          ? `<video class="fc-media-preview" src="${fcMedia.bgURL}" muted autoplay loop playsinline style="object-fit:cover;"></video>`
+          : `<img class="fc-media-preview" src="${fcMedia.bgURL}" alt="${es ? 'Tu fondo' : 'Your background'}" style="object-fit:cover;">`);
+      return `
+        <div class="card">
+          <div class="card-title">${es ? 'LOGO' : 'LOGO'}</div>
+          <div class="fc-media-row">
+            ${logoPrev}
+            <p style="font-size:12px; color:var(--paper-dim);">${es ? 'Imagen .png (con transparencia si quieres). Se queda hasta que la cambies. Tócalo arriba para ir a Hoy.' : '.png image (transparency OK). Stays until you change it. Tap it at the top to go to Today.'}</p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-primary" style="flex:1; font-size:11px;" onclick="document.getElementById('fcLogoInput').click()">${es ? 'ELEGIR .PNG' : 'CHOOSE .PNG'}</button>
+            ${fcMedia.logoURL ? `<button type="button" class="btn btn-secondary" style="flex:1; font-size:11px;" onclick="fcClearMedia('logo')">${es ? 'QUITAR' : 'REMOVE'}</button>` : ''}
+          </div>
+          <input type="file" id="fcLogoInput" accept="image/png,.png" style="display:none;" onchange="fcPickLogo(event)" />
+          <label for="fcLogoSize" style="display:flex; justify-content:space-between; font-size:12px; margin-top:14px;">
+            <span>${es ? 'Tamaño del logo' : 'Logo size'}</span><span id="fcLogoSizeVal">${fcLogoSize()} px</span>
+          </label>
+          <input type="range" id="fcLogoSize" min="32" max="76" step="2" value="${fcLogoSize()}" style="width:100%;" oninput="fcSetLogoSize(this.value)" onchange="saveState()" />
+          <p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${es ? 'Se recortan solos los bordes transparentes del .png para que el dibujo llene el espacio. El encabezado crece con el logo.' : 'Transparent edges of the .png are trimmed so the drawing fills the space. The header grows with the logo.'}</p>
+        </div>
+        <div class="card">
+          <div class="card-title">${es ? 'FONDO' : 'BACKGROUND'}</div>
+          <div class="fc-media-row">
+            ${bgPrev}
+            <p style="font-size:12px; color:var(--paper-dim);">${es ? 'Imagen .png o video (.mp4, .webm, .mov; sin sonido y en bucle). Va detrás de todo: las tarjetas no cambian.' : '.png image or video (.mp4, .webm, .mov; muted, looping). It sits behind everything: cards do not change.'}</p>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn btn-primary" style="flex:1; font-size:11px;" onclick="document.getElementById('fcBgInput').click()">${es ? 'ELEGIR .PNG O VIDEO' : 'CHOOSE .PNG OR VIDEO'}</button>
+            ${fcMedia.bgURL ? `<button type="button" class="btn btn-secondary" style="flex:1; font-size:11px;" onclick="fcClearMedia('bg')">${es ? 'QUITAR' : 'REMOVE'}</button>` : ''}
+          </div>
+          <input type="file" id="fcBgInput" accept="image/png,.png,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v" style="display:none;" onchange="fcPickBg(event)" />
+          <label for="fcBgOpacity" style="display:flex; justify-content:space-between; font-size:12px; margin-top:14px;">
+            <span>${es ? 'Visibilidad del fondo' : 'Background visibility'}</span><span id="fcBgOpVal">${op} %</span>
+          </label>
+          <input type="range" id="fcBgOpacity" min="0" max="100" step="5" value="${op}" style="width:100%;" oninput="fcSetBgOpacity(this.value)" onchange="saveState()" ${fcMedia.bgURL ? '' : 'disabled'} />
+          <p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${es ? '0 % = no se ve · 100 % = sin transparencia. Recomendado: 15–35 % para que el texto se lea bien.' : '0 % = hidden · 100 % = fully opaque. Suggested: 15–35 % so text stays readable.'}</p>
+          <p style="font-size:11px; color:var(--paper-dim); margin-top:6px;">${es ? 'El logo, su tamaño y el fondo (si es imagen) viajan en el respaldo JSON. Un fondo de video se queda solo en este teléfono.' : 'The logo, its size and the background (if it is an image) travel in the JSON backup. A video background stays on this phone only.'}</p>
+        </div>`;
+    }
+
+    // ── Semanas programadas: se pegan antes y se activan solas el domingo de su semana ──
+    var fcSundayOf = (iso) => { const d = parseISODateLocal(iso); d.setDate(d.getDate() - d.getDay()); return isoFromDate(d); };
+    var FC_MONTHS = { ene: 1, jan: 1, feb: 2, mar: 3, abr: 4, apr: 4, may: 5, jun: 6, jul: 7, ago: 8, aug: 8, sep: 9, oct: 10, nov: 11, dic: 12, dec: 12 };
+    function fcDateFromLabel(lbl) {
+      const m = String(lbl || '').toLowerCase().match(/(\d{1,2})(?:\s*(?:a|al|-|–)\s*\d{1,2})?\s*-?\s*(?:de\s+)?([a-zé]{3})/);
+      if (!m) return null;
+      const mon = FC_MONTHS[m[2]];
+      if (!mon) return null;
+      const now = new Date();
+      let y = now.getFullYear();
+      if (mon < now.getMonth() + 1 - 6) y++;
+      return y + '-' + String(mon).padStart(2, '0') + '-' + String(+m[1]).padStart(2, '0');
+    }
+    // Documento de bloques completo ("## BLOQUE 3 (15 a 21-nov)" + bloque de código) → una semana por bloque.
+    function fcSplitBlocksDoc(text) {
+      const out = [];
+      const re = /^#*\s*BLOQUE\s*(\d+)[^\n(]*\(([^)\n]*)\)[^\n]*\n[\s\S]*?```[a-z]*\n([\s\S]*?)```/gim;
+      let m;
+      while ((m = re.exec(text))) {
+        const iso = fcDateFromLabel(m[2]);
+        out.push({ label: 'Bloque ' + m[1], weekStartISO: iso ? fcSundayOf(iso) : null, text: m[3].trim() });
+      }
+      return out;
+    }
+    function fcWeekLabel(weekStartISO) {
+      const es = getLang() === 'es';
+      const a = parseISODateLocal(weekStartISO), b = parseISODateLocal(addDaysISO(weekStartISO, 6));
+      const mn = (d) => d.toLocaleDateString(es ? 'es' : 'en', { month: 'short' }).replace('.', '');
+      return a.getMonth() === b.getMonth() ? `${a.getDate()}–${b.getDate()} ${mn(b)}` : `${a.getDate()} ${mn(a)} – ${b.getDate()} ${mn(b)}`;
+    }
+    function fcApplyDueWeeks() {
+      if (!Array.isArray(state.planQueue) || !state.planQueue.length) return false;
+      const today = todayISO();
+      const done = [];
+      state.planQueue.forEach((q) => {
+        if (q.appliedISO || !q.weekStartISO || q.weekStartISO > today) return;
+        if (importClaudePlan(q.text, q.weekStartISO, { silent: true })) { q.appliedISO = today; done.push(q); }
+      });
+      if (!done.length) return false;
+      saveState();
+      setTimeout(() => { try { showToast((getLang() === 'es' ? '✓ Semana activada: ' : '✓ Week activated: ') + done.map((q) => fcWeekLabel(q.weekStartISO)).join(', ')); } catch (_) {} }, 800);
+      return true;
+    }
+    function fcQueueValidate(text) { try { const d = parseClaudePlan(text); return d && d.length ? d : null; } catch (_) { return null; } }
+    function fcQueueAdd() {
+      const es = getLang() === 'es';
+      const text = (document.getElementById('fcQueueInput')?.value || '').trim();
+      const dateVal = document.getElementById('fcQueueDate')?.value || '';
+      if (!text) { showToast(es ? 'Pega un bloque primero' : 'Paste a block first'); return; }
+      let items = fcSplitBlocksDoc(text);
+      if (!items.length) {
+        if (!dateVal) { showToast(es ? 'Escoge el domingo de la semana' : 'Pick the week\'s Sunday'); return; }
+        items = [{ label: '', weekStartISO: fcSundayOf(dateVal), text }];
+      }
+      const thisSunday = fcSundayOf(todayISO());
+      state.planQueue = Array.isArray(state.planQueue) ? state.planQueue : [];
+      let added = 0, replaced = 0, skipped = 0, bad = 0;
+      items.forEach((it) => {
+        if (!it.weekStartISO) it.weekStartISO = dateVal ? fcSundayOf(dateVal) : null;
+        if (!it.weekStartISO || !fcQueueValidate(it.text)) { bad++; return; }
+        if (it.weekStartISO < thisSunday) { skipped++; return; } // semanas que ya pasaron
+        const ex = state.planQueue.find((q) => q.weekStartISO === it.weekStartISO);
+        if (ex) { ex.text = it.text; ex.label = it.label || ex.label; ex.appliedISO = null; replaced++; }
+        else { state.planQueue.push({ id: 'q' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), weekStartISO: it.weekStartISO, label: it.label, text: it.text, appliedISO: null, createdISO: todayISO() }); added++; }
+      });
+      state.planQueue.sort((a, b) => a.weekStartISO.localeCompare(b.weekStartISO));
+      saveState();
+      fcApplyDueWeeks(); // la semana actual se activa al momento
+      render();
+      const parts = [];
+      if (added) parts.push((es ? 'programadas: ' : 'scheduled: ') + added);
+      if (replaced) parts.push((es ? 'reemplazadas: ' : 'replaced: ') + replaced);
+      if (skipped) parts.push((es ? 'ya pasaron: ' : 'already past: ') + skipped);
+      if (bad) parts.push((es ? 'no se pudieron leer: ' : 'unreadable: ') + bad);
+      showToast(parts.join(' · ') || (es ? 'Nada que programar' : 'Nothing to schedule'));
+    }
+    var fcQueueEditId = null;
+    function fcQueueEdit(id) { fcQueueEditId = id; render(); }
+    function fcQueueCancel() { fcQueueEditId = null; render(); }
+    function fcQueueSave(id) {
+      const es = getLang() === 'es';
+      const q = (state.planQueue || []).find((x) => x.id === id);
+      if (!q) return;
+      const text = (document.getElementById('fcQueueEditText')?.value || '').trim();
+      const dateVal = document.getElementById('fcQueueEditDate')?.value || q.weekStartISO;
+      if (!fcQueueValidate(text)) { showToast(t('claude_import_error')); return; }
+      const ws = fcSundayOf(dateVal);
+      if ((state.planQueue || []).some((x) => x.id !== id && x.weekStartISO === ws)) { showToast(es ? 'Ya hay otra semana programada en esa fecha' : 'Another week is already scheduled there'); return; }
+      const moved = ws !== q.weekStartISO;
+      q.text = text; q.weekStartISO = ws;
+      if (moved) q.appliedISO = null;
+      if (q.weekStartISO <= todayISO()) { if (importClaudePlan(q.text, q.weekStartISO, { silent: true })) q.appliedISO = todayISO(); }
+      else q.appliedISO = null;
+      state.planQueue.sort((a, b) => a.weekStartISO.localeCompare(b.weekStartISO));
+      fcQueueEditId = null;
+      saveState();
+      render();
+      showToast(es ? '✓ Semana guardada' : '✓ Week saved');
+    }
+    function fcQueueDelete(id) {
+      const es = getLang() === 'es';
+      const q = (state.planQueue || []).find((x) => x.id === id);
+      if (!q) return;
+      if (!confirm(es ? `¿Borrar la semana programada ${fcWeekLabel(q.weekStartISO)}? (No borra lo que ya está en el plan.)` : `Delete the scheduled week ${fcWeekLabel(q.weekStartISO)}? (It does not remove what is already in the plan.)`)) return;
+      state.planQueue = state.planQueue.filter((x) => x.id !== id);
+      saveState();
+      render();
+    }
+    function renderPlanQueueCard() {
+      const es = getLang() === 'es';
+      const today = todayISO();
+      const thisSunday = fcSundayOf(today);
+      const nextSunday = addDaysISO(thisSunday, 7);
+      const DAYN = es ? ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'] : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const TYPEN = { easy: es ? 'fácil' : 'easy', tempo: 'tempo', intervals: es ? 'intervalos' : 'intervals', long: es ? 'larga' : 'long', rest: es ? 'descanso' : 'rest', cross_training: es ? 'cruzado' : 'cross-training' };
+      const list = (Array.isArray(state.planQueue) ? state.planQueue : []).filter((q) => q.weekStartISO >= addDaysISO(thisSunday, -7));
+      const items = list.map((q) => {
+        const days = fcQueueValidate(q.text) || [];
+        const status = q.appliedISO
+          ? (q.weekStartISO === thisSunday ? (es ? 'ACTIVA' : 'ACTIVE') : (es ? 'APLICADA' : 'APPLIED'))
+          : (es ? 'PROGRAMADA · se activa el dom ' : 'SCHEDULED · activates Sun ') + parseISODateLocal(q.weekStartISO).getDate();
+        if (fcQueueEditId === q.id) {
+          return `<div class="fc-q-item">
+            <div style="font-size:12px; font-weight:700; margin-bottom:6px;">${es ? 'Editar semana' : 'Edit week'} ${fcWeekLabel(q.weekStartISO)}</div>
+            <label style="font-size:11px; color:var(--paper-dim);">${es ? 'Domingo de la semana' : 'Week Sunday'} <input type="date" id="fcQueueEditDate" value="${q.weekStartISO}" style="margin-left:6px;"></label>
+            <textarea id="fcQueueEditText" style="width:100%; min-height:160px; font-size:11px; padding:8px; margin-top:8px; border:1px solid var(--field-line); border-radius:2px; font-family:var(--font-mono); color:var(--paper); background:var(--field-dark);">${esc(q.text)}</textarea>
+            <div class="fc-q-actions" style="margin-top:8px;">
+              <button type="button" class="btn btn-primary" onclick="fcQueueSave('${q.id}')">${es ? 'GUARDAR' : 'SAVE'}</button>
+              <button type="button" class="btn btn-secondary" onclick="fcQueueCancel()">${es ? 'CANCELAR' : 'CANCEL'}</button>
+            </div>
+          </div>`;
+        }
+        const dayLines = days.slice().sort((a, b) => a.dayOfWeek - b.dayOfWeek).map((d) =>
+          `${DAYN[d.dayOfWeek] || '?'} · ${TYPEN[d.type] || d.type}${d.distMi ? ' · ' + d.distMi + ' mi' : ''}${d.opt ? ` <span style="opacity:.8">(+ ${es ? 'opcional' : 'optional'} ${d.opt.slot || ''}${d.opt.distMi ? ' ' + d.opt.distMi + ' mi' : ''})</span>` : ''}`).join('<br>');
+        const runMi = days.filter((d) => !['rest', 'cross_training'].includes(d.type)).reduce((a, d) => a + (d.distMi || 0), 0);
+        return `<div class="fc-q-item ${q.appliedISO && q.weekStartISO < thisSunday ? 'fc-q-applied' : ''}">
+          <div style="display:flex; justify-content:space-between; gap:8px; align-items:baseline;">
+            <strong style="font-size:13px;">${fcWeekLabel(q.weekStartISO)}${q.label ? ' · ' + esc(q.label) : ''}</strong>
+            <span style="font-size:10px; color:${q.appliedISO ? 'var(--coyote)' : 'var(--paper-dim)'}; text-align:right;">${status}</span>
+          </div>
+          <div class="fc-q-days">${dayLines}<br>${es ? 'Corriendo' : 'Running'}: ${runMi.toFixed(1)} mi</div>
+          <div class="fc-q-actions">
+            <button type="button" class="btn btn-secondary" onclick="fcQueueEdit('${q.id}')">${es ? 'VER / EDITAR' : 'VIEW / EDIT'}</button>
+            <button type="button" class="btn btn-secondary" onclick="fcQueueDelete('${q.id}')">${es ? 'BORRAR' : 'DELETE'}</button>
+          </div>
+        </div>`;
+      }).join('');
+      return `
+        <div class="card" style="margin-bottom:12px; border:1px solid var(--field-line); background:var(--field-dark);">
+          <div class="card-title">${es ? 'SEMANAS PROGRAMADAS' : 'SCHEDULED WEEKS'}</div>
+          <p style="font-size:11px; color:var(--paper-dim); margin-bottom:10px;">${es ? 'Pega el bloque de una semana que viene, o el documento de bloques completo (detecta cada "BLOQUE n (fechas)"). Cada semana se activa sola el domingo en que empieza; antes no toca tu plan.' : 'Paste a future week block, or the whole blocks document (each "BLOQUE n (dates)" is detected). Each week activates on its own Sunday; until then your plan is untouched.'}</p>
+          <textarea id="fcQueueInput" placeholder="${es ? 'Lun: …\nMar: …' : 'Mon: …\nTue: …'}" style="width:100%; min-height:80px; font-size:11px; padding:8px; border:1px solid var(--field-line); border-radius:2px; font-family:var(--font-mono); color:var(--paper); background:var(--black-olive);"></textarea>
+          <label style="display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:11px; color:var(--paper-dim); margin-top:8px;">
+            <span>${es ? 'Domingo de la semana (si el texto no trae fechas)' : 'Week Sunday (if the text has no dates)'}</span>
+            <input type="date" id="fcQueueDate" value="${nextSunday}" style="max-width:150px;">
+          </label>
+          <button type="button" class="btn btn-primary" style="width:100%; font-size:11px; margin-top:8px;" onclick="fcQueueAdd()">${es ? 'PROGRAMAR' : 'SCHEDULE'}</button>
+          ${items || `<p style="font-size:11px; color:var(--paper-dim); margin-top:10px;">${es ? 'No hay semanas programadas.' : 'No scheduled weeks.'}</p>`}
+        </div>`;
+    }
+
+
     // Pick the active race (next upcoming) and mirror it into the legacy profile fields.
     try { syncActiveRace(); saveState(); } catch (err) { console.warn('syncActiveRace skipped:', err); }
     // Re-evaluate when the app returns to the foreground (a race date may have passed).
@@ -13576,9 +14338,13 @@
       const before = state.profile?.activeRaceId;
       try { syncActiveRace(); } catch (_) {}
       if (state.profile?.activeRaceId !== before) { saveState(); render(); }
+      // 2026.11.08-7: una semana programada se activa al llegar su domingo, aunque la app quedara abierta.
+      try { if (fcApplyDueWeeks()) render(); } catch (_) {}
     });
 
+    try { fcApplyDueWeeks(); } catch (err) { console.warn('Scheduled weeks skipped:', err); }
     render();
+    fcLoadMedia();
 
     // One-time backup reminder: if the user has real data but no recent backup, nudge them.
     (function backupReminder() {
