@@ -8338,6 +8338,22 @@
               ${mf.rpe ? `<p style="font-size:12px;color:var(--coyote);margin-top:8px;">RPE seleccionado: ${mf.rpe}/10</p>` : ''}
             </div>
 
+            <div class="sitrep-label">${getLang() === 'es' ? 'DESPUÉS DE LA SESIÓN' : 'AFTER THE SESSION'}</div>
+            <div class="card">
+              <p style="font-size:11px;color:var(--paper-dim);margin-bottom:8px;line-height:1.4;">${getLang()==='es' ? 'Estas respuestas van en el informe .md para que el entrenador las tenga sin preguntarlas. Cambian según el tipo de sesión.' : 'These answers go into the .md report so the coach has them without asking. They change with the session type.'}</p>
+              ${(() => {
+                const qs = postSessionQuestions(act), es = getLang() === 'es';
+                const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                return qs.map((x, i) => {
+                  const nextId = i + 1 < qs.length ? `mf-${qs[i + 1].id}-${act.id}` : null;
+                  const label = es ? x.es : x.en;
+                  return x.kind === 'num'
+                    ? `<div class="manual-field-row"><label for="mf-${x.id}-${act.id}">${label}</label><input type="text" inputmode="decimal" id="mf-${x.id}-${act.id}" value="${esc(mf[x.id])}" placeholder="—" onblur="saveManualField('${act.id}', '${x.id}', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, ${nextId ? `'${nextId}'` : 'null'})" /></div>`
+                    : `<div class="form-group" style="margin-top:8px;"><label class="form-label" for="mf-${x.id}-${act.id}" style="margin-bottom:4px;">${label}</label><input type="text" id="mf-${x.id}-${act.id}" value="${esc(mf[x.id])}" placeholder="—" onblur="saveManualField('${act.id}', '${x.id}', this.value)" style="width:100%;" enterkeyhint="next" onkeydown="handleEnterNext(event, ${nextId ? `'${nextId}'` : 'null'})" /></div>`;
+                }).join('');
+              })()}
+            </div>
+
             <div class="sitrep-label">${getLang() === 'es' ? 'SENSACIONES' : 'SENSATIONS'}</div>
             <div class="card">
               <textarea id="mf-athleteNotes-${act.id}" rows="4" style="width:100%; background:var(--field-surface); border:1px solid var(--field-line); color:var(--paper); padding:10px; font-family:var(--font-body); font-size:13px; line-height:1.5;" placeholder="${getLang()==='es' ? 'Ej: Piernas frescas. Respiración cómoda. Mucho calor durante la sesión...' : 'E.g. Legs felt fresh. Breathing comfortable...'}" onblur="saveManualField('${act.id}', 'athleteNotes', this.value)">${mf.athleteNotes}</textarea>
@@ -11872,6 +11888,49 @@
     }
 
 
+    // 2026.11.09-5: preguntas de después de la sesión. Las respuestas viajan en el informe .md
+    // ("Exportar MD") para que el entrenador no tenga que preguntarlas en el chat.
+    // Se guardan en manualFields con el prefijo ps_. Las comunes salen siempre; las demás según el tipo.
+    function postSessionQuestions(act) {
+      const key = activityKind(act).key;
+      const q = (id, es, en, kind) => ({ id: 'ps_' + id, es, en, kind: kind || 'text' });
+      const quality = ['intervals', 'tempo', 'course', 'hills', 'race'].includes(key);
+      const list = [
+        q('waterBefore', 'Agua antes (oz)', 'Water before (oz)', 'num'),
+        q('waterDuring', 'Agua durante (oz)', 'Water during (oz)', 'num'),
+        q('waterAfter', 'Agua después (oz)', 'Water after (oz)', 'num'),
+        q('snackTime', 'Hora de la merienda o comida previa', 'Time of pre-session snack/meal')
+      ];
+      if (quality) {
+        list.push(
+          q('limiter', 'Qué limitó el esfuerzo (piernas, respiración, FC, terreno, calor)', 'What limited the effort (legs, breathing, HR, terrain, heat)'),
+          q('walkWhy', 'Si caminaste en recuperaciones o trote final: ¿por qué?', 'If you walked in recoveries or the final jog: why?'),
+          q('routeNotes', 'Ruta y estado del terreno (mojado, irregular, tráfico)', 'Route and terrain (wet, uneven, traffic)')
+        );
+      } else if (key === 'long') {
+        list.push(
+          q('fuelDuring', 'Electrolitos o carbohidrato durante', 'Electrolytes or carbs during'),
+          q('legsLate', 'Cómo estaban las piernas en el último tercio', 'How the legs felt in the last third')
+        );
+      } else if (key === 'easy') {
+        list.push(
+          q('easyCheck', '¿Pudiste respirar por la nariz? ¿Sonó la alerta de FC? ¿Pasos cortos en las bajadas?', 'Could you breathe through the nose? Did the HR alert sound? Short steps on downhills?')
+        );
+      } else if (key === 'march') {
+        list.push(
+          q('feetHot', 'Puntos calientes en los pies (sí/no, dónde)', 'Hot spots on the feet (yes/no, where)'),
+          q('nextDayPain', 'Dolor al día siguiente: espalda, cadera, rodillas, pies (llenar mañana)', 'Next-day pain: back, hips, knees, feet (fill in tomorrow)')
+        );
+      }
+      list.push(
+        q('strengthAfter', 'Fuerza después (A / B / ninguna) y qué ejercicios o saltos se omitieron', 'Strength afterwards (A / B / none) and what was skipped'),
+        q('calvesAfter', 'Pantorrillas después (0–10)', 'Calves afterwards (0–10)', 'num'),
+        q('warnSymptoms', 'Mareo, molestia en el pecho o piernas pesadas (durante o después)', 'Dizziness, chest discomfort or heavy legs (during or after)'),
+        q('offPlan', 'Algo fuera del plan (ruta, hora, peso del chaleco, sesión doble)', 'Anything off-plan (route, time, vest weight, double session)')
+      );
+      return list;
+    }
+
     const SESSION_TYPE_LABELS = {
       easy: 'Z2 / Easy', tempo: 'Tempo', intervals: 'Intervalos', long: 'Long Run',
       race_sim: 'Race Simulation', rest: 'Rest'
@@ -12562,6 +12621,29 @@
       lines.push('');
       lines.push(mf.athleteNotes || ND);
       lines.push('');
+      // 2026.11.09-5: respuestas de después de la sesión (según el tipo).
+      {
+        lines.push('## Después de la Sesión (respuestas del atleta)');
+        lines.push('');
+        const psQs = postSessionQuestions(t);
+        psQs.forEach(x => {
+          const v = String(mf[x.id] == null ? '' : mf[x.id]).trim();
+          lines.push(`**${x.es}:** ${v || ND}`);
+        });
+        // Aviso objetivo: la regla del proyecto pide 12–16 oz durante la calidad y la larga con calor.
+        const kk = activityKind(t).key;
+        const wd = parseFloat(String(mf.ps_waterDuring == null ? '' : mf.ps_waterDuring).replace(',', '.'));
+        if (['intervals', 'tempo', 'course', 'hills', 'race', 'long'].includes(kk) && !isNaN(wd) && wd < 12) {
+          lines.push('');
+          lines.push(`> ⚠ Agua durante: ${wd} oz. La regla del proyecto es 12–16 oz en calidad y larga con calor.`);
+        }
+        const cv = parseFloat(String(mf.ps_calvesAfter == null ? '' : mf.ps_calvesAfter).replace(',', '.'));
+        if (!isNaN(cv) && cv >= 2) {
+          lines.push('');
+          lines.push(`> ⚠ Pantorrillas en ${cv}/10 después de la sesión: ese día se quitan los saltos y revisa la regla de cancelar.`);
+        }
+        lines.push('');
+      }
 
       // ── EVALUACIÓN POR CARACTERÍSTICA ───────────────────────────────────────
       // Eight independent axes, each graded on its own evidence — see calcCategoryGrades().
@@ -13862,7 +13944,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.09-4';
+    const APP_BUILD = '2026.11.09-5';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
