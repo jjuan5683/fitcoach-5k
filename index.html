@@ -8125,6 +8125,8 @@
 
             ${linkedSession ? renderPlanVsActualBlock(linkedSession, act) : ''}
 
+            ${renderCoachCard(act)}
+
             <div class="sitrep-label">${t('summary_label')}</div>
             <div class="stat-grid">
               <div class="stat-box"><div class="value">${act.totalDistMi.toFixed(2)} mi</div><div class="label">${t('stat_distance')}</div></div>
@@ -8340,16 +8342,20 @@
 
             <div class="sitrep-label">${getLang() === 'es' ? 'DESPUÉS DE LA SESIÓN' : 'AFTER THE SESSION'}</div>
             <div class="card">
-              <p style="font-size:11px;color:var(--paper-dim);margin-bottom:8px;line-height:1.4;">${getLang()==='es' ? 'Estas respuestas van en el informe .md para que el entrenador las tenga sin preguntarlas. Cambian según el tipo de sesión.' : 'These answers go into the .md report so the coach has them without asking. They change with the session type.'}</p>
+              <p style="font-size:11px;color:var(--paper-dim);margin-bottom:8px;line-height:1.4;">${getLang()==='es' ? 'Toca una opción o escribe otra respuesta. Todo va en el informe .md y alimenta el mensaje del entrenador.' : 'Tap an option or type another answer. Everything goes into the .md report and feeds the coach message.'}</p>
               ${(() => {
                 const qs = postSessionQuestions(act), es = getLang() === 'es';
-                const esc = v => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                const on = 'border-color:var(--coyote);color:var(--coyote);background:rgba(201,169,97,0.1);';
                 return qs.map((x, i) => {
                   const nextId = i + 1 < qs.length ? `mf-${qs[i + 1].id}-${act.id}` : null;
-                  const label = es ? x.es : x.en;
-                  return x.kind === 'num'
-                    ? `<div class="manual-field-row"><label for="mf-${x.id}-${act.id}">${label}</label><input type="text" inputmode="decimal" id="mf-${x.id}-${act.id}" value="${esc(mf[x.id])}" placeholder="—" onblur="saveManualField('${act.id}', '${x.id}', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, ${nextId ? `'${nextId}'` : 'null'})" /></div>`
-                    : `<div class="form-group" style="margin-top:8px;"><label class="form-label" for="mf-${x.id}-${act.id}" style="margin-bottom:4px;">${label}</label><input type="text" id="mf-${x.id}-${act.id}" value="${esc(mf[x.id])}" placeholder="—" onblur="saveManualField('${act.id}', '${x.id}', this.value)" style="width:100%;" enterkeyhint="next" onkeydown="handleEnterNext(event, ${nextId ? `'${nextId}'` : 'null'})" /></div>`;
+                  const cur = String(mf[x.id] == null ? '' : mf[x.id]).trim();
+                  const hit = x.opts.findIndex(o => o.v === cur);
+                  const chips = x.opts.map((o, k) => `<button type="button" class="btn-small" aria-pressed="${hit === k}" style="${hit === k ? on : ''}" onclick="pickPostAnswer('${act.id}', '${x.id}', ${k})">${esc(es ? o.v : o.en)}</button>`).join('');
+                  return `<div class="form-group" style="margin-top:12px;">
+                    <label class="form-label" for="mf-${x.id}-${act.id}" style="margin-bottom:6px;">${esc(es ? x.es : x.en)}</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${chips}</div>
+                    <input type="text" id="mf-${x.id}-${act.id}" value="${esc(hit < 0 ? cur : '')}" placeholder="${es ? 'Otra respuesta…' : 'Other answer…'}" onblur="savePostCustom('${act.id}', '${x.id}', this.value)" style="width:100%;" enterkeyhint="next" onkeydown="handleEnterNext(event, ${nextId ? `'${nextId}'` : 'null'})" />
+                  </div>`;
                 }).join('');
               })()}
             </div>
@@ -11888,47 +11894,234 @@
     }
 
 
-    // 2026.11.09-5: preguntas de después de la sesión. Las respuestas viajan en el informe .md
-    // ("Exportar MD") para que el entrenador no tenga que preguntarlas en el chat.
-    // Se guardan en manualFields con el prefijo ps_. Las comunes salen siempre; las demás según el tipo.
+    // 2026.11.10-1: preguntas de después de la sesión, una por una, con opciones para tocar y
+    // un campo para escribir otra respuesta. Se guardan en manualFields con el prefijo ps_ y viajan
+    // en el informe .md. Las comunes salen siempre; las demás, según el tipo de sesión.
+    // El valor guardado es el texto en español de la opción (así lo leen el informe y el entrenador).
     function postSessionQuestions(act) {
-      const key = activityKind(act).key;
-      const q = (id, es, en, kind) => ({ id: 'ps_' + id, es, en, kind: kind || 'text' });
+      const key = activityKind(act).key, mf = act?.manualFields || {};
+      const O = (es, en) => ({ v: es, en: en || es });
+      const N = (...ns) => ns.map(n => ({ v: String(n), en: String(n) }));
+      const q = (id, es, en, kind, opts) => ({ id: 'ps_' + id, es, en, kind: kind || 'text', opts: opts || [] });
+      const NO3 = [O('No', 'No'), O('Leve y pasó', 'Mild, it passed'), O('Sí, tuve que parar', 'Yes, I had to stop')];
       const quality = ['intervals', 'tempo', 'course', 'hills', 'race'].includes(key);
       const list = [
-        q('waterBefore', 'Agua antes (oz)', 'Water before (oz)', 'num'),
-        q('waterDuring', 'Agua durante (oz)', 'Water during (oz)', 'num'),
-        q('waterAfter', 'Agua después (oz)', 'Water after (oz)', 'num'),
-        q('snackTime', 'Hora de la merienda o comida previa', 'Time of pre-session snack/meal')
+        q('waterBefore', 'Agua antes (oz)', 'Water before (oz)', 'num', N(0, 4, 6, 8, 12, 16)),
+        q('waterDuring', 'Agua durante (oz)', 'Water during (oz)', 'num', N(0, 4, 6, 8, 12, 16)),
+        q('waterAfter', 'Agua después (oz)', 'Water after (oz)', 'num', N(4, 8, 12, 16, 24)),
+        q('snackTime', '¿Cuánto antes de salir comiste algo?', 'How long before the session did you eat?', 'text', [
+          O('No comí', 'I did not eat'), O('Menos de 1 h', 'Under 1 h'), O('1 a 2 h', '1 to 2 h'), O('2 a 3 h', '2 to 3 h'), O('Más de 3 h', 'Over 3 h')])
       ];
       if (quality) {
         list.push(
-          q('limiter', 'Qué limitó el esfuerzo (piernas, respiración, FC, terreno, calor)', 'What limited the effort (legs, breathing, HR, terrain, heat)'),
-          q('walkWhy', 'Si caminaste en recuperaciones o trote final: ¿por qué?', 'If you walked in recoveries or the final jog: why?'),
-          q('routeNotes', 'Ruta y estado del terreno (mojado, irregular, tráfico)', 'Route and terrain (wet, uneven, traffic)')
+          q('limiter', '¿Qué limitó el esfuerzo?', 'What limited the effort?', 'text', [
+            O('Nada, salió como lo previsto', 'Nothing, it went as planned'), O('Piernas', 'Legs'), O('Respiración', 'Breathing'),
+            O('La FC tardó en subir', 'HR was slow to rise'), O('La FC subió muy rápido', 'HR rose too fast'), O('Terreno', 'Terrain'), O('Calor', 'Heat')]),
+          q('walkWhy', 'Si caminaste en las recuperaciones o el trote final: ¿por qué?', 'If you walked in recoveries or the final jog: why?', 'text', [
+            O('No caminé', 'I did not walk'), O('Subió la FC', 'HR went up'), O('Respiración', 'Breathing'), O('Terreno o charcos', 'Terrain or puddles'),
+            O('Cansancio de piernas', 'Tired legs'), O('Era descanso planeado', 'Planned rest')]),
+          q('route', '¿Dónde lo hiciste?', 'Where did you do it?', 'text', [
+            O('Parque de softball', 'Softball park'), O('Falso plano', 'False flat'), O('Recorrido del 10K', '10K course'), O('Calle del barrio', 'Neighborhood street')]),
+          q('terrain', 'Estado del terreno', 'Terrain condition', 'text', [
+            O('Seco y plano', 'Dry and flat'), O('Mojado', 'Wet'), O('Con subidas y bajadas', 'Rolling'), O('Irregular o con baches', 'Uneven or potholes'), O('Mucho tráfico', 'Heavy traffic')])
         );
       } else if (key === 'long') {
         list.push(
-          q('fuelDuring', 'Electrolitos o carbohidrato durante', 'Electrolytes or carbs during'),
-          q('legsLate', 'Cómo estaban las piernas en el último tercio', 'How the legs felt in the last third')
+          q('electrolytes', '¿Tomaste electrolitos durante?', 'Did you take electrolytes during?', 'text', [O('Sí', 'Yes'), O('No', 'No')]),
+          q('carbs', '¿Tomaste carbohidrato durante?', 'Did you take carbs during?', 'text', [O('Sí', 'Yes'), O('No', 'No')]),
+          q('legsLate', 'Piernas en el último tercio', 'Legs in the last third', 'text', [O('Frescas', 'Fresh'), O('Normales', 'Normal'), O('Pesadas', 'Heavy'), O('Muy cargadas', 'Very loaded')])
         );
       } else if (key === 'easy') {
         list.push(
-          q('easyCheck', '¿Pudiste respirar por la nariz? ¿Sonó la alerta de FC? ¿Pasos cortos en las bajadas?', 'Could you breathe through the nose? Did the HR alert sound? Short steps on downhills?')
+          q('nasal', '¿Pudiste respirar por la nariz?', 'Could you breathe through the nose?', 'text', [O('Sí, todo el tiempo', 'Yes, throughout'), O('Solo en parte', 'Only part of it'), O('No pude', 'I could not')]),
+          q('hrAlert', '¿Sonó la alerta de FC?', 'Did the HR alert sound?', 'text', [O('No sonó', 'It did not sound'), O('Sonó y bajé el ritmo', 'It sounded and I slowed down'), O('Sonó y no bajé el ritmo', 'It sounded and I did not slow down'), O('No la tenía puesta', 'It was not set')]),
+          q('shortSteps', '¿Diste pasos cortos en las bajadas?', 'Did you take short steps on the downhills?', 'text', [O('Sí, en todas', 'Yes, on all'), O('En algunas', 'On some'), O('No', 'No')])
         );
       } else if (key === 'march') {
         list.push(
-          q('feetHot', 'Puntos calientes en los pies (sí/no, dónde)', 'Hot spots on the feet (yes/no, where)'),
-          q('nextDayPain', 'Dolor al día siguiente: espalda, cadera, rodillas, pies (llenar mañana)', 'Next-day pain: back, hips, knees, feet (fill in tomorrow)')
+          q('feetHot', 'Puntos calientes en los pies', 'Hot spots on the feet', 'text', [O('No', 'No'), O('Sí, talón', 'Yes, heel'), O('Sí, dedos', 'Yes, toes'), O('Sí, planta', 'Yes, sole')]),
+          q('nextDayPain', 'Dolor al día siguiente (llenar mañana)', 'Next-day pain (fill in tomorrow)', 'text', [O('Sin dolor', 'No pain'), O('Espalda', 'Back'), O('Cadera', 'Hips'), O('Rodillas', 'Knees'), O('Pies', 'Feet')])
         );
       }
+      list.push(q('strengthDone', 'Fuerza después de la sesión', 'Strength afterwards', 'text', [O('Ninguna', 'None'), O('Fuerza A', 'Strength A'), O('Fuerza B', 'Strength B')]));
+      if (String(mf.ps_strengthDone || '').trim() !== 'Ninguna') {
+        list.push(q('strengthSkipped', '¿Qué se omitió de la fuerza?', 'What was skipped from strength?', 'text', [
+          O('Nada, completa', 'Nothing, complete'), O('Los saltos', 'The jumps'), O('Un ejercicio pesado', 'A heavy exercise'), O('Casi todo, por falta de tiempo', 'Almost all, no time')]));
+      }
       list.push(
-        q('strengthAfter', 'Fuerza después (A / B / ninguna) y qué ejercicios o saltos se omitieron', 'Strength afterwards (A / B / none) and what was skipped'),
-        q('calvesAfter', 'Pantorrillas después (0–10)', 'Calves afterwards (0–10)', 'num'),
-        q('warnSymptoms', 'Mareo, molestia en el pecho o piernas pesadas (durante o después)', 'Dizziness, chest discomfort or heavy legs (during or after)'),
-        q('offPlan', 'Algo fuera del plan (ruta, hora, peso del chaleco, sesión doble)', 'Anything off-plan (route, time, vest weight, double session)')
+        q('calvesAfter', 'Pantorrillas después (0–10)', 'Calves afterwards (0–10)', 'num', N(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)),
+        q('dizzy', 'Mareo', 'Dizziness', 'text', NO3),
+        q('chestPain', 'Molestia en el pecho', 'Chest discomfort', 'text', NO3),
+        q('heavyLegs', 'Piernas pesadas', 'Heavy legs', 'text', [O('No', 'No'), O('Un poco al final', 'A little at the end'), O('Desde el inicio', 'From the start')]),
+        q('offPlan', 'Algo fuera del plan', 'Anything off-plan', 'text', [O('Nada', 'Nothing'), O('Ruta distinta', 'Different route'), O('Hora distinta', 'Different time'), O('Peso del chaleco distinto', 'Different vest weight'), O('Sesión doble', 'Double session')])
       );
       return list;
+    }
+
+    // Toca una opción: la guarda; si ya estaba elegida, la quita.
+    function pickPostAnswer(actId, qid, k) {
+      const act = state.tcxSessions.find(a => a.id === actId); if (!act) return;
+      const x = postSessionQuestions(act).find(z => z.id === qid); if (!x || !x.opts[k]) return;
+      const cur = String((act.manualFields || {})[qid] == null ? '' : act.manualFields[qid]).trim();
+      saveManualField(actId, qid, cur === x.opts[k].v ? '' : x.opts[k].v);
+    }
+    // Campo "otra respuesta": no borra la opción elegida si se deja vacío.
+    function savePostCustom(actId, qid, value) {
+      const act = state.tcxSessions.find(a => a.id === actId); if (!act) return;
+      const v = String(value == null ? '' : value).trim();
+      const cur = String((act.manualFields || {})[qid] == null ? '' : act.manualFields[qid]).trim();
+      const x = postSessionQuestions(act).find(z => z.id === qid);
+      const isOpt = !!(x && x.opts.some(o => o.v === cur));
+      if (v === '' && isOpt) return;
+      if (v === cur) return;
+      saveManualField(actId, qid, v);
+    }
+
+    // 2026.11.10-1: mensaje del entrenador a partir de los datos de la sesión y de las respuestas:
+    // qué salió mal, qué salió bien y cómo mejorarlo. Solo reglas del proyecto; nada inventado.
+    function coachFeedback(act) {
+      const a = act?.analysis || {}, mf = act?.manualFields || {};
+      const key = activityKind(act).key;
+      const bad = [], good = [], fix = [];
+      const addBad = (b, f) => { bad.push(b); if (f && !fix.includes(f)) fix.push(f); };
+      const num = v => { const n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isNaN(n) ? null : n; };
+      const mmss = sec => secToMMSS(Math.round(sec));
+      const ans = id => String(mf[id] == null ? '' : mf[id]).trim();
+      const feels = num(mf.feelsLike), hot = feels != null && feels > 80;
+      const easyLike = key === 'easy' || key === 'long';
+      const quality = ['intervals', 'tempo', 'course', 'hills', 'race'].includes(key);
+      const tz = a.timeInZones, zs = tz && tz.seconds, tot = (tz && tz.totalSec) || 0;
+      const linked = act.linkedPlanDay ? state.plan.find(p => p.day === act.linkedPlanDay) : null;
+      const ss = sessionSamples(act), L = ss && ss.list ? ss.list : null;
+
+      // ── Días fáciles y largos: zona, arranque, cadencia, desacople, caminatas, esfuerzo ──
+      if (easyLike && zs && tot > 60) {
+        const z3 = zs[3] || 0, z45 = (zs[4] || 0) + (zs[5] || 0), over = z3 + z45, pct = Math.round(over / tot * 100);
+        if (pct > 10) addBad(`${mmss(z3)} en Z3${z45 >= 30 ? ' y ' + mmss(z45) + ' en Z4–Z5' : ''} (${pct} % del tiempo sobre 148 lpm). Un día ${key === 'long' ? 'largo' : 'fácil'} se queda en Z2.`,
+          'Pon la alerta del reloj en 145 (con calor); cuando suene, baja el ritmo o camina 20–30 s hasta ~135 y retoma.');
+        else if (pct <= 5) good.push(`Disciplina de zona: ${100 - pct} % del tiempo en Z1–Z2 (solo ${mmss(over)} sobre 148 lpm).`);
+        const sp1 = a.realSplitsMi && a.realSplitsMi[0];
+        if (sp1 && !sp1.partial && sp1.avgHR >= 145) addBad(`Milla 1 con FC ${Math.round(sp1.avgHR)} lpm: saliste más rápido de lo que pide la zona.`,
+          'Los primeros 10 min a ritmo fijo y suave, sin dejarte llevar por el ritmo promedio del reloj.');
+        const cad = act.avgCadSPM;
+        if (cad >= 168) good.push(`Cadencia de ${cad} spm (meta ≥168).`);
+        else if (cad > 0 && cad < 160) addBad(`Cadencia de ${cad} spm (meta ≥168).`, 'Pasos más cortos y rápidos, sobre todo en las bajadas.');
+        if (a.decouplingValid && a.aerobicDecouplingPct != null) {
+          const v = a.aerobicDecouplingPct;
+          if (v <= 5) good.push(`Desacople de ${v.toFixed(1)} %: base aeróbica sólida en esta sesión.`);
+          else if (v > 7.5) addBad(`Desacople de ${v.toFixed(1)} % (meta <7.5 %).`, 'Baja el ritmo para que la FC no suba a mitad de sesión y revisa hidratación y calor.');
+        }
+        const ws = (a.runWalk && a.runWalk.walkSegments) || [];
+        if (ws.length) addBad(`${ws.length} caminata(s) (${mmss(ws.reduce((x, w) => x + (w.durationSec || 0), 0))} en total) en una sesión continua.`, 'Baja el ritmo antes de que la FC pase de 148 para no tener que parar.');
+        else if (a.runWalk && a.runWalk.runPct >= 98) good.push('Sesión continua, sin caminatas.');
+        const rpe = num(mf.rpe);
+        if (key === 'easy' && rpe != null && rpe >= 5) addBad(`Esfuerzo percibido ${rpe}/10 en un día fácil (se siente ≤4).`, 'Revisa calor, hidratación, comida previa y la carga de los días anteriores.');
+      }
+
+      // ── Calidad: repeticiones, ejecución, trote final, ritmo sostenido ──
+      const rm = a.repMatch, seg = a.workSegment && a.workSegment.main;
+      if (quality && rm && Array.isArray(rm.reps) && rm.reps.length) {
+        if (rm.matched >= rm.planned) good.push(`${rm.matched} de ${rm.planned} repeticiones completadas.`);
+        else addBad(`Solo ${rm.matched} de ${rm.planned} repeticiones detectadas.`, 'Marca una vuelta por repetición (usa el entrenamiento del reloj).');
+        if (rm.repCvPct != null) {
+          if (rm.repCvPct < 3) good.push(`Ritmo parejo entre repeticiones (CV ${rm.repCvPct} %).`);
+          else if (rm.repCvPct >= 6) addBad(`Ritmo irregular entre repeticiones (CV ${rm.repCvPct} %).`, 'Busca el mismo ritmo de la repetición 2 a la última.');
+        }
+        const p1 = rm.reps[0].paceSecPerMi, pn = rm.reps[rm.reps.length - 1].paceSecPerMi;
+        if (rm.reps.length >= 3 && p1 > 0 && pn > 0) {
+          if (pn <= p1) good.push(`Cerraste igual o más fuerte: ${fmtPaceNoUnit(p1)} → ${fmtPaceNoUnit(pn)}/mi.`);
+          else if (pn > p1 + 15) addBad(`Te frenaste: ${fmtPaceNoUnit(p1)} → ${fmtPaceNoUnit(pn)}/mi.`, 'Sal 5–10 s/mi más suave en la repetición 1 para no pagarlo al final.');
+        }
+        const hz = rm.timeInZones && rm.timeInZones.pct;
+        if (hz) {
+          const z45 = (hz.z4 || 0) + (hz.z5 || 0);
+          if (z45 < 50) addBad(`Solo ${z45} % de las repeticiones en Z4–Z5 (meta ≥50 %).`,
+            'Sal al ritmo objetivo desde el primer minuto y busca FC 165 antes del minuto 2: en repeticiones cortas la FC sube tarde y las primeras quedan flojas si arrancas suave.');
+          else good.push(`${z45} % de las repeticiones en Z4–Z5 (meta ≥50 %).`);
+        }
+        let ex = [];
+        try { ex = executionAlerts(act, linked) || []; } catch (e) { ex = []; }
+        const EXFIX = {
+          strides: 'Aceleraciones de 20 s rápidas y sueltas (~8:00–8:30/mi), con 1 min caminando.',
+          warmup: 'Calentamiento de 12–15 min en Z2: baja el ritmo si ves 149.',
+          rep1: 'Repetición 1 a esfuerzo 7, sin pico de salida.',
+          cooldown: 'Trote final suave, 15:00–16:30/mi con pasos cortos.',
+          rpe: 'Revisa calor, hidratación, comida previa y la carga de los días anteriores.'
+        };
+        ex.forEach(x => addBad(x.text, EXFIX[x.key]));
+        if (!ex.some(x => x.key === 'strides' || x.key === 'warmup') && rm.strides && rm.strides.length >= 3) good.push('Calentamiento y aceleraciones dentro de lo planeado.');
+        // Trote final: techo de 140; 145 con sensación térmica >80 °F (decisión del 9-nov).
+        if (rm.cooldown && rm.cooldown.durSec >= 300 && L && L.length) {
+          const end = L[L.length - 1].t, from = end - rm.cooldown.durSec;
+          const cs = L.filter(z => z.t >= from && z.hr > 0);
+          if (cs.length >= 10) {
+            const ceil = hot ? 145 : 140, over = cs.filter(z => z.hr > ceil).length / cs.length;
+            const avg = Math.round(cs.reduce((x, z) => x + z.hr, 0) / cs.length);
+            if (over > 0.5) addBad(`Trote final: ${Math.round(over * 100)} % del tiempo sobre ${ceil} lpm (FC promedio ${avg}).`,
+              `Si pasa de ${ceil}: camina hasta 130 y retoma; los primeros 2 min del trote caminando; ritmo 15:00–16:30/mi.`);
+            else good.push(`Trote final dentro del techo de ${ceil} lpm (FC promedio ${avg}).`);
+          }
+        }
+      }
+      if (quality && seg && seg.bandPct != null) {
+        if (seg.bandPct >= 70) good.push(`${seg.bandPct} % del bloque en ${seg.bandLo}–${seg.bandHi} lpm (meta ≥70 %).`);
+        else addBad(`Solo ${seg.bandPct} % del bloque en ${seg.bandLo}–${seg.bandHi} lpm (meta ≥70 %).`,
+          'Después del arranque, ritmo fijo de ~10:20–10:30/mi los primeros 4 min aunque la FC marque 158–164 (no perseguirla); baja el ritmo al ver 172.');
+        if (seg.longestAboveLthrSec > 60) addBad(`Racha de ${seg.longestAboveLthrSec} s sobre 174 lpm (máximo 60 s).`, 'Baja el ritmo al ver 172, antes de pasar el umbral.');
+        else good.push(`Racha máxima sobre 174 lpm de ${seg.longestAboveLthrSec || 0} s (≤60 s).`);
+      }
+
+      // ── Marcha con chaleco: FC ≤150, peso, pies ──
+      if (key === 'march' && L && L.length) {
+        const hs = L.filter(z => z.hr > 0), over = hs.filter(z => z.hr > 150).length;
+        if (hs.length && over / hs.length > 0.05) addBad(`${mmss(over * (ss.step || 5))} sobre 150 lpm (${Math.round(over / hs.length * 100)} % de la marcha).`, 'Pasos más cortos y menos ritmo; revisa que el chaleco quede ajustado.');
+        else if (hs.length) good.push('FC dentro de ≤150 lpm durante la marcha.');
+        const vest = num(mf.vestLb);
+        if (vest != null && vest !== 20) addBad(`Chaleco de ${vest} lb (noviembre: fijo en 20 lb, agua incluida).`, 'Vuelve a 20 lb.');
+        if (/caliente|ampolla|roz/i.test(String(mf.feetNotes || ''))) addBad(`Pies: ${mf.feetNotes}.`, 'Revisa los pies en la milla 1 y cambia las medias si hace falta.');
+      }
+
+      // ── Todas las sesiones: regla de cancelar, agua, síntomas, pantorrillas, respuestas ──
+      const sleep = num(mf.sleepHours), rhr = num(mf.restingHR), hrv = num(mf.hrv);
+      if (sleep != null && sleep < 6) addBad(`Dormiste ${sleep} h (<6 h): la regla pide pasar a Z2 o cancelar la calidad.`, 'Protege ≥7 h la noche antes de una sesión de calidad.');
+      if (rhr != null && rhr >= 60) addBad(`FC de reposo ${rhr} (≥60): la regla pide pasar a Z2 o cancelar.`, 'Revisa sueño, hidratación y carga antes de volver a la calidad.');
+      if (hrv != null && hrv <= 34) addBad(`HRV de ${hrv} ms (≤34): la regla pide pasar a Z2 o cancelar.`, 'Revisa sueño, hidratación y carga antes de volver a la calidad.');
+      if (feels != null && feels > 90) addBad(`Sensación térmica de ${feels} °F (>90): la regla pide pasar a Z2 o cancelar.`, 'Mueve la sesión a una hora más fresca.');
+      if (hot && easyLike) fix.push(`Con ${feels} °F de sensación: alerta de FC en 145 y pasos cortos en las bajadas.`);
+      if (quality || key === 'long') {
+        const wd = num(mf.ps_waterDuring);
+        if (wd != null && wd < 12) addBad(`Agua durante la sesión: ${wd} oz (regla: 12–16 oz con calor).`, 'Reparte 12–16 oz: por ejemplo 6 antes, 4 después del calentamiento y 6 al final.');
+        else if (wd != null) good.push(`Agua durante la sesión: ${wd} oz (regla 12–16 oz).`);
+      }
+      const dz = ans('ps_dizzy'), ch = ans('ps_chestPain'), hl = ans('ps_heavyLegs'), old = ans('ps_warnSymptoms');
+      if ((dz && dz !== 'No') || (ch && ch !== 'No') || (old && !/^(ning|no\b|nada|sin)/i.test(old))) {
+        addBad(`Síntomas reportados: ${[dz && dz !== 'No' ? 'mareo (' + dz.toLowerCase() + ')' : '', ch && ch !== 'No' ? 'molestia en el pecho (' + ch.toLowerCase() + ')' : '', old && !/^(ning|no\b|nada|sin)/i.test(old) ? old : ''].filter(Boolean).join(', ')}.`,
+          'Dolor de pecho, mareo o FC anormal: detente y busca evaluación médica; no lo midas con datos del reloj.');
+      } else if (dz === 'No' && ch === 'No') good.push('Sin mareo ni molestia en el pecho.');
+      if (hl === 'Desde el inicio') addBad('Piernas pesadas desde el inicio.', 'Revisa sueño, la carga de los días anteriores y la fuerza; considera pasar la próxima calidad a Z2.');
+      const cv = num(mf.ps_calvesAfter);
+      if (cv != null && cv >= 2) addBad(`Pantorrillas en ${cv}/10 después de la sesión.`, 'Ese día se quitan los saltos; revisa la regla de cancelar antes de la próxima sesión.');
+      if (ans('ps_nasal') === 'No pude') addBad('No pudiste respirar por la nariz en un día fácil.', 'Baja el ritmo hasta poder respirar por la nariz con la FC dentro de Z2.');
+      if (ans('ps_hrAlert') === 'Sonó y no bajé el ritmo') addBad('La alerta de FC sonó y no bajaste el ritmo.', 'Cuando suene, baja el ritmo en ese momento.');
+      if (ans('ps_shortSteps') === 'No') addBad('No diste pasos cortos en las bajadas.', 'Bajadas con pasos cortos y cadencia de 168 o más: frenan menos y cuidan cuádriceps y pantorrillas.');
+      return { bad: bad.slice(0, 8), good: good.slice(0, 8), fix: fix.slice(0, 8) };
+    }
+
+    function renderCoachCard(act) {
+      const es = getLang() === 'es';
+      let f; try { f = coachFeedback(act); } catch (e) { console.warn('coachFeedback', e); return ''; }
+      if (!f || (!f.bad.length && !f.good.length && !f.fix.length)) return '';
+      const grp = (title, items, type, empty) => `
+        <div style="font-family:var(--font-mono);font-size:11px;color:var(--paper-dim);margin:12px 0 4px;letter-spacing:.04em;">${title}</div>
+        ${items.length ? items.map(i => `<div class="finding-line finding-${type}"><span>${type === 'pos' ? '▲' : type === 'warn' ? '◆' : '✕'}</span><span>${esc(i)}</span></div>`).join('') : `<p style="font-size:12px;color:var(--paper-dim);">${empty}</p>`}`;
+      return `
+        <div class="sitrep-label">${es ? 'ENTRENADOR · QUÉ AJUSTAR' : 'COACH · WHAT TO ADJUST'}</div>
+        <div class="card">
+          ${grp(es ? 'LO QUE HICISTE MAL' : 'WHAT WENT WRONG', f.bad, 'crit', es ? 'Nada fuera de las reglas en esta sesión.' : 'Nothing outside the rules in this session.')}
+          ${grp(es ? 'LO QUE HICISTE BIEN' : 'WHAT WENT WELL', f.good, 'pos', es ? 'Sin datos suficientes todavía.' : 'Not enough data yet.')}
+          ${grp(es ? 'CÓMO MEJORARLO' : 'HOW TO IMPROVE', f.fix, 'warn', es ? 'Mantén lo mismo en la próxima.' : 'Keep doing the same next time.')}
+          <p style="font-size:11px;color:var(--paper-dim);margin-top:10px;line-height:1.4;">${es ? 'Sale de los datos del reloj y de tus respuestas de abajo; se actualiza al contestarlas.' : 'Built from the watch data and your answers below; it updates as you answer.'}</p>
+        </div>`;
     }
 
     const SESSION_TYPE_LABELS = {
@@ -12621,28 +12814,37 @@
       lines.push('');
       lines.push(mf.athleteNotes || ND);
       lines.push('');
-      // 2026.11.09-5: respuestas de después de la sesión (según el tipo).
+      // 2026.11.10-1: respuestas de después de la sesión (una por pregunta, según el tipo) y mensaje del entrenador.
       {
         lines.push('## Después de la Sesión (respuestas del atleta)');
         lines.push('');
-        const psQs = postSessionQuestions(t);
-        psQs.forEach(x => {
+        postSessionQuestions(t).forEach(x => {
           const v = String(mf[x.id] == null ? '' : mf[x.id]).trim();
           lines.push(`**${x.es}:** ${v || ND}`);
         });
-        // Aviso objetivo: la regla del proyecto pide 12–16 oz durante la calidad y la larga con calor.
-        const kk = activityKind(t).key;
-        const wd = parseFloat(String(mf.ps_waterDuring == null ? '' : mf.ps_waterDuring).replace(',', '.'));
-        if (['intervals', 'tempo', 'course', 'hills', 'race', 'long'].includes(kk) && !isNaN(wd) && wd < 12) {
-          lines.push('');
-          lines.push(`> ⚠ Agua durante: ${wd} oz. La regla del proyecto es 12–16 oz en calidad y larga con calor.`);
-        }
-        const cv = parseFloat(String(mf.ps_calvesAfter == null ? '' : mf.ps_calvesAfter).replace(',', '.'));
-        if (!isNaN(cv) && cv >= 2) {
-          lines.push('');
-          lines.push(`> ⚠ Pantorrillas en ${cv}/10 después de la sesión: ese día se quitan los saltos y revisa la regla de cancelar.`);
-        }
+        // Respuestas guardadas con la versión 11.09-5 (preguntas que ahora están separadas).
+        [['ps_easyCheck', 'Respiración nasal, alerta de FC y pasos cortos (respuesta anterior)'], ['ps_warnSymptoms', 'Mareo, pecho o piernas pesadas (respuesta anterior)'],
+         ['ps_strengthAfter', 'Fuerza después (respuesta anterior)'], ['ps_routeNotes', 'Ruta y terreno (respuesta anterior)'], ['ps_fuelDuring', 'Electrolitos o carbohidrato (respuesta anterior)'],
+         ].forEach(([k, lab]) => {
+          const v = String(mf[k] == null ? '' : mf[k]).trim();
+          if (v && lab) lines.push(`**${lab}:** ${v}`);
+        });
         lines.push('');
+        let cf = null;
+        try { cf = coachFeedback(t); } catch (e) { cf = null; }
+        if (cf && (cf.bad.length || cf.good.length || cf.fix.length)) {
+          lines.push('## Recomendaciones del Entrenador (automáticas)');
+          lines.push('');
+          lines.push('**Lo que hiciste mal:**');
+          (cf.bad.length ? cf.bad : ['Nada fuera de las reglas en esta sesión.']).forEach(x => lines.push('- ' + x));
+          lines.push('');
+          lines.push('**Lo que hiciste bien:**');
+          (cf.good.length ? cf.good : ['Sin datos suficientes todavía.']).forEach(x => lines.push('- ' + x));
+          lines.push('');
+          lines.push('**Cómo mejorarlo:**');
+          (cf.fix.length ? cf.fix : ['Mantén lo mismo en la próxima.']).forEach(x => lines.push('- ' + x));
+          lines.push('');
+        }
       }
 
       // ── EVALUACIÓN POR CARACTERÍSTICA ───────────────────────────────────────
@@ -13944,7 +14146,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.09-5';
+    const APP_BUILD = '2026.11.10-1';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
