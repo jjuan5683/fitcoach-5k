@@ -3539,6 +3539,11 @@
       const allPrior = state.tcxSessions
         .filter(act => act.id !== activity.id && act.dateISO < activity.dateISO)
         .sort((a, b) => b.dateISO.localeCompare(a.dateISO));
+      // 2026.11.10-2: el recorrido (D1/D2) solo se compara con otros recorridos; antes lo comparaba con el ritmo sostenido.
+      if (activity.analysis && activity.analysis.courseSegment) {
+        const same = allPrior.filter(x => x.analysis && x.analysis.courseSegment);
+        return same.length >= 2 ? { history: same.map(x => ({ avgHR: x.avgHR, avgPaceSecPerMi: x.avgPaceSecPerMi })), sameTypeOnly: true } : { history: [], sameTypeOnly: false, needSameType: true };
+      }
 
       const activityType = activity.linkedPlanDay ? state.plan.find(s => s.day === activity.linkedPlanDay)?.type : null;
 
@@ -3901,6 +3906,7 @@
         paceSecPerMi: best.ds / distMi, avgHR: w.avgHR, maxHR: w.maxHR, avgCad: w.avgCad,
         timeInZones: w.timeInZones, miles,
         projected10KSec: Math.round(best.ds * 6.2137 / distMi),
+        fromSec: start, toSec: end, // 2026.11.10-2: para el mensaje del entrenador (FC por tramo del recorrido)
         warmupSec: Math.round(start), cooldownSec: Math.round(Math.max(0, (laps[laps.length - 1].end) - end))
       };
     }
@@ -8133,7 +8139,7 @@
               <div class="stat-box"><div class="value">${secToMMSS(act.totalTimeSec)}</div><div class="label">${t('stat_time')}</div></div>
               <div class="stat-box"><div class="value">${act.sport === 'biking' ? (act.avgSpeedMph||0).toFixed(1)+' mph' : fmtPace(act.avgPaceSecPerMi)}</div><div class="label">${act.sport === 'biking' ? (getLang()==='es'?'VELOCIDAD':'SPEED') : t('stat_avg_pace')}</div></div>
               ${a.workSegment?.main ? `<div class="stat-box"><div class="value">${fmtPace(a.workSegment.main.paceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'RITMO DEL BLOQUE' : 'WORK BLOCK PACE'}</div></div>`
-                : act.workPaceSecPerMi ? `<div class="stat-box"><div class="value">${fmtPace(act.workPaceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'PACE REPETICIONES' : 'REPS PACE'}</div></div>` : ''}
+                : (act.workPaceSecPerMi && !a.courseSegment) ? `<div class="stat-box"><div class="value">${fmtPace(act.workPaceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'PACE REPETICIONES' : 'REPS PACE'}</div></div>` : ''}
               <div class="stat-box"><div class="value">${act.avgHR} bpm</div><div class="label">${t('stat_avg_hr')}</div></div>
               <div class="stat-box"><div class="value">${act.maxHR} bpm</div><div class="label">${t('stat_max_hr')}</div></div>
               <div class="stat-box"><div class="value">${act.avgCadSPM} spm</div><div class="label">${t('stat_avg_cad')}</div></div>
@@ -11913,6 +11919,18 @@
           O('No comí', 'I did not eat'), O('Menos de 1 h', 'Under 1 h'), O('1 a 2 h', '1 to 2 h'), O('2 a 3 h', '2 to 3 h'), O('Más de 3 h', 'Over 3 h')])
       ];
       if (quality) {
+        list.push(q('snackWhat', '¿Qué comiste antes?', 'What did you eat before?', 'text', [
+          O('Merienda ligera (guineo, galletas)', 'Light snack (banana, crackers)'), O('Barra o gel', 'Bar or gel'), O('Comida completa', 'Full meal'), O('Nada', 'Nothing')]));
+        if (key === 'course') {
+          list.push(
+            q('courseStart', '¿A qué hora saliste al recorrido?', 'What time did you start the course?', 'text', [
+              O('Antes de las 3:45 pm', 'Before 3:45 pm'), O('3:45 a 4:00 pm', '3:45 to 4:00 pm'), O('4:00 a 4:15 pm', '4:00 to 4:15 pm'), O('Después de las 4:15 pm', 'After 4:15 pm')]),
+            q('waterRoute', '¿En qué millas del recorrido tomaste agua?', 'In which miles of the course did you drink?', 'text', [
+              O('No tomé', 'I did not drink'), O('Solo al final', 'Only at the end'), O('Milla 2', 'Mile 2'), O('Millas 2 y 4', 'Miles 2 and 4'), O('Casi cada milla', 'Almost every mile')]),
+            q('sun', 'Sol durante el recorrido', 'Sun during the course', 'text', [
+              O('Nublado', 'Cloudy'), O('Sol a ratos', 'Sun at times'), O('Sol directo casi todo', 'Direct sun most of it')])
+          );
+        }
         list.push(
           q('limiter', '¿Qué limitó el esfuerzo?', 'What limited the effort?', 'text', [
             O('Nada, salió como lo previsto', 'Nothing, it went as planned'), O('Piernas', 'Legs'), O('Respiración', 'Breathing'),
@@ -12069,6 +12087,51 @@
           'Después del arranque, ritmo fijo de ~10:20–10:30/mi los primeros 4 min aunque la FC marque 158–164 (no perseguirla); baja el ritmo al ver 172.');
         if (seg.longestAboveLthrSec > 60) addBad(`Racha de ${seg.longestAboveLthrSec} s sobre 174 lpm (máximo 60 s).`, 'Baja el ritmo al ver 172, antes de pasar el umbral.');
         else good.push(`Racha máxima sobre 174 lpm de ${seg.longestAboveLthrSec || 0} s (≤60 s).`);
+      }
+
+      // ── 2026.11.10-2: D1/D2 en el recorrido: milla 1 en 165–172, millas 2–5 con techo de 174, milla 6 hasta 180 ──
+      const cs = a.courseSegment;
+      if (key === 'course' && cs && L && L.length && cs.fromSec != null) {
+        const W = L.filter(z => z.t >= cs.fromSec && z.t <= cs.toSec && z.hr > 0);
+        if (W.length > 20) {
+          const st = ss.step || 5, d0 = W[0].d, dEnd = W[W.length - 1].d;
+          const m1 = W.filter(z => z.d - d0 < 1609.344), m6 = W.filter(z => dEnd - z.d < 1609.344), mid = W.filter(z => z.d - d0 >= 1609.344 && dEnd - z.d >= 1609.344);
+          const band1 = m1.length ? Math.round(m1.filter(z => z.hr >= 165 && z.hr <= 172).length / m1.length * 100) : null;
+          if (band1 != null) { if (band1 >= 60) good.push(`Milla 1: ${band1} % en 165–172 lpm.`); else addBad(`Milla 1: solo ${band1} % en 165–172 lpm.`, 'En la subida de la milla 1, ritmo por FC: si pasa de 172, acorta el paso.'); }
+          const over174 = mid.filter(z => z.hr > 174).length * st;
+          if (mid.length) {
+            if (over174 > 60) addBad(`Millas 2–5: ${mmss(over174)} sobre el techo de 174 lpm.`, `En las bajadas, quédate 2–4 lpm bajo el techo${hot ? ' (con calor, techo de 170–172)' : ''}: si las millas 2–5 van pegadas al techo, la milla 6 llega con la FC ya arriba.`);
+            else good.push(`Millas 2–5 bajo el techo de 174 lpm (${mmss(over174)} sobre él).`);
+          }
+          const over180 = m6.filter(z => z.hr > 180).length * st;
+          if (m6.length) { if (over180 > 30) addBad(`Milla 6: ${mmss(over180)} sobre 180 lpm (máximo 30 s).`, 'En los repechos de la milla 6, al ver 180 afloja hasta bajar de 175.'); else good.push('Milla 6 dentro del tope de 180 lpm.'); }
+          const wu = L.filter(z => z.t < Math.min(cs.fromSec, 900) && z.hr > 0);
+          if (wu.length > 20) { const wa = Math.round(wu.reduce((x, z) => x + z.hr, 0) / wu.length); if (wa <= 148) good.push(`Calentamiento en Z2 (FC promedio ${wa}).`); else addBad(`Calentamiento con FC promedio ${wa} (sobre Z2).`, 'Calentamiento de 12–15 min en Z2: baja el ritmo si ves 149.'); }
+          const prev = state.tcxSessions.filter(x => x.id !== act.id && x.dateISO < act.dateISO && x.analysis && x.analysis.courseSegment).sort((x, y) => y.dateISO.localeCompare(x.dateISO))[0];
+          if (prev) {
+            const dt = cs.projected10KSec - prev.analysis.courseSegment.projected10KSec;
+            const line = `Equivalente 10K ${mmss(cs.projected10KSec)} contra ${mmss(prev.analysis.courseSegment.projected10KSec)} del ${prev.dateISO} (${dt > 0 ? '+' : '−'}${mmss(Math.abs(dt))}).`;
+            if (dt <= 0) good.push(line); else addBad(line, 'Compara con las condiciones de ese día (calor, hora, energía, agua) antes de sacar conclusiones.');
+          }
+          // Trote final después del recorrido
+          const cd = L.filter(z => z.t > cs.toSec && z.hr > 0);
+          if (cd.length * st >= 300) {
+            const ceil = hot ? 145 : 140, ov = cd.filter(z => z.hr > ceil).length / cd.length, walk = cd.filter(z => z.cad > 0 && z.cad < 140).length / cd.length;
+            if (ov > 0.5 && walk < 0.5) addBad(`Trote final: ${Math.round(ov * 100)} % del tiempo sobre ${ceil} lpm.`, `Si pasa de ${ceil}: camina hasta 130 y retoma.`);
+            else if (ov > 0.5) good.push(`Caminaste el trote final mientras la FC bajaba (${Math.round(walk * 100)} % caminando): correcto con la FC alta.`);
+          }
+        }
+      }
+      if (quality) {
+        const slp = num(mf.sleepHours); if (slp != null && slp >= 7) good.push(`Dormiste ${slp} h antes de la sesión.`);
+        const en = num(mf.energyLevel);
+        if (en != null && en <= 4) addBad(`Energía ${en}/10 antes de una sesión de calidad.`, 'Con energía ≤4, revisa comida, sueño y carga antes de salir; considera pasar la sesión a Z2.');
+        const sn = ans('ps_snackTime'), sw = ans('ps_snackWhat');
+        if (sn === 'Más de 3 h' || sn === 'No comí' || sw === 'Nada') addBad(`Comida previa: ${[sn, sw].filter(Boolean).join(', ').toLowerCase()}.`, 'Merienda 1.5–2 h antes con 30–50 g de carbohidrato, poca grasa y poca fibra (por ejemplo, un guineo con 2 galletas de soda con miel).');
+        else if (sn === '1 a 2 h') good.push('Merienda entre 1 y 2 h antes.');
+        const wr = ans('ps_waterRoute');
+        if (key === 'course' && (wr === 'No tomé' || wr === 'Solo al final')) addBad(`Agua en el recorrido: ${wr.toLowerCase()}.`, 'Ensaya tomar en las millas 2 y 4, como en la carrera.');
+        if (key === 'course' && ans('ps_courseStart') === 'Antes de las 3:45 pm') fix.push('Sal al recorrido a las 4:00 pm, la hora de la carrera, para que la comparación sea justa.');
       }
 
       // ── Marcha con chaleco: FC ≤150, peso, pies ──
@@ -12273,7 +12336,7 @@
       lines.push(`**Estrés (1-10):** ${mf.stressLevel || ND}`);
       lines.push(`**Dolor o Molestias:** ${mf.painNotes || 'Ninguno'}`);
       lines.push(`**Peso Corporal:** ${mf.bodyWeight ? mf.bodyWeight + ' lb' : ND}`);
-      lines.push(`**HRV:** ${mf.hrv ? mf.hrv + ' ms' : (a.hrvProxy ? '~' + a.hrvProxy + ' (proxy TCX)' : ND)}`);
+      lines.push(`**HRV:** ${mf.hrv ? mf.hrv + ' ms' : ND + ' — falta la HRV de la noche del reloj (el valor aproximado del TCX no es HRV)'}`);
       lines.push(`**Frecuencia Cardíaca en Reposo:** ${mf.restingHR ? mf.restingHR + ' bpm' : ND}`);
       lines.push('');
 
@@ -12305,7 +12368,7 @@
         if (seg) {
           lines.push(`**Ritmo del bloque sostenido:** ${fmtPace(seg.main.paceSecPerMi)} — ${secToMMSS(seg.main.durSec)}, ${seg.main.distMi.toFixed(2)} mi, FC ${seg.main.avgHR}/${seg.main.maxHR}`);
           if (seg.arranque) lines.push(`**Arranque (${Math.round(seg.arranque.durSec / 60)} min):** ${fmtPace(seg.arranque.paceSecPerMi)} — FC ${seg.arranque.hrStart}→${seg.arranque.hrEnd}`);
-        } else if (t.workPaceSecPerMi) {
+        } else if (t.workPaceSecPerMi && !a.courseSegment) { // 2026.11.10-2: en la D1/D2 las aceleraciones no son repeticiones
           lines.push(`**Pace de Repeticiones (solo esfuerzo):** ${fmtPace(t.workPaceSecPerMi)} — ${t.workLapsCount} tramo(s) de esfuerzo detectados`);
           lines.push(`**Pace de Recuperación:** ${fmtPace(t.recoveryPaceSecPerMi)} — ${t.recoveryLapsCount} tramo(s) de recuperación excluidos del promedio de arriba`);
         }
@@ -12495,7 +12558,7 @@
       // already drives workPaceSecPerMi — this just exposes each individual rep instead of only
       // the blended average, which is what actually shows fatigue progression (or its absence)
       // across a set.
-      if (!isBike && !seg && Array.isArray(t.laps) && t.workLapsCount >= 2) {
+      if (!isBike && !seg && !a.courseSegment && Array.isArray(t.laps) && t.workLapsCount >= 2) {
         const workReps = t.laps.filter(l => l.repType === 'work').sort((x, y) => x.lapIndex - y.lapIndex);
         const recoveryReps = t.laps.filter(l => l.repType === 'recovery').sort((x, y) => x.lapIndex - y.lapIndex);
 
@@ -14146,7 +14209,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.10-1';
+    const APP_BUILD = '2026.11.10-2';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
