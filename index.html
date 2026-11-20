@@ -7790,11 +7790,16 @@
       return { day, acc, left: Math.max(0, GRIT.target - acc.total), wkRun: wk.run, wkRuck: wk.ruck, prevRun: prev.run, cap: prev.run > 0 ? prev.run * 1.10 : null, sun };
     }
     // Reglas de cancelar o pasar a Z2 (las del proyecto) contra lo que se anotó antes de salir.
+    // 2026.11.20-5: el informe va siempre en español, aunque la app esté en inglés.
+    const TP_KIND_ES = { easy: 'Carrera fácil', long: 'Larga', tempo: 'Ritmo sostenido', course: 'Recorrido de la carrera', hills: 'Cuestas', intervals: 'Intervalos',
+      race: 'Carrera / simulacro', march: 'Marcha con chaleco', cross: 'Entrenamiento cruzado', rest: 'Descanso', bike: 'Bicicleta', none: 'Sin tipo' };
+    function tpKindEs(act) { const k = activityKind(act); return TP_KIND_ES[k.key] || k.label; }
     function tpPreChecks(mf, kind) {
       const num = v => { const m = String(v == null ? '' : v).replace(',', '.').match(/-?\d+(?:\.\d+)?/); return m ? parseFloat(m[0]) : null; };
       const hrv = num(mf.hrv), rhr = num(mf.restingHR), sl = num(mf.sleepHours), en = num(mf.energyLevel), fl = num(mf.feelsLike);
       const h7 = num(mf.hrv7d), band = Number(state.settings?.hrvBandLow) || 41;
       const pain = String(mf.painNotes || '').trim();
+      const noPain = !pain || /^\s*(0|no|ninguno?a?|nada|sin dolor)\s*$/i.test(pain);
       const q = TP_QUALITY.includes(kind);
       const row = (label, val, rule, ok) => ({ label, val, rule, ok });
       return [
@@ -7802,7 +7807,7 @@
         row('HRV de 7 días', h7 != null ? h7 + ' ms' : 'N/D', `cancela si queda bajo la banda (${band} ms)`, h7 == null ? null : h7 >= band),
         row('FC en reposo', rhr != null ? rhr + ' lpm' : 'N/D', 'cancela si ≥60', rhr == null ? null : rhr < 60),
         row('Sueño', sl != null ? sl + ' h' : 'N/D', 'cancela si <6 h', sl == null ? null : sl >= 6),
-        row('Dolor', pain || 'Ninguno', 'articular u óseo cancela', pain ? null : true),
+        row('Dolor', noPain ? 'Ninguno' + (pain ? ` (${pain})` : '') : pain, 'articular u óseo cancela', noPain ? true : null),
         row('Energía', en != null ? en + '/10' : 'N/D', q ? '≤4 antes de una calidad: avisar y considerar Z2' : 'informativo', en == null ? null : q ? en > 4 : true),
         row('Sensación térmica', fl != null ? fl + ' °F' : 'N/D', q ? '>90 °F cancela la calidad' : kind === 'march' ? 'informativo' : '>80 °F: alerta en 145', fl == null ? null : q ? fl <= 90 : true)
       ];
@@ -7819,8 +7824,13 @@
       const hhmm = t.startTimeISO ? new Date(t.startTimeISO).toLocaleTimeString('es-PR', { hour: 'numeric', minute: '2-digit' }) : 'N/D';
       L.push('## Resumen para el análisis', '');
       L.push(`- **Versión de la app:** FitCoach ${typeof APP_BUILD !== 'undefined' ? APP_BUILD : 'N/D'}`);
-      L.push(`- **Sesión:** ${activityKind(t).label} · ${wd} · salida ${hhmm}${linkedSession ? ` · día ${linkedSession.day} del plan` : ' · **sin vincular al plan**'}`);
+      L.push(`- **Sesión:** ${tpKindEs(t)} · ${wd} · salida ${hhmm}${linkedSession ? ` · día ${linkedSession.day} del plan` : ' · **sin vincular al plan**'}`);
       if (linkedSession && linkedSession.notes) L.push(`- **Línea del plan:** «${String(linkedSession.notes).trim().replace(/^(lun|mar|mi[eé]|jue|vie|s[aá]b|dom)\s*:\s*/i, '')}»`);
+      if (!linkedSession) {
+        const pd = (state.plan || []).find(p => p.dateISO === t.dateISO);
+        L.push(pd ? `- **Plan de ese día (sin vincular):** día ${pd.day} · «${String(pd.notes || sessionTitle(pd)).trim().replace(/^(lun|mar|mi[eé]|jue|vie|s[aá]b|dom)\s*:\s*/i, '')}»${pd.linkedActivityId ? ' · ya tiene otra actividad vinculada' : ' · vincúlala en la app'}` : '- **Plan de ese día:** no hay sesión en el plan');
+        if (pd && pd.opt) L.push(`- **Opcional de ese día:** ${pd.opt.slot || ''} «${pd.opt.text || ''}»`);
+      }
       if (linkedSession && linkedSession.opt) L.push(`- **Opcional del día:** ${linkedSession.opt.slot || ''} «${linkedSession.opt.text || ''}» (no es deuda)`);
       const gear = gearById(mf.gearId);
       L.push(`- **Equipo y datos:** ${gear ? gear.name : 'calzado N/D'} · FC ${mf.hrSource ? (HR_SOURCES[mf.hrSource]?.es || mf.hrSource) : 'fuente N/D'}${kind === 'march' ? ` · chaleco ${mf.vestLb ? mf.vestLb + ' lb' : 'N/D'}` : ''}`);
@@ -12709,6 +12719,8 @@
           q('feetHot', 'Puntos calientes en los pies', 'Hot spots on the feet', 'text', [O('No', 'No'), O('Sí, talón', 'Yes, heel'), O('Sí, dedos', 'Yes, toes'), O('Sí, planta', 'Yes, sole')]),
           q('nextDayPain', 'Dolor al día siguiente (llenar mañana)', 'Next-day pain (fill in tomorrow)', 'text', [O('Sin dolor', 'No pain'), O('Espalda', 'Back'), O('Cadera', 'Hips'), O('Rodillas', 'Knees'), O('Pies', 'Feet')])
         );
+        // 2026.11.20-5: el dolor del día siguiente solo se contesta desde el día siguiente.
+        if (act && act.dateISO >= todayISO() && !String(mf.ps_nextDayPain || '').trim()) list.pop();
       }
       list.push(q('strengthDone', 'Fuerza después de la sesión', 'Strength afterwards', 'text', [O('Ninguna', 'None'), O('Fuerza A', 'Strength A'), O('Fuerza B', 'Strength B')]));
       if (String(mf.ps_strengthDone || '').trim() !== 'Ninguna') {
@@ -13022,7 +13034,7 @@
       lines.push(`Date: ${t.dateISO}`);
       lines.push(`Sport: ${isBike ? 'Biking' : 'Running'}`);
       lines.push(`Type: ${typeLabel}`);
-      lines.push(`Kind: ${tpKind} (${activityKind(t).label})`);
+      lines.push(`Kind: ${tpKind} (${tpKindEs(t)})`);
       if (linkedSession) lines.push(`Linked Plan Day: ${linkedSession.day}`);
       lines.push(`LTHR: ${state.profile?.lthr || 174} bpm`);
       if (isBike) {
@@ -13070,7 +13082,7 @@
       lines.push('## Información General');
       lines.push('');
       lines.push(`**Fecha:** ${t.dateISO}`);
-      lines.push(`**Tipo de Entrenamiento:** ${activityKind(t).label}${linkedSession ? ` (plan: ${linkedSession.type === 'cross_training' ? 'entrenamiento cruzado' : typeLabel})` : ''}`);
+      lines.push(`**Tipo de Entrenamiento:** ${tpKindEs(t)}${linkedSession ? ` (plan: ${linkedSession.type === 'cross_training' ? 'entrenamiento cruzado' : typeLabel})` : ''}`);
       lines.push(`**Objetivo del Entrenamiento:** ${mf.sessionGoal || (linkedSession && linkedSession.notes ? 'ver la línea del plan arriba' : ND)}`);
       lines.push('');
 
@@ -13312,8 +13324,7 @@
           const paceOrSpeed = isBike ? `${(s.paceSecPerUnit > 0 ? (3600/s.paceSecPerUnit).toFixed(1) : '0.0')} mph` : fmtPace(s.paceSecPerUnit);
           lines.push(`| ${s.splitNum}${s.partial ? '*' : ''} | ${paceOrSpeed} | ${s.avgHR ? Math.round(s.avgHR) : ND} | ${s.maxHR ? Math.round(s.maxHR) : ND} | ${s.avgCadence ? Math.round(s.avgCadence) : ND} | +${s.elevGainM}m/-${s.elevLossM}m |`);
         });
-        if (splits.some(s => s.partial)) lines.push('');
-        lines.push(`*  Parcial (distancia: ${(splits.find(s=>s.partial)?.distM/1609.344 || 0).toFixed(2)} mi)`);
+        if (splits.some(s => s.partial)) { lines.push(''); lines.push(`*  Parcial (distancia: ${(splits.find(s=>s.partial)?.distM/1609.344 || 0).toFixed(2)} mi)`); }
       } else {
         lines.push(ND);
       }
@@ -13402,7 +13413,7 @@
       // the session grade drifted apart; calcAerobicDecoupling() is now the only place this is
       // calculated, and parseTCX() ran it on these same per-mile splits at import time.
       const dec = a.decouplingInfo;
-      if (dec && dec.value != null) {
+      if (tpKind !== 'march' && dec && dec.value != null) {
         lines.push('## Decoupling Aeróbico (HR/Pace Divergence)');
         lines.push('');
         lines.push(`**Primera Mitad:** ${dec.avgHRFirst} bpm avg, ${fmtPace(dec.avgPaceFirst)} pace`);
@@ -14994,7 +15005,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.20-4';
+    const APP_BUILD = '2026.11.20-5';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
