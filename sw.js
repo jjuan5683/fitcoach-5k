@@ -1,5 +1,5 @@
 // FitCoach Táctico — service worker
-// Build: 2026.11.08-6 (pairs with index.html APP_BUILD 2026.11.08-6)
+// Build: 2026.11.20-6 (pairs with index.html APP_BUILD 2026.11.20-6)
 //
 // WHY THIS FILE LOOKS LIKE THIS
 // A cache-first service worker is the standard PWA recipe and it is the wrong recipe for a
@@ -21,7 +21,8 @@
 // After editing this file, bump CACHE_VERSION. That byte change is what tells the browser a new
 // worker exists.
 
-const CACHE_VERSION = 'fitcoach-v2026.11.08-6';
+const CACHE_PREFIX = 'fitcoach-v';
+const CACHE_VERSION = 'fitcoach-v2026.11.20-6';
 const SHELL = ['./', './index.html', './manifest.json'];
 const HTML_KEY = './index.html';
 
@@ -36,7 +37,9 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter((k) => k !== CACHE_VERSION).map((k) => caches.delete(k)));
+    // 2026.11.20-6: solo borra sus propias cachés. FitCoach Pao vive en el mismo dominio (jjuan5683.github.io)
+    // y antes este paso le borraba su copia sin conexión.
+    await Promise.all(keys.filter((k) => k.startsWith(CACHE_PREFIX) && k !== CACHE_VERSION).map((k) => caches.delete(k)));
     // Take over open tabs immediately rather than waiting for every one to close.
     await self.clients.claim();
   })());

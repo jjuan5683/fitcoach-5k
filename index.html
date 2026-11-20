@@ -1990,6 +1990,11 @@
     .tp-nd-n { font-size: 11.5px; color: var(--paper-dim); margin: 8px 0 0; }
     .tp-claude-btn { border-color: var(--coyote) !important; color: var(--coyote-text, #d8bd7f) !important; }
 
+    /* 2026.11.20-6: aviso fijo cuando no se puede guardar */
+    #fc-save-alert { position: fixed; left: 8px; right: 8px; top: calc(8px + env(safe-area-inset-top, 0px)); z-index: 9999; padding: 10px 12px; border-radius: 8px;
+      background: #5c1416; color: #fff; border: 1px solid #e5484d; font-size: 13px; line-height: 1.4; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+    #fc-save-alert small { opacity: .85; font-family: var(--font-mono); font-size: 11px; }
+
     /* 2026.11.20-1: capa visible (solo modo oscuro; el modo sol queda igual) */
     html:not(.fc-sun) body {
       background-image:
@@ -2360,10 +2365,39 @@
     ensureGear(); // after the gear constants above are initialised
 
     let _quotaWarned = false;
+    // 2026.11.20-6: si el teléfono se queda sin espacio, primero se quita la serie de 15 s de las actividades de hace más
+    // de 21 días (se vuelve a calcular subiendo su TCX) y se intenta otra vez. Si aun así falla, sale un aviso fijo.
+    function fcCompactOldSessions(days) {
+      const cut = addDaysISO(todayISO(), -(days || 21)); let n = 0;
+      (state.tcxSessions || []).forEach(t => { const A = t.analysis && t.analysis.advanced; if (t.dateISO < cut && A && A.series && A.series.length) { A.series = []; n++; } });
+      return n;
+    }
+    function fcStorageReport() {
+      let total = 0; const rows = [];
+      try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i), v = localStorage.getItem(k) || ''; total += k.length + v.length; rows.push([k, v.length]); } } catch (e) {}
+      rows.sort((a, b) => b[1] - a[1]);
+      return { kb: Math.round(total * 2 / 1024), top: rows.slice(0, 4).map(([k, n]) => `${k} ${Math.round(n * 2 / 1024)} KB`).join(' · ') };
+    }
+    function fcSaveAlert(show) {
+      try {
+        let el = document.getElementById('fc-save-alert');
+        if (!show) { if (el) el.remove(); return; }
+        const r = fcStorageReport(), es = getLang() === 'es';
+        if (!el) { el = document.createElement('div'); el.id = 'fc-save-alert'; el.setAttribute('role', 'alert'); document.body.appendChild(el); }
+        el.innerHTML = `<b>${es ? '⚠ NO SE ESTÁ GUARDANDO' : '⚠ NOT SAVING'}</b> — ${es ? 'el almacenamiento del teléfono para esta página está lleno' : 'storage for this page is full'} (${r.kb} KB). ${es ? 'Lo que hagas se pierde al cerrar la app. Exporta un respaldo (Más) y libera espacio.' : 'Changes are lost when the app closes. Export a backup and free space.'}<br><small>${r.top}</small>`;
+      } catch (e) {}
+    }
     function saveState() {
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      } catch (e) {
+        if (window._fcSaveFailed) { window._fcSaveFailed = false; fcSaveAlert(false); }
+        return true;
+      } catch (e0) {
+        try {
+          if (fcCompactOldSessions(21) > 0) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); window._fcSaveFailed = false; fcSaveAlert(false); return true; }
+        } catch (e1) {}
+        window._fcSaveFailed = true; fcSaveAlert(true);
+        const e = e0;
         // Most likely QuotaExceededError from too many stored TCX sessions with detailed splits.
         console.error('saveState failed:', e);
         if (!_quotaWarned) {
@@ -2371,8 +2405,9 @@
           const msg = getLang() === 'es'
             ? '⚠ Almacenamiento lleno. Exporta un backup (.json) y considera borrar actividades viejas para liberar espacio.'
             : '⚠ Storage full. Export a backup (.json) and consider deleting old activities to free space.';
-          try { showToast(msg); } catch (_) { alert(msg); }
+          try { showToast(msg); } catch (_) {}
         }
+        return false;
       }
     }
 
@@ -7799,7 +7834,7 @@
       const hrv = num(mf.hrv), rhr = num(mf.restingHR), sl = num(mf.sleepHours), en = num(mf.energyLevel), fl = num(mf.feelsLike);
       const h7 = num(mf.hrv7d), band = Number(state.settings?.hrvBandLow) || 41;
       const pain = String(mf.painNotes || '').trim();
-      const noPain = !pain || /^\s*(0|no|ninguno?a?|nada|sin dolor)\s*$/i.test(pain);
+      const noPain = !pain || /^\s*(0|no|ninguno?a?|nada|sin dolor|none|no pain)\s*$/i.test(pain);
       const q = TP_QUALITY.includes(kind);
       const row = (label, val, rule, ok) => ({ label, val, rule, ok });
       return [
@@ -14052,7 +14087,7 @@
       const i = out.findIndex(l => l.startsWith('## Resumen para el análisis'));
       if (i >= 0) out.splice(i, 0, ...extra);
       out.push('', `*Informe corto de FitCoach ${APP_BUILD}. El informe completo y el TCX tienen la serie de datos.*`);
-      return out.join('\n').replace(/\n{3,}/g, '\n\n');
+      return out.join('\n').replace(/(\n---\s*)+(\n---)/g, '$2').replace(/\n{3,}/g, '\n\n');
     }
     function exportClaudeReport(activityId) {
       const t = state.tcxSessions.find(a => a.id === activityId);
@@ -15005,7 +15040,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.20-5';
+    const APP_BUILD = '2026.11.20-6';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
@@ -16377,6 +16412,54 @@
       schedule();
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  })();
+  </script>
+  <script id="fc-autosave-back">
+  /* 2026.11.20-6: (1) lo que escribes en los campos de la actividad se guarda mientras escribes, no solo al salir del campo;
+     (2) al pasar la app a segundo plano o cerrarla se guarda todo; (3) el botón "atrás" del teléfono navega dentro de la app
+     (cierra el informe, el detalle o vuelve a Hoy) y solo sale si lo presionas dos veces seguidas. */
+  (function () {
+    var timer = null;
+    function parseTarget(el) {
+      var h = el.getAttribute && (el.getAttribute('onblur') || el.getAttribute('onchange') || '');
+      var m = /save(?:ManualField|PostCustom)\('([^']+)',\s*'([^']+)'/.exec(h || '');
+      return m ? { id: m[1], field: m[2] } : null;
+    }
+    document.addEventListener('input', function (ev) {
+      var el = ev.target, tg = el && parseTarget(el);
+      if (!tg) return;
+      try {
+        var act = (state.tcxSessions || []).find(function (a) { return a.id === tg.id; });
+        if (!act) return;
+        act.manualFields = act.manualFields || {};
+        act.manualFields[tg.field] = el.value;
+        clearTimeout(timer); timer = setTimeout(function () { try { saveState(); } catch (e) {} }, 400);
+      } catch (e) {}
+    }, true);
+    function flush() {
+      try { var el = document.activeElement; if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) && el.blur) el.blur(); } catch (e) {}
+      try { clearTimeout(timer); saveState(); } catch (e) {}
+    }
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden') flush(); });
+    window.addEventListener('pagehide', flush);
+
+    var lastBack = 0;
+    function arm() { try { history.pushState({ fcTrap: 1 }, ''); } catch (e) {} }
+    window.addEventListener('popstate', function () {
+      flush();
+      try {
+        if (typeof mdModalContent !== 'undefined' && mdModalContent) { closeMarkdownModal(); arm(); return; }
+        if (typeof detailOverlay !== 'undefined' && detailOverlay) { closeDetail(); arm(); return; }
+        if (typeof currentView !== 'undefined' && currentView === 'more' && typeof moreSection !== 'undefined' && moreSection) { moreSection = null; render(); arm(); return; }
+        if (typeof currentView !== 'undefined' && currentView !== 'home' && currentView !== 'onboarding') { switchView('home'); arm(); return; }
+      } catch (e) {}
+      var now = Date.now();
+      if (now - lastBack < 2000) { history.back(); return; }
+      lastBack = now;
+      try { showToast(getLang() === 'es' ? 'Presiona atrás otra vez para salir' : 'Press back again to exit'); } catch (e) {}
+      arm();
+    });
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arm); else arm();
   })();
   </script>
 </body>
