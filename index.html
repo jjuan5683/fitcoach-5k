@@ -1698,7 +1698,330 @@
       button:focus-visible, a:focus-visible { outline: 2px solid Highlight !important; }
     }
 
-  </style>
+  
+    /* ================================================================
+       FITCOACH TACTICO — TACTICAL PERFORMANCE VISUAL LAYER
+       Visual-only overrides. Existing HTML, IDs, handlers and app logic
+       remain untouched. Cinematic HUD is deliberately restrained.
+       ================================================================ */
+    :root {
+      --tp-radius: 12px;
+      --tp-radius-sm: 8px;
+      --tp-glass: rgba(18, 25, 16, .88);
+      --tp-shadow: 0 14px 36px rgba(0, 0, 0, .30);
+      --tp-glow: 0 0 24px rgba(201, 169, 97, .10);
+    }
+
+    body {
+      background-color: var(--black-olive);
+      background-image:
+        radial-gradient(ellipse at 50% -18%, rgba(106,154,56,.18), transparent 48%),
+        radial-gradient(ellipse at 100% 60%, rgba(201,169,97,.055), transparent 42%),
+        repeating-linear-gradient(0deg, transparent 0, transparent 47px, rgba(167,212,119,.035) 48px),
+        repeating-linear-gradient(90deg, transparent 0, transparent 47px, rgba(167,212,119,.035) 48px);
+    }
+
+    #app { position: relative; isolation: isolate; }
+    #app::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      opacity: .18;
+      background: linear-gradient(110deg, transparent 0 42%, rgba(201,169,97,.045) 50%, transparent 58% 100%);
+      background-size: 220% 100%;
+      animation: tp-sweep 18s linear infinite;
+    }
+    /* 2026.11.20-1: solo encabezado y contenido; el enlace de salto y la barra inferior conservan su posición fija */
+    #app > header, #app > main { position: relative; z-index: 1; }
+    @keyframes tp-sweep { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+    header {
+      height: 68px;
+      padding-inline: clamp(14px, 3vw, 28px);
+      background: linear-gradient(180deg, rgba(22,30,19,.97), rgba(13,18,12,.94));
+      border-bottom-color: rgba(201,169,97,.34);
+      box-shadow: 0 8px 26px rgba(0,0,0,.24);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    header::after { height: 1px; opacity: .72; }
+    .header-mark {
+      width: 38px; height: 38px;
+      border-radius: 8px;
+      box-shadow: 0 0 18px rgba(201,169,97,.12), inset 0 0 12px rgba(201,169,97,.08);
+    }
+    .header-mark::before { box-shadow: 0 0 9px var(--coyote); }
+    .header-info .callsign { font-size: 10px; letter-spacing: 2.3px; }
+    .header-info .name { font-size: 17px; letter-spacing: .55px; }
+    .status-pill {
+      border-radius: 999px;
+      padding: 6px 11px;
+      background: rgba(106,154,56,.10);
+      border-color: rgba(167,212,119,.32);
+      box-shadow: inset 0 0 12px rgba(106,154,56,.06);
+    }
+
+    main { scrollbar-width: thin; scrollbar-color: var(--field-line) transparent; }
+    main::-webkit-scrollbar { width: 7px; }
+    main::-webkit-scrollbar-thumb { background: rgba(126,151,102,.42); border-radius: 10px; }
+    .view-container {
+      max-width: 780px;
+      padding: clamp(16px, 3vw, 28px) clamp(14px, 3vw, 24px);
+      padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
+    }
+    .view.active { animation: tp-view-in .34s cubic-bezier(.2,.75,.25,1) both; }
+    @keyframes tp-view-in { from { opacity: 0; transform: translateY(10px); filter: blur(2px); } to { opacity: 1; transform: none; filter: none; } }
+
+    .card, .mission-clock, .session-card, .onboarding-card {
+      border-radius: var(--tp-radius);
+      border-color: rgba(117,139,99,.48);
+      box-shadow: var(--tp-shadow);
+    }
+    .card {
+      padding: clamp(15px, 2.5vw, 21px);
+      margin-bottom: 15px;
+      background: linear-gradient(145deg, rgba(29,39,25,.97), rgba(17,23,15,.98));
+      overflow: hidden;
+      transition: border-color .22s ease, transform .22s ease, box-shadow .22s ease;
+    }
+    .card::after {
+      content: "";
+      position: absolute;
+      top: 0; right: 0;
+      width: 72px; height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(201,169,97,.68));
+      pointer-events: none;
+    }
+    .card:hover {
+      border-color: rgba(201,169,97,.56);
+      box-shadow: var(--tp-shadow), var(--tp-glow);
+      transform: translateY(-2px);
+    }
+    .card-title { letter-spacing: 1.7px; font-size: 10px; }
+    .card-title::before { box-shadow: 0 0 8px rgba(201,169,97,.28); }
+
+    .mission-clock {
+      border-color: rgba(201,169,97,.52);
+      background:
+        radial-gradient(ellipse at 90% 0%, rgba(201,169,97,.12), transparent 48%),
+        linear-gradient(135deg, #1d2919 0%, #11170f 68%, #171b12 100%);
+      box-shadow: 0 18px 42px rgba(0,0,0,.38), 0 0 28px rgba(201,169,97,.08);
+    }
+    .mission-clock::before {
+      background:
+        linear-gradient(135deg, rgba(106,154,56,.15), transparent 52%),
+        repeating-linear-gradient(135deg, transparent, transparent 22px, rgba(201,169,97,.045) 22px, rgba(201,169,97,.045) 23px);
+    }
+    .clock-top { padding: 17px 20px 0; }
+    .clock-label { letter-spacing: 2.3px; }
+    .clock-number { text-shadow: 0 0 28px rgba(232,228,217,.12); }
+    .clock-divider { background: linear-gradient(90deg, transparent, var(--field-line), rgba(201,169,97,.55), var(--field-line), transparent); }
+
+    .session-card {
+      border-radius: var(--tp-radius-sm);
+      background: linear-gradient(110deg, rgba(28,38,23,.98), rgba(18,24,16,.98));
+      border-color: rgba(117,139,99,.42);
+      border-left-width: 3px;
+      box-shadow: 0 7px 18px rgba(0,0,0,.17);
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease, background .2s ease;
+    }
+    .session-card:hover { transform: translateX(3px); box-shadow: 0 10px 24px rgba(0,0,0,.25); }
+    .session-card.completed { opacity: .72; }
+
+    nav {
+      height: calc(68px + env(safe-area-inset-bottom, 0px));
+      background: rgba(13,18,12,.94);
+      border-top: 1px solid rgba(201,169,97,.32);
+      box-shadow: 0 -12px 30px rgba(0,0,0,.32);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+    nav button { gap: 5px; font-size: 10px; letter-spacing: .85px; transition: color .2s ease, transform .2s ease; }
+    nav button .nav-icon { width: 21px; height: 21px; }
+    nav button.active { color: var(--coyote-text); text-shadow: 0 0 14px rgba(201,169,97,.28); }
+    nav button.active::before { width: 34px; height: 2px; box-shadow: 0 0 12px rgba(201,169,97,.7); }
+    nav button:active { transform: translateY(-2px); }
+
+    .btn, .btn-small, button {
+      transition: transform .16s ease, box-shadow .2s ease, border-color .2s ease, background-color .2s ease, color .2s ease;
+    }
+    .btn { border-radius: 7px; min-height: 44px; }
+    .btn-primary { box-shadow: 0 5px 18px rgba(201,169,97,.14); }
+    .btn-primary:hover { box-shadow: 0 7px 22px rgba(201,169,97,.24); transform: translateY(-1px); }
+    .btn-secondary, .btn-small { border-radius: 7px; }
+    .btn-small:hover { border-color: var(--coyote); color: var(--coyote-text); background: rgba(201,169,97,.08); }
+    button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+      outline: 2px solid var(--fc-focus);
+      outline-offset: 3px;
+    }
+
+    input[type="text"], input[type="number"], textarea, select {
+      border-radius: 7px;
+      background: rgba(13,19,12,.78);
+      border-color: rgba(117,139,99,.55);
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--coyote);
+      box-shadow: 0 0 0 3px rgba(201,169,97,.10);
+    }
+    .onboarding-card {
+      overflow: hidden;
+      background: linear-gradient(145deg, #1a2416, #10160e 72%);
+    }
+
+    canvas { max-width: 100%; }
+    .fc-slot-empty, .fc-opt-card { border-radius: 8px; }
+    .fc-opt-card { background: linear-gradient(120deg, rgba(201,169,97,.07), rgba(17,23,15,.96)); }
+
+    @media (min-width: 760px) {
+      .view-container { max-width: 900px; }
+      .card { margin-bottom: 17px; }
+      .mission-clock { margin-bottom: 18px; }
+    }
+    @media (max-width: 480px) {
+      header { height: 62px; }
+      .header-info .name { font-size: 15px; }
+      .header-mark { width: 33px; height: 33px; }
+      .status-pill { font-size: 9px; padding: 5px 8px; }
+      .clock-number { font-size: clamp(54px, 15vw, 68px); }
+      .card { padding: 15px; }
+      nav { height: calc(64px + env(safe-area-inset-bottom, 0px)); }
+      nav button { font-size: 9px; letter-spacing: .35px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      #app::before { animation: none; }
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+
+  
+    /* 2026.11.20-2: estado del día, barras de instrumento, conteo, barrido único y respuesta al tocar */
+    .tp-status { display: inline-flex; align-items: center; gap: 7px; margin: 10px 20px 12px; padding: 4px 10px 4px 8px;
+      border: 1px solid currentColor; border-radius: 999px; font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.2px; max-width: calc(100% - 40px); }
+    .tp-status b { font-weight: 700; white-space: nowrap; }
+    .tp-status-sub { letter-spacing: .3px; opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    .tp-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+    .tp-st-live { color: var(--coyote-text, #d8bd7f); background: rgba(201,169,97,.08); }
+    .tp-st-live .tp-dot { box-shadow: 0 0 0 0 rgba(201,169,97,.6); animation: tp-pulse 2s ease-out infinite; }
+    .tp-st-done { color: var(--olive-bright); background: rgba(106,154,56,.10); }
+    .tp-st-rest { color: var(--paper-dim); }
+    @keyframes tp-pulse { 0% { box-shadow: 0 0 0 0 rgba(201,169,97,.55); } 70% { box-shadow: 0 0 0 7px rgba(201,169,97,0); } 100% { box-shadow: 0 0 0 0 rgba(201,169,97,0); } }
+    html.fc-sun .tp-st-live { color: #6b4f10; background: rgba(122,90,18,.08); }
+    html.fc-sun .tp-st-done { color: #3d5a1f; }
+    @media (max-width: 480px) { .tp-status { margin: 8px 16px 10px; max-width: calc(100% - 32px); } }
+
+    .tp-seg { position: relative; display: grid; grid-template-columns: repeat(var(--n, 20), 1fr); gap: 2px; height: 9px; margin: 8px 0 6px; }
+    .tp-seg i { display: block; border-radius: 1px; --c: var(--olive-bright);
+      background: linear-gradient(90deg, var(--c) calc(var(--f) * 100%), rgba(117,139,99,.22) 0);
+      animation: tp-seg-in .35s ease-out both; animation-delay: calc(var(--i) * 22ms); }
+    .tp-seg i.on { box-shadow: 0 0 6px rgba(167,212,119,.35); }
+    .tp-seg-week i { --c: var(--coyote); }
+    .tp-seg-week i.on { box-shadow: 0 0 6px rgba(201,169,97,.35); }
+    .tp-seg-over i { --c: #e5484d; }
+    .tp-seg-over i.on { box-shadow: 0 0 6px rgba(229,72,77,.4); }
+    .tp-seg-mark { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--coyote); box-shadow: 0 0 6px var(--coyote); border-radius: 1px; }
+    @keyframes tp-seg-in { from { opacity: 0; transform: scaleY(.3); } to { opacity: 1; transform: none; } }
+    html.fc-sun .tp-seg i { background: linear-gradient(90deg, var(--c) calc(var(--f) * 100%), rgba(0,0,0,.10) 0); box-shadow: none; }
+    html.fc-sun .tp-seg-mark { background: #6b4f10; box-shadow: none; }
+
+    /* Barrido del encabezado y del fondo: una sola pasada al abrir; brillo de la moneda: una sola pasada */
+    header { overflow: hidden; }
+    html:not(.fc-sun) header::before { content: ""; position: absolute; left: 0; right: 0; top: -40%; height: 40%; pointer-events: none; z-index: 0;
+      background: linear-gradient(180deg, transparent, rgba(201,169,97,.16) 60%, rgba(232,228,217,.30) 100%); animation: tp-scan 1.3s ease-out .2s 1 both; }
+    @keyframes tp-scan { from { top: -40%; opacity: 1; } 80% { opacity: 1; } to { top: 100%; opacity: 0; } }
+    #app::before { animation-iteration-count: 1; animation-duration: 6s; animation-fill-mode: forwards; }
+    .grit-coin-shine::before { animation-iteration-count: 1; }
+
+    /* Respuesta al tocar (en el teléfono no existe "pasar encima") */
+    @media (hover: none) {
+      .card:hover, .session-card:hover, .btn-primary:hover { transform: none; }
+    }
+    button:active, .btn:active, .session-card:active, .card[onclick]:active, .grit-coin-wrap:active { transform: scale(.97); transition-duration: 120ms; }
+    nav button:active { transform: scale(.94); }
+
+    /* 2026.11.20-3: íconos por tipo, misión del día, línea de fases y cinta de zonas */
+    .tp-kic { display: inline-flex; vertical-align: -2px; margin-right: 6px; color: var(--coyote); }
+    .hero-title .tp-kic { vertical-align: -3px; margin-right: 8px; }
+    .tp-kic-easy, .tp-kic-long { color: var(--olive-bright); }
+    .tp-kic-march { color: #b8a27a; }
+    .tp-mb { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 10px 0 4px; padding: 10px 12px; border: 1px solid rgba(201,169,97,.32);
+      border-left: 3px solid var(--coyote); border-radius: 6px; background: rgba(13,19,12,.45); font-size: 13px; cursor: default; }
+    .tp-mb-row { display: contents; }
+    .tp-mb dt { font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.1px; color: var(--coyote-text, #d8bd7f); padding-top: 2px; white-space: nowrap; }
+    .tp-mb dd { margin: 0; color: var(--paper); line-height: 1.4; }
+    .tp-mb-cancel { font-size: 11.5px; color: var(--paper-dim); margin: 4px 0 2px; line-height: 1.45; }
+    html.fc-sun .tp-mb { background: #fffdf7; border-color: #d8cfb5; border-left-color: #7a5a12; }
+    html.fc-sun .tp-mb dt { color: #6b4f10; }
+
+    .tp-phase { margin: 2px 20px 14px; padding-top: 4px; }
+    .tp-ph-track { position: relative; height: 3px; margin: 34px 14px 34px; background: rgba(117,139,99,.30); border-radius: 2px; }
+    .tp-ph-fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--olive-bright), var(--coyote)); border-radius: 2px; }
+    .tp-ph-today { position: absolute; top: -6px; width: 2px; height: 15px; margin-left: -1px; background: var(--paper); box-shadow: 0 0 6px rgba(232,228,217,.6); }
+    .tp-ph-node { position: absolute; top: -5px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; min-width: 40px; }
+    .tp-ph-node i { width: 11px; height: 11px; border-radius: 50%; border: 2px solid var(--coyote); background: #11170f; }
+    .tp-ph-node.done i { background: var(--olive-bright); border-color: var(--olive-bright); }
+    .tp-ph-node.miss i { border-color: var(--paper-dim); }
+    .tp-ph-node.race i { width: 13px; height: 13px; border-radius: 2px; transform: rotate(45deg); background: var(--coyote); }
+    .tp-ph-node b { font-family: var(--font-mono); font-size: 10px; letter-spacing: 1px; color: var(--paper); margin-top: 5px; }
+    .tp-ph-node small { font-family: var(--font-mono); font-size: 10px; color: var(--paper-dim); white-space: nowrap; }
+    .tp-ph-node.up { flex-direction: column-reverse; top: auto; bottom: -5px; }
+    .tp-ph-node.up b { margin: 0 0 1px; }
+    .tp-ph-node.up small { margin-bottom: 4px; }
+    html.fc-sun .tp-ph-node i { background: #fffdf7; }
+    html.fc-sun .tp-ph-node.done i { background: #3d5a1f; border-color: #3d5a1f; }
+    html.fc-sun .tp-ph-node.race i { background: #7a5a12; border-color: #7a5a12; }
+    @media (max-width: 480px) { .tp-phase { margin: 2px 16px 12px; } }
+
+    .tp-ztape { display: flex; height: 22px; border-radius: 4px; overflow: hidden; margin: 2px 0 6px; border: 1px solid rgba(117,139,99,.4); }
+    .tp-ztape span { display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: #0d120c; min-width: 0; overflow: hidden; }
+    .tp-zt-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-family: var(--font-mono); font-size: 11px; color: var(--paper-dim); margin-bottom: 6px; }
+    .tp-zt-legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+    .tp-zt-ceil { font-size: 12px; margin: 2px 0 10px; font-family: var(--font-mono); }
+    .tp-zt-ceil.ok { color: var(--olive-bright); }
+    .tp-zt-ceil.bad { color: #e5484d; }
+
+    /* 2026.11.20-4: pregunta del día siguiente a la marcha y botón Para Claude */
+    .tp-nd { border-left: 3px solid #b8a27a; }
+    .tp-nd-h { display: flex; align-items: center; font-family: var(--font-display); font-size: 15px; letter-spacing: .4px; color: var(--paper); margin-bottom: 8px; }
+    .tp-nd-b { display: flex; flex-wrap: wrap; gap: 6px; }
+    .tp-nd-b .btn-small { min-height: 40px; }
+    .tp-nd-ok { border-color: var(--olive-bright) !important; color: var(--olive-bright) !important; }
+    .tp-nd-n { font-size: 11.5px; color: var(--paper-dim); margin: 8px 0 0; }
+    .tp-claude-btn { border-color: var(--coyote) !important; color: var(--coyote-text, #d8bd7f) !important; }
+
+    /* 2026.11.20-1: capa visible (solo modo oscuro; el modo sol queda igual) */
+    html:not(.fc-sun) body {
+      background-image:
+        radial-gradient(ellipse at 50% -18%, rgba(106,154,56,.26), transparent 50%),
+        radial-gradient(ellipse at 100% 60%, rgba(201,169,97,.09), transparent 44%),
+        repeating-linear-gradient(0deg, transparent 0, transparent 39px, rgba(167,212,119,.075) 40px),
+        repeating-linear-gradient(90deg, transparent 0, transparent 39px, rgba(167,212,119,.075) 40px);
+    }
+    html:not(.fc-sun) #app::before {
+      opacity: .6;
+      background: linear-gradient(110deg, transparent 0 44%, rgba(201,169,97,.10) 50%, transparent 56% 100%);
+      background-size: 220% 100%;
+    }
+    html:not(.fc-sun) .mission-clock::after {
+      content: ""; position: absolute; inset: 7px; pointer-events: none; z-index: 2;
+      --c: rgba(201,169,97,.85);
+      background:
+        linear-gradient(var(--c),var(--c)) top left / 18px 2px no-repeat,
+        linear-gradient(var(--c),var(--c)) top left / 2px 18px no-repeat,
+        linear-gradient(var(--c),var(--c)) top right / 18px 2px no-repeat,
+        linear-gradient(var(--c),var(--c)) top right / 2px 18px no-repeat,
+        linear-gradient(var(--c),var(--c)) bottom left / 18px 2px no-repeat,
+        linear-gradient(var(--c),var(--c)) bottom left / 2px 18px no-repeat,
+        linear-gradient(var(--c),var(--c)) bottom right / 18px 2px no-repeat,
+        linear-gradient(var(--c),var(--c)) bottom right / 2px 18px no-repeat;
+    }
+    html:not(.fc-sun) .clock-number { color: #f1ead4; text-shadow: 0 0 22px rgba(201,169,97,.35); }
+    html:not(.fc-sun) .dash-body > .card { border-left: 2px solid rgba(201,169,97,.45); padding-left: 12px; }
+    html:not(.fc-sun) .card-title { color: var(--coyote-text); }
+    html:not(.fc-sun) header { border-bottom: 1px solid rgba(201,169,97,.55); }
+
+</style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
 <body>
@@ -2150,7 +2473,15 @@
       flag: '<path d="M5 21V4h11l-2 4 2 4H5"/>',
       target: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/>',
       refresh: '<path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/>',
-      image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 9"/>'
+      image: '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="2"/><path d="M21 17l-5-5-9 9"/>',
+      // 2026.11.20-3: íconos propios por tipo de sesión
+      k_easy: '<path d="M2 13h4l2-4 3 8 3-6 2 2h6"/>',
+      k_long: '<path d="M7 21l3-18M17 21l-3-18"/><path d="M12 6v2M12 11v2M12 16v3"/>',
+      k_tempo: '<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4.5-5"/><circle cx="12" cy="17" r="1.3"/><path d="M6.5 11.5l1 .8M12 8v1.3M17.5 11.5l-1 .8"/>',
+      k_hills: '<path d="M2 20l7-11 4 6 3-4 6 9z"/><path d="M13 7l3-3 3 3M16 4v6"/>',
+      k_intervals: '<path d="M4 20v-6M8.5 20V8M13 20v-6M17.5 20V5M22 20v-6"/>',
+      k_course: '<path d="M5 22V3"/><path d="M5 3h12l-2.5 3.5L17 10H5"/><path d="M9 21c3-4 7-1 10-5"/>',
+      k_march: '<path d="M8 6V5a4 4 0 0 1 8 0v1"/><rect x="5" y="6" width="14" height="15" rx="2.5"/><path d="M5 12h14M10 15.5h4M9 6v6M15 6v6"/>'
     };
     function ic(name, size) {
       const sz = size || 16;
@@ -3564,6 +3895,17 @@
         return same.length >= 2 ? { history: same.map(x => ({ avgHR: x.avgHR, avgPaceSecPerMi: x.avgPaceSecPerMi })), sameTypeOnly: true } : { history: [], sameTypeOnly: false, needSameType: true };
       }
 
+      // 2026.11.20-3: la marcha solo se compara con marchas, y una corrida nunca contra marchas o bicicleta.
+      // Fáciles y largas se comparan entre sí; el resto necesita 2 previas del mismo tipo.
+      {
+        const fam = k => k === 'march' ? 'march' : (k === 'easy' || k === 'long') ? 'aerobic' : k === 'bike' ? 'bike' : 'k:' + k;
+        const myK = activityKind(activity).key, myF = fam(myK);
+        const same = allPrior.filter(x => activityKind(x).key === myK);
+        if (same.length >= 2) return { history: same.map(x => ({ avgHR: x.avgHR, avgPaceSecPerMi: x.avgPaceSecPerMi })), sameTypeOnly: true };
+        const famL = allPrior.filter(x => fam(activityKind(x).key) === myF);
+        if (myF === 'aerobic' && famL.length >= 2) return { history: famL.map(x => ({ avgHR: x.avgHR, avgPaceSecPerMi: x.avgPaceSecPerMi })), sameTypeOnly: false, family: 'aerobic' };
+        if (myK !== 'none') return { history: [], sameTypeOnly: false, needSameType: true };
+      }
       const activityType = activity.linkedPlanDay ? state.plan.find(s => s.day === activity.linkedPlanDay)?.type : null;
 
       if (activityType) {
@@ -4231,6 +4573,37 @@
       const seg = a.workSegment && a.workSegment.kind === 'tempo' ? a.workSegment : null;
       const reps = a.repMatch || null;
       const hrGuided = /\bfc\s+\d{3}/i.test(linkedSession.notes || '') || /esfuerzo/i.test(linkedSession.notes || '');
+      // 2026.11.20-4: la D1/D2 se compara por el recorrido (distancia, milla 1, millas 2–5, milla 6), no por una duración genérica.
+      if (activityKind(t).key === 'course' && a.courseSegment && a.trace5 && a.courseSegment.fromSec != null) {
+        const n = String(linkedSession.notes || '').toLowerCase(), cs = a.courseSegment, tr = a.trace5, st = tr.step || 5;
+        const crs = parseFloat((/recorrido completo de\s*(\d+(?:\.\d+)?)/.exec(n) || [])[1]) || 6.3;
+        const lo1 = parseFloat((/milla 1 a fc\s*(\d{3})/.exec(n) || [])[1]) || 165, hi1 = parseFloat((/milla 1 a fc\s*\d{3}\s*a\s*(\d{3})/.exec(n) || [])[1]) || 172;
+        const cap = parseFloat((/techo de fc\s*(\d{3})/.exec(n) || [])[1]) || 174, top6 = parseFloat((/milla 6[^,)]*?fc\s*(\d{3})/.exec(n) || [])[1]) || 180;
+        const W = []; for (let i = 0; i < tr.hr.length; i++) { const tt = i * st; if (tt >= cs.fromSec && tt <= cs.toSec && tr.hr[i] > 0) W.push({ hr: tr.hr[i], d: tr.d[i] }); }
+        const mm = x => x > 0 ? secToMMSS(Math.round(x)) : '0:00';
+        if (W.length > 20) {
+          const d0 = W[0].d, dE = W[W.length - 1].d, M = 1609.344;
+          const m1 = W.filter(z => z.d - d0 < M), m6 = W.filter(z => dE - z.d < M), mid = W.filter(z => z.d - d0 >= M && dE - z.d >= M);
+          const dd = cs.distMi - crs;
+          rows.push(['Distancia del recorrido', `${crs.toFixed(2)} mi`, `${cs.distMi.toFixed(2)} mi`, `${dd >= 0 ? '+' : ''}${dd.toFixed(2)} mi`, Math.abs(dd) <= 0.35 ? 'En objetivo' : 'Revisar (vueltas del reloj)']);
+          rows.push(['Tiempo del recorrido', '—', `${secToHHMMSS(cs.durSec || (cs.toSec - cs.fromSec))} · equivalente 10K ${secToMMSS(Math.round(cs.projected10KSec || 0))}`, '—', 'Informativo']);
+          if (m1.length) { const p1 = Math.round(m1.filter(z => z.hr >= lo1 && z.hr <= hi1).length / m1.length * 100); rows.push([`Milla 1 en ${lo1}–${hi1}`, '≥ 60%', `${p1}%`, `${p1 - 60 >= 0 ? '+' : ''}${p1 - 60} pts`, p1 >= 60 ? 'En objetivo' : 'Por debajo']); }
+          if (mid.length) { const o = mid.filter(z => z.hr > cap).length * st; rows.push([`Millas 2–5 sobre ${cap}`, '≤ 1:00', mm(o), o > 60 ? `+${mm(o - 60)}` : '—', o <= 60 ? 'En objetivo' : 'Por encima']); }
+          if (m6.length) { const o = m6.filter(z => z.hr > top6).length * st; rows.push([`Milla 6 sobre ${top6}`, '≤ 0:30', mm(o), o > 30 ? `+${mm(o - 30)}` : '—', o <= 30 ? 'En objetivo' : 'Por encima']); }
+        }
+        rows.push(['Sesión completa', linkedSession.targetDistM > 0 ? `${(linkedSession.targetDistM / 1609.344).toFixed(2)} mi` : '—', `${t.totalDistMi.toFixed(2)} mi · ${secToHHMMSS(t.totalTimeSec)}`, '—', 'Informativo']);
+        return rows;
+      }
+      // 2026.11.20-3: la marcha se compara por distancia, FC ≤150 y trote con chaleco (no por una duración genérica).
+      if (activityKind(t).key === 'march') {
+        const n = String(linkedSession.notes || ''), dm = /(\d+(?:\.\d+)?)\s*mil(?:es|las)\b/i.exec(n), cap = parseFloat((/fc\s+(\d{3})\s*o\s*menos/i.exec(n) || [])[1]) || 150;
+        if (dm) { const tg = parseFloat(dm[1]), d = t.totalDistMi - tg, pct = d / tg * 100; rows.push(['Distancia', `${tg.toFixed(2)} mi`, `${t.totalDistMi.toFixed(2)} mi`, `${d >= 0 ? '+' : ''}${d.toFixed(2)} mi (${d >= 0 ? '+' : ''}${pct.toFixed(0)}%)`, Math.abs(pct) <= 5 ? 'En objetivo' : d > 0 ? 'Por encima' : 'Por debajo']); }
+        if (t.maxHR) rows.push(['FC máxima', `≤ ${cap}`, `${t.maxHR}`, `${t.maxHR - cap >= 0 ? '+' : ''}${t.maxHR - cap} lpm`, t.maxHR <= cap ? 'En objetivo' : 'Por encima']);
+        const jog = tpVestJogSec(t);
+        if (jog != null) rows.push(['Trote con chaleco', '0:00', jog ? secToMMSS(jog) : '0:00', jog ? `+${secToMMSS(jog)}` : '0:00', jog <= 30 ? 'En objetivo' : 'Por encima']);
+        rows.push(['Duración', '—', secToHHMMSS(t.totalTimeSec), '—', 'Informativo']);
+        return rows;
+      }
 
       const stepDur = plannedDurationFromSteps(linkedSession, lthr);
       // 2026.11.10-3: con recuperaciones libres (bajar caminando la cuesta) la distancia depende del terreno:
@@ -6463,6 +6836,44 @@
       return sessionTitle(s);
     }
 
+    // 2026.11.20-3: misión del día tipo orden: objetivo, FC, distancia, agua, comida y cuándo cancelar.
+    // Sale de las reglas del proyecto y de la línea del plan; no cambia el plan.
+    function tpMissionBrief(s) {
+      if (!s || s.type === 'rest') return '';
+      const es = getLang() === 'es', k = tpPlanKind(s), z = tpZones(), T = planLineTargets(s) || {};
+      const txt = String(s.notes || '').toLowerCase();
+      const fcLine = (/fc\s+(\d{3})\s*a\s*(\d{3})/.exec(txt) || []);
+      const R = [];
+      const add = (lab, val) => { if (val) R.push(`<div class="tp-mb-row"><dt>${lab}</dt><dd>${val}</dd></div>`); };
+      const OBJ = {
+        easy: es ? 'Base aeróbica: frases completas, sin Z3' : 'Aerobic base: full sentences, no Z3',
+        long: es ? 'Resistencia en Z2; el final también es fácil' : 'Endurance in Z2; the end is easy too',
+        tempo: es ? `Ritmo sostenido en ${z.z4lo}–172; si pasa de ${z.z5lo - 1} más de 60 s, bajar` : `Sustained ${z.z4lo}–172; above ${z.z5lo - 1} for 60 s, ease off`,
+        course: es ? `Milla 1 en ${z.z4lo}–172 · millas 2–5 techo ${z.z5lo - 1} · milla 6 hasta 180` : `Mile 1 ${z.z4lo}–172 · miles 2–5 cap ${z.z5lo - 1} · mile 6 up to 180`,
+        hills: es ? 'Subidas fuertes con zancada corta; Z4–Z5 al final de cada una' : 'Strong climbs, short stride; Z4–Z5 at the end of each',
+        intervals: es ? 'Z4–Z5 al menos la mitad del tiempo de cada repetición' : 'Z4–Z5 at least half of each rep',
+        march: es ? 'Pasos cortos, sin trotar con el chaleco' : 'Short steps, no jogging with the vest',
+        strength: es ? 'Esfuerzo 7/10, nunca al fallo' : 'Effort 7/10, never to failure'
+      };
+      add(es ? 'OBJETIVO' : 'OBJECTIVE', OBJ[k]);
+      const fc = k === 'easy' || k === 'long' ? `${fcLine[1] || z.z2lo}–${fcLine[2] || z.z2hi} · ${es ? 'alerta en 145 con calor' : 'alert at 145 when hot'}`
+        : k === 'march' ? '≤150' : k === 'tempo' ? `${z.z4lo}–172` : k === 'course' ? `${z.z4lo}–180` : (k === 'hills' || k === 'intervals') ? `Z4–Z5 (≥${z.z4lo})` : '';
+      // Lo que ya dice el número grande de la tarjeta no se repite.
+      const hl = (typeof sessionHeadline === 'function' && sessionHeadline(s)) || {};
+      if (!/fc|hr/i.test(String(hl.big || ''))) add(es ? 'FC' : 'HR', fc);
+      if (!/mi\b/.test(String(hl.big || '') + ' ' + String(hl.small || ''))) add(es ? 'DISTANCIA' : 'DISTANCE', T.distMi ? T.distMi + ' mi' : '');
+      const q = TP_QUALITY.includes(k);
+      if (q) add(es ? 'ANTES' : 'BEFORE', es ? '12–15 min en Z2 + 4 aceleraciones de 20 s' : '12–15 min Z2 + 4 × 20 s strides');
+      if (q) add(es ? 'TROTE FINAL' : 'COOL-DOWN', es ? '10 min en Z1, techo 140 (145 si la sensación pasa de 80 °F)' : '10 min Z1, cap 140 (145 above 80 °F)');
+      add(es ? 'AGUA' : 'WATER', q || k === 'long' ? (k === 'course' ? (es ? '12–16 oz, en las millas 2 y 4' : '12–16 oz, at miles 2 and 4') : '12–16 oz ' + (es ? 'durante' : 'during'))
+        : k === 'march' ? (es ? '8 oz y medio guineo antes' : '8 oz and half a banana before') : (es ? 'lleva agua aunque sea fácil' : 'carry water even if easy'));
+      if (k === 'course') add(es ? 'COMIDA' : 'FOOD', es ? 'completa 3–4 h antes + merienda 1.5–2 h antes' : 'full meal 3–4 h before + snack 1.5–2 h before');
+      else if (q) add(es ? 'COMIDA' : 'FOOD', es ? 'merienda de 30–50 g de carbohidrato 1.5–2 h antes' : '30–50 g carb snack 1.5–2 h before');
+      const cancel = es ? `Cancela o pasa a Z2 si: HRV ≤34 · FC en reposo ≥60 · sueño <6 h · dolor articular · fiebre${q ? ' · sensación >90 °F' : ''}`
+        : `Cancel or go Z2 if: HRV ≤34 · resting HR ≥60 · sleep <6 h · joint pain · fever${q ? ' · feels-like >90 °F' : ''}`;
+      return `<dl class="tp-mb" onclick="event.stopPropagation()">${R.join('')}</dl><p class="tp-mb-cancel">${cancel}</p>`;
+    }
+
     function renderTodayHero() {
       const today = todayISO();
       const todaySess = state.plan.find(s => s.dateISO === today);
@@ -6483,12 +6894,13 @@
             <span style="font-size:11px; letter-spacing:1px; color:var(--paper-dim);">${es?'HOY · QUÉ TOCA':'TODAY · WHAT IS ON'}</span>
             ${todaySess.completed ? `<span class="badge">${t('badge_done')}</span>` : `<span class="session-tag">${sessionTag(todaySess)}</span>`}
           </div>
-          <div class="hero-title" style="font-family:var(--font-display); font-size:24px; font-weight:600; letter-spacing:.5px; color:var(--paper); margin-bottom:4px; line-height:1.15;">${esc(shortSessionTitle(todaySess))}</div>
+          <div class="hero-title" style="font-family:var(--font-display); font-size:24px; font-weight:600; letter-spacing:.5px; color:var(--paper); margin-bottom:4px; line-height:1.15;">${tpKindIcon(tpPlanKind(todaySess), 22)}${esc(shortSessionTitle(todaySess))}</div>
           ${(() => { const h = sessionHeadline(todaySess); return `
           <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
             <span style="font-size:36px; font-weight:700; color:var(--coyote); font-family:var(--font-mono); line-height:1.1;">${h.big}</span>
             <span style="font-size:13px; color:var(--paper-dim);">${h.small}</span>
           </div>`; })()}
+          ${tpMissionBrief(todaySess)}
           ${todaySess.notes ? `<details class="fc-details" style="margin-top:8px;" onclick="event.stopPropagation()">
             <summary style="font-size:11px; color:var(--coyote-text); font-family:var(--font-mono); letter-spacing:.5px;">${es ? 'INSTRUCCIÓN COMPLETA' : 'FULL INSTRUCTION'} ▾</summary>
             <div style="font-size:13px; color:var(--paper); margin-top:6px;">${sessionTitleHtml(todaySess)}</div>
@@ -6793,7 +7205,7 @@
       let wk = '';
       if (r.cap) {
         const col = r.over ? '#e5484d' : 'var(--paper-dim)';
-        wk = `<div class="grit-kv" style="color:${col}">${es ? 'Semana' : 'Week'}: <b>${f1(r.proj)}</b> ${es ? 'mi corriendo (hechas + plan) · tope 10 %' : 'run mi (done + plan) · 10 % cap'} <b>${f1(r.cap)}</b></div>`;
+        wk = tpSegBar(Math.min(r.proj, r.cap), r.cap, null, { n: 10, cls: r.over ? 'tp-seg-over' : 'tp-seg-week', label: (es ? 'Semana: ' : 'Week: ') + f1(r.proj) + (es ? ' de ' : ' of ') + f1(r.cap) + ' mi' }) + `<div class="grit-kv" style="color:${col}">${es ? 'Semana' : 'Week'}: <b>${f1(r.proj)}</b> ${es ? 'mi corriendo (hechas + plan) · tope 10 %' : 'run mi (done + plan) · 10 % cap'} <b>${f1(r.cap)}</b></div>`;
         if (r.opt) wk += `<div class="grit-kv" style="color:${r.optOver ? 'var(--signal-amber)' : 'var(--paper-dim)'}">${r.optOver ? (es ? `⚠ La opcional del ${dayName(r.opt.iso)} (${f1(r.opt.mi)}) pasaría el tope: sáltala` : `⚠ The ${dayName(r.opt.iso)} optional (${f1(r.opt.mi)}) would break the cap: skip it`) : (es ? `La opcional del ${dayName(r.opt.iso)} (${f1(r.opt.mi)}) cabe en el tope` : `The ${dayName(r.opt.iso)} optional (${f1(r.opt.mi)}) fits the cap`)}</div>`;
       }
       return `<div class="grit-guard" style="margin-top:6px;">
@@ -6811,6 +7223,7 @@
         <div class="grit-hero-coin">${gritCoinHtml(pct, g.all.total)}</div>
         <div class="grit-hero-stats">
           <div class="grit-big">${f1(g.all.total)}<small> / ${GRIT.target} mi</small></div>
+          ${tpSegBar(g.all.total, GRIT.target, g.started && !g.finished ? g.expected : null, { n: 20, label: (es ? 'GRIT: ' : 'GRIT: ') + f1(g.all.total) + ' / ' + GRIT.target + ' mi' + (g.started && !g.finished ? (es ? ' · marca: dónde deberías ir hoy ' : ' · mark: where you should be today ') + f1(g.expected) : '') })}
           <div class="grit-chip" style="color:${ahead ? 'var(--olive-bright)' : 'var(--signal-amber)'}; border-color:currentColor;">${ahead ? (es ? '▲ ' : '▲ ') + '+' + f1(Math.max(0, diff)) + (es ? ' adelantado' : ' ahead') : '▼ ' + f1(-diff) + (es ? ' atrasado' : ' behind')}</div>
           <div class="grit-kv"><b>${f1(g.perDay)}</b> ${es ? 'mi/día necesarias' : 'mi/day needed'}</div>
           <div class="grit-kv"><b>${g.daysLeft}</b> ${es ? 'días (con hoy)' : 'days (incl. today)'}</div>
@@ -7286,6 +7699,201 @@
       delete state.settings.dashOrder; delete state.settings.dashHidden; saveState(); render();
     }
 
+    // 2026.11.20-2: capa visual (presentación; no cambia datos ni reglas).
+    // Etiqueta de estado del día, sacada del plan: EN MISIÓN / CUMPLIDA / DESCANSO.
+    function tpStatusHtml(s) {
+      const es = getLang() === 'es';
+      let k, txt;
+      if (!s || s.type === 'rest') { k = 'rest'; txt = es ? 'DESCANSO' : 'REST'; }
+      else if (s.completed) { k = 'done'; txt = es ? 'CUMPLIDA' : 'COMPLETE'; }
+      else { k = 'live'; txt = es ? 'EN MISIÓN' : 'ON MISSION'; }
+      const sub = s && s.type !== 'rest' ? ` · ${esc(shortSessionTitle(s))}` : '';
+      return `<div class="tp-status tp-st-${k}"><span class="tp-dot" aria-hidden="true"></span><b>${txt}</b><span class="tp-status-sub">${sub}</span></div>`;
+    }
+    // Barra segmentada tipo instrumento. val/max en millas; mark = dónde deberías ir.
+    function tpSegBar(val, max, mark, opt) {
+      opt = opt || {};
+      const n = opt.n || 20, per = max / n;
+      if (!(max > 0)) return '';
+      let segs = '';
+      for (let i = 0; i < n; i++) {
+        const f = Math.max(0, Math.min(1, ((val || 0) - i * per) / per));
+        segs += `<i class="${f > 0 ? 'on' : ''}" style="--f:${f.toFixed(2)};--i:${i}"></i>`;
+      }
+      const m = mark != null && mark > 0 ? `<b class="tp-seg-mark" style="left:${Math.max(0, Math.min(100, mark / max * 100)).toFixed(1)}%"></b>` : '';
+      return `<div class="tp-seg ${opt.cls || ''}" style="--n:${n}" role="img" aria-label="${opt.label || ''}">${segs}${m}</div>`;
+    }
+
+    // ═══ 2026.11.20-3: helpers compartidos (misión del día, línea de fases, cinta de zonas, informe .md) ═══
+    // Límites de zona desde el umbral (mismos porcentajes que ZONE_PCT): con 174 → Z2 130–148, Z4 165–174, Z5 ≥175.
+    function tpZones(lthr) {
+      lthr = lthr || state.profile?.lthr || 174;
+      const z3 = Math.round(lthr * 0.856), z4 = Math.round(lthr * 0.948), z5 = Math.round(lthr * 1.005);
+      return { z2lo: Math.round(lthr * 0.747), z2hi: z3 - 1, z3lo: z3, z3hi: z4 - 1, z4lo: z4, z4hi: z5 - 1, z5lo: z5 };
+    }
+    // Tipo de una sesión del PLAN (activityKind hace lo mismo con una actividad).
+    function tpPlanKind(s) {
+      if (!s) return 'none';
+      const txt = String(s.notes || '').toLowerCase();
+      switch (s.type) {
+        case 'rest': return 'rest';
+        case 'easy': return 'easy';
+        case 'long': return 'long';
+        case 'tempo': return /espec[ií]fico|recorrido/.test(txt) ? 'course' : 'tempo';
+        case 'intervals': return /cuesta/.test(txt) ? 'hills' : 'intervals';
+        case 'race_sim': return 'course';
+        case 'cross_training': return /chaleco|caminata/.test(txt) ? 'march' : (typeof strengthForSession === 'function' && strengthForSession(s)) ? 'strength' : 'cross';
+      }
+      return s.type || 'none';
+    }
+    const TP_KIND_ICON = { easy: 'k_easy', long: 'k_long', tempo: 'k_tempo', course: 'k_course', hills: 'k_hills', intervals: 'k_intervals', march: 'k_march', strength: 'dumbbell', rest: 'moon', race: 'k_course' };
+    function tpKindIcon(kind, size) { const n = TP_KIND_ICON[kind]; return n ? `<span class="tp-kic tp-kic-${kind}">${ic(n, size || 16)}</span>` : ''; }
+    const TP_QUALITY = ['tempo', 'course', 'hills', 'intervals', 'race'];
+    // Techo de FC de la sesión: fácil/larga = tope de Z2; marcha = 150; ritmo sostenido y recorrido = umbral.
+    function tpCeiling(kind, lthr) {
+      const z = tpZones(lthr);
+      if (kind === 'easy' || kind === 'long') return z.z2hi;
+      if (kind === 'march') return 150;
+      if (kind === 'tempo') return z.z5lo - 1; // el recorrido tiene 3 techos (milla 1, 2–5 y 6): va en "Planeado vs Real"
+      return null;
+    }
+    // Tiempo sobre el techo con la traza de 5 s: total, racha más larga y primera vez (min y milla).
+    function tpCeilingStats(act) {
+      const a = act?.analysis || {}, tr = a.trace5;
+      const kind = activityKind(act).key, ceil = tpCeiling(kind, state.profile?.lthr || 174);
+      if (!tr || !tr.hr || !ceil) return null;
+      let from = 0, to = tr.hr.length * tr.step, scope = 'sesión completa';
+      if (kind === 'tempo' && a.workSegment && a.workSegment.startSec != null) { from = a.workSegment.startSec; to = a.workSegment.endSec; scope = 'bloque de trabajo'; }
+      if (kind === 'course' && a.courseSegment && a.courseSegment.fromSec != null) { from = a.courseSegment.fromSec; to = a.courseSegment.toSec; scope = 'recorrido'; }
+      let over = 0, run = 0, longest = 0, first = null, tot = 0;
+      for (let i = 0; i < tr.hr.length; i++) {
+        const tt = i * tr.step; if (tt < from || tt > to) continue;
+        const h = tr.hr[i]; if (!h) { continue; }
+        tot += tr.step;
+        if (h > ceil) { over += tr.step; run += tr.step; if (run > longest) longest = run; if (first == null) first = i; }
+        else run = 0;
+      }
+      return { ceil, scope, overSec: over, longestSec: longest, totSec: tot, pct: tot ? Math.round(over / tot * 100) : 0,
+        firstSec: first != null ? first * tr.step : null, firstMi: first != null && tr.d ? tr.d[first] / 1609.344 : null };
+    }
+    // Segundos trotando con el chaleco (cadencia de carrera ≥140 pasos/min en la traza de 5 s).
+    function tpVestJogSec(act) {
+      const tr = act?.analysis?.trace5; if (!tr || !tr.cad) return null;
+      let s2 = 0; tr.cad.forEach(c => { if (c >= 140) s2 += tr.step; }); return s2;
+    }
+    // GRIT 100 al cierre del día de la actividad: running, marcha, acumulado, restantes y regla del 10 % de la semana.
+    function tpGritAt(iso) {
+      if (typeof GRIT === 'undefined' || !iso || iso < GRIT.start || iso > GRIT.end) return null;
+      const day = gritMilesBetween(iso, iso), acc = gritMilesBetween(GRIT.start, iso);
+      const dow = parseISODateLocal(iso).getDay(), sun = addDaysISO(iso, -dow);
+      const wk = gritMilesBetween(sun, iso), prev = gritMilesBetween(addDaysISO(sun, -7), addDaysISO(sun, -1));
+      return { day, acc, left: Math.max(0, GRIT.target - acc.total), wkRun: wk.run, wkRuck: wk.ruck, prevRun: prev.run, cap: prev.run > 0 ? prev.run * 1.10 : null, sun };
+    }
+    // Reglas de cancelar o pasar a Z2 (las del proyecto) contra lo que se anotó antes de salir.
+    function tpPreChecks(mf, kind) {
+      const num = v => { const m = String(v == null ? '' : v).replace(',', '.').match(/-?\d+(?:\.\d+)?/); return m ? parseFloat(m[0]) : null; };
+      const hrv = num(mf.hrv), rhr = num(mf.restingHR), sl = num(mf.sleepHours), en = num(mf.energyLevel), fl = num(mf.feelsLike);
+      const h7 = num(mf.hrv7d), band = Number(state.settings?.hrvBandLow) || 41;
+      const pain = String(mf.painNotes || '').trim();
+      const q = TP_QUALITY.includes(kind);
+      const row = (label, val, rule, ok) => ({ label, val, rule, ok });
+      return [
+        row('HRV de la noche', hrv != null ? hrv + ' ms' : 'N/D', 'cancela si ≤34', hrv == null ? null : hrv > 34),
+        row('HRV de 7 días', h7 != null ? h7 + ' ms' : 'N/D', `cancela si queda bajo la banda (${band} ms)`, h7 == null ? null : h7 >= band),
+        row('FC en reposo', rhr != null ? rhr + ' lpm' : 'N/D', 'cancela si ≥60', rhr == null ? null : rhr < 60),
+        row('Sueño', sl != null ? sl + ' h' : 'N/D', 'cancela si <6 h', sl == null ? null : sl >= 6),
+        row('Dolor', pain || 'Ninguno', 'articular u óseo cancela', pain ? null : true),
+        row('Energía', en != null ? en + '/10' : 'N/D', q ? '≤4 antes de una calidad: avisar y considerar Z2' : 'informativo', en == null ? null : q ? en > 4 : true),
+        row('Sensación térmica', fl != null ? fl + ' °F' : 'N/D', q ? '>90 °F cancela la calidad' : kind === 'march' ? 'informativo' : '>80 °F: alerta en 145', fl == null ? null : q ? fl <= 90 : true)
+      ];
+    }
+    // 2026.11.20-4: límite de abajo de la banda de HRV (Garmin), guardado una sola vez para todas las sesiones.
+    function tpSetHrvBand(v) {
+      const n = parseFloat(String(v || '').replace(',', '.'));
+      if (n > 10 && n < 200) { state.settings.hrvBandLow = n; saveState(); }
+    }
+    // Encabezado "Resumen para el análisis" del informe .md: lo primero que hace falta para analizar la sesión.
+    function tpReportHeader(t, a, linkedSession, mf, kind) {
+      const L = [], f1 = n => (Math.round((n || 0) * 100) / 100).toFixed(2), mmss = s => s == null ? 'N/D' : s <= 0 ? '0:00' : secToMMSS(Math.round(s));
+      const wd = t.dateISO ? parseISODateLocal(t.dateISO).toLocaleDateString('es-PR', { weekday: 'long', day: 'numeric', month: 'short' }) : 'N/D';
+      const hhmm = t.startTimeISO ? new Date(t.startTimeISO).toLocaleTimeString('es-PR', { hour: 'numeric', minute: '2-digit' }) : 'N/D';
+      L.push('## Resumen para el análisis', '');
+      L.push(`- **Versión de la app:** FitCoach ${typeof APP_BUILD !== 'undefined' ? APP_BUILD : 'N/D'}`);
+      L.push(`- **Sesión:** ${activityKind(t).label} · ${wd} · salida ${hhmm}${linkedSession ? ` · día ${linkedSession.day} del plan` : ' · **sin vincular al plan**'}`);
+      if (linkedSession && linkedSession.notes) L.push(`- **Línea del plan:** «${String(linkedSession.notes).trim().replace(/^(lun|mar|mi[eé]|jue|vie|s[aá]b|dom)\s*:\s*/i, '')}»`);
+      if (linkedSession && linkedSession.opt) L.push(`- **Opcional del día:** ${linkedSession.opt.slot || ''} «${linkedSession.opt.text || ''}» (no es deuda)`);
+      const gear = gearById(mf.gearId);
+      L.push(`- **Equipo y datos:** ${gear ? gear.name : 'calzado N/D'} · FC ${mf.hrSource ? (HR_SOURCES[mf.hrSource]?.es || mf.hrSource) : 'fuente N/D'}${kind === 'march' ? ` · chaleco ${mf.vestLb ? mf.vestLb + ' lb' : 'N/D'}` : ''}`);
+      L.push(`- **Condiciones [I]:** sensación ${mf.feelsLike ? mf.feelsLike + ' °F' : 'N/D'} · humedad ${mf.humidity ? mf.humidity + ' %' : 'N/D'}${mf.surface ? ' · ' + mf.surface : ''}`);
+      L.push('');
+      // Reglas de antes de salir
+      L.push('**Antes de salir (reglas de cancelar) [I]:**', '', '| Señal | Valor | Regla | Estado |', '|---|---|---|---|');
+      tpPreChecks(mf, kind).forEach(r => L.push(`| ${r.label} | ${r.val} | ${r.rule} | ${r.ok == null ? 'N/D' : r.ok ? '✓' : '✗'} |`));
+      L.push('');
+      // Techo de FC
+      const cs = tpCeilingStats(t);
+      if (cs) {
+        L.push(`**Techo de FC de la sesión [M]:** ${cs.ceil} lpm (${cs.scope}) · por encima ${mmss(cs.overSec)} (${cs.pct} %) · racha más larga ${mmss(cs.longestSec)}` +
+          (cs.firstSec != null ? ` · primera vez al min ${mmss(cs.firstSec)} (milla ${cs.firstMi != null ? cs.firstMi.toFixed(2) : 'N/D'} de la sesión)` : ' · nunca lo pasó'), '');
+      }
+      if (kind === 'march') {
+        const jog = tpVestJogSec(t), maxHR = t.maxHR || 0;
+        L.push('**Criterios de la marcha:**', '', '| Criterio | Resultado | Estado |', '|---|---|---|');
+        L.push(`| FC ≤150 | máx. ${maxHR || 'N/D'} lpm | ${maxHR ? (maxHR <= 150 ? '✓' : '✗') : 'N/D'} |`);
+        L.push(`| Sin trotar con el chaleco | ${jog == null ? 'N/D' : mmss(jog) + ' con cadencia ≥140'} | ${jog == null ? 'N/D' : jog <= 30 ? '✓' : '✗'} |`);
+        const feet = mf.ps_feetHot || mf.feetNotes || '', nd = mf.ps_nextDayPain || '';
+        L.push(`| Pies sin puntos calientes [I] | ${feet || 'N/D'} | ${feet ? (/^\s*(no|ninguno?s?|bien)\b/i.test(feet) ? '✓' : '✗ revisar') : 'N/D'} |`);
+        L.push(`| Sin dolor al día siguiente [I] | ${nd || 'llenar mañana'} | ${nd ? (/sin dolor|^\s*(no|ninguno?)\b|^\s*0\s*$/i.test(nd) ? '✓' : '✗ revisar') : 'POR CONFIRMAR'} |`);
+        L.push(`| Peso del chaleco [I] | ${mf.vestLb ? mf.vestLb + ' lb' : 'N/D'} | ${mf.vestLb ? (Number(mf.vestLb) === 20 ? '✓ (fijo en 20 lb en noviembre)' : '⚠ distinto de 20 lb') : 'N/D'} |`);
+        L.push('', '> En la marcha no aplican la deriva, el desacople, la continuidad ni la nota de correr: valen estos criterios.', '');
+      }
+      // GRIT
+      const g = tpGritAt(t.dateISO);
+      if (g) {
+        L.push('**GRIT 100 al cierre del día [M]:**', '', '| Running hoy | Marcha hoy | Acumulado | Faltan | Running de la semana | Tope del 10 % |', '|---|---|---|---|---|---|');
+        L.push(`| ${f1(g.day.run)} | ${f1(g.day.ruck)} | ${f1(g.acc.total)} (${f1(g.acc.run)} + ${f1(g.acc.ruck)}) | ${f1(g.left)} | ${f1(g.wkRun)} | ${g.cap ? f1(g.cap) + (g.wkRun > g.cap ? ' ✗' : ' ✓') : 'N/D'} |`);
+        const miss = (state.plan || []).filter(p => p.dateISO >= GRIT.start && p.dateISO <= t.dateISO && p.completed && !p.linkedActivityId && p.type !== 'rest' && tpPlanKind(p) !== 'strength');
+        L.push('', miss.length ? `⚠ **Días marcados como hechos sin actividad subida:** ${miss.map(p => p.dateISO.slice(5)).join(', ')} — esas millas no están en el acumulado.` : '*Cuenta las actividades guardadas en la app hasta esa fecha.*', '');
+      }
+      L.push('> Leyenda: [M] medido por el reloj · [I] informado en la app. Lo que falta sale como N/D.', '');
+      return L;
+    }
+
+    // 2026.11.20-4: al día siguiente de una marcha (hasta 3 días), pregunta por el dolor sin entrar al detalle.
+    function tpNextDayCheckHtml() {
+      const es = getLang() === 'es', today = todayISO(), from = addDaysISO(today, -3);
+      const act = (state.tcxSessions || []).filter(x => x.dateISO >= from && x.dateISO < today && activityKind(x).key === 'march' && !String(x.manualFields?.ps_nextDayPain || '').trim())
+        .sort((x, y) => y.dateISO.localeCompare(x.dateISO))[0];
+      if (!act) return '';
+      const opts = es ? ['Sin dolor', 'Espalda', 'Cadera', 'Rodillas', 'Pies'] : ['Sin dolor', 'Espalda', 'Cadera', 'Rodillas', 'Pies'];
+      const lbl = es ? opts : ['No pain', 'Back', 'Hips', 'Knees', 'Feet'];
+      const d = parseISODateLocal(act.dateISO).toLocaleDateString(es ? 'es-PR' : 'en-US', { weekday: 'long', day: 'numeric', month: 'short' });
+      return `<div class="card tp-nd"><div class="tp-nd-h">${tpKindIcon('march', 16)}${es ? `Marcha del ${d}: ¿dolor hoy?` : `March on ${d}: any pain today?`}</div>
+        <div class="tp-nd-b">${opts.map((o, i) => `<button type="button" class="btn-small${i === 0 ? ' tp-nd-ok' : ''}" onclick="saveManualField('${esc(act.id)}', 'ps_nextDayPain', '${o}')">${lbl[i]}</button>`).join('')}</div>
+        <p class="tp-nd-n">${es ? 'Cuenta para mantener las 20 lb: sin dolor al día siguiente.' : 'Needed to keep 20 lb: no pain the next day.'}</p></div>`;
+    }
+
+    // 2026.11.20-3: línea de fases hacia la carrera: D1/D2 del plan, cierre del GRIT y la carrera.
+    function tpPhaseLine() {
+      const es = getLang() === 'es', today = todayISO();
+      const raceISO = state.profile?.raceDateISO; // la misma fecha que la cuenta regresiva
+      if (!raceISO || raceISO < today) return '';
+      const fmt = iso => parseISODateLocal(iso).toLocaleDateString(es ? 'es-PR' : 'en-US', { day: 'numeric', month: 'short' });
+      const pts = [];
+      const courses = (state.plan || []).filter(s => tpPlanKind(s) === 'course').sort((a, b) => a.dateISO.localeCompare(b.dateISO));
+      courses.forEach((s, i) => pts.push({ iso: s.dateISO, lab: 'D' + (i + 1), done: !!s.completed || !!s.linkedActivityId }));
+      if (typeof GRIT !== 'undefined' && GRIT.end <= raceISO) pts.push({ iso: GRIT.end, lab: 'GRIT', done: today > GRIT.end });
+      pts.push({ iso: raceISO, lab: es ? 'CARRERA' : 'RACE', race: true });
+      const first = [today, ...pts.map(p => p.iso)].sort()[0];
+      const span = Math.max(1, daysBetweenISO(first, raceISO));
+      const pos = iso => Math.max(0, Math.min(100, daysBetweenISO(first, iso) / span * 100));
+      // Etiquetas que quedarían encimadas (a menos de 16 % de la anterior) suben arriba de la línea.
+      let lastPos = -100, lastUp = true;
+      const nodes = pts.map(p => { const x = pos(p.iso); const up = x - lastPos < 16 ? !lastUp : false; lastPos = x; lastUp = up;
+        return `<div class="tp-ph-node ${p.done ? 'done' : p.iso < today ? 'miss' : ''} ${p.race ? 'race' : ''} ${up ? 'up' : ''}" style="left:${x.toFixed(1)}%"><i></i><b>${p.lab}</b><small>${fmt(p.iso)}</small></div>`; }).join('');
+      return `<div class="tp-phase" role="img" aria-label="${es ? 'Línea de fases hacia la carrera' : 'Phase line to race day'}"><div class="tp-ph-track"><span class="tp-ph-fill" style="width:${pos(today).toFixed(1)}%"></span><span class="tp-ph-today" style="left:${pos(today).toFixed(1)}%"></span>${nodes}</div></div>`;
+    }
+
     function renderDashboard() {
       if (!state.profile) return renderOnboarding();
 
@@ -7312,6 +7920,8 @@
               </div>
               <div class="clock-meta">${esc((activeRace()?.name) || raceLabelByKey(profile.raceDistanceKey || '5k'))} · ${getLang() === 'es' ? 'meta personal' : 'personal goal'} ${fmtRaceTime(activeGoalSec(profile, raceMetersByKey(profile.raceDistanceKey || '5k')))}</div>
             </div>
+            ${tpStatusHtml(todaySess)}
+            ${tpPhaseLine()}
             <div class="clock-divider"></div>
             <div class="clock-stats">
               <div class="clock-stat">
@@ -7329,6 +7939,7 @@
             </div>
           </div>
 
+          ${tpNextDayCheckHtml()}
           <nav class="fc-quick-actions" aria-label="${getLang() === 'es' ? 'Accesos rápidos' : 'Quick actions'}">
             <button type="button" onclick="switchView('calendar')">
               <span class="fc-quick-icon" aria-hidden="true">▦</span>
@@ -7519,6 +8130,18 @@
             </div>
           `}
         </div>`;
+    }
+
+    // 2026.11.20-3: cinta de zonas (minutos en cada zona) con el techo de la sesión marcado.
+    function tpZoneTape(act) {
+      const es = getLang() === 'es', a = act?.analysis || {}, sec = a.timeInZones?.seconds || {};
+      const tot = [1, 2, 3, 4, 5].reduce((x, k) => x + (sec[k] || 0), 0);
+      if (!tot) return '';
+      const segs = [1, 2, 3, 4, 5].map(k => { const p = (sec[k] || 0) / tot * 100; return p > 0 ? `<span style="width:${p.toFixed(2)}%;background:${ZONE_COLORS[k]}" title="Z${k} ${secToMMSS(Math.round(sec[k]))}">${p >= 9 ? 'Z' + k : ''}</span>` : ''; }).join('');
+      const legend = [1, 2, 3, 4, 5].map(k => `<span><i style="background:${ZONE_COLORS[k]}"></i>Z${k} ${Math.round((sec[k] || 0) / 60)}′</span>`).join('');
+      const cs = tpCeilingStats(act);
+      const ceil = cs ? `<p class="tp-zt-ceil ${cs.longestSec > (activityKind(act).key === 'tempo' ? 60 : 0) ? 'bad' : 'ok'}">${es ? 'Techo' : 'Cap'} ${cs.ceil} ${es ? 'lpm' : 'bpm'} (${cs.scope}): ${cs.overSec ? `${secToMMSS(cs.overSec)} ${es ? 'por encima' : 'above'} · ${es ? 'racha' : 'streak'} ${secToMMSS(cs.longestSec)}${cs.firstSec != null ? ` · ${es ? 'primera vez al min' : 'first at min'} ${secToMMSS(cs.firstSec)}` : ''}` : (es ? 'nunca lo pasó ✓' : 'never above ✓')}</p>` : '';
+      return `<div class="tp-ztape">${segs}</div><div class="tp-zt-legend">${legend}</div>${ceil}`;
     }
 
     function renderHRZones(zones) {
@@ -8197,6 +8820,7 @@
             <div style="display:flex; gap:6px;">
               <button class="btn-small" onclick="exportGritActivityCSV('${esc(act.id)}')" title="${getLang() === 'es' ? 'CSV de esta actividad para subir al GRIT 100 (en inglés)' : 'This activity as a GRIT 100 upload CSV'}">GRIT100</button>
               <button class="btn-small" onclick="exportActivityMarkdown('${esc(act.id)}')">${t('export_md')}</button>
+              <button class="btn-small tp-claude-btn" onclick="exportClaudeReport('${esc(act.id)}')" title="${getLang() === 'es' ? 'Informe corto para mandar a Claude (sin la serie de datos)' : 'Short report for Claude (no data series)'}">${getLang() === 'es' ? 'PARA CLAUDE' : 'FOR CLAUDE'}</button>
             </div>
           </div>
           <div class="detail-body">
@@ -8370,7 +8994,15 @@
               </div>
               <div class="manual-field-row">
                 <label>HRV (ms)</label>
-                <input type="text" inputmode="decimal" id="mf-hrv-${act.id}" value="${mf.hrv}" placeholder="—" onblur="saveManualField('${act.id}', 'hrv', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-bodyWeight-${act.id}')" />
+                <input type="text" inputmode="decimal" id="mf-hrv-${act.id}" value="${mf.hrv}" placeholder="—" onblur="saveManualField('${act.id}', 'hrv', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-hrv7d-${act.id}')" />
+              </div>
+              <div class="manual-field-row">
+                <label>${getLang() === 'es' ? 'HRV promedio 7 días (ms)' : 'HRV 7-day average (ms)'}</label>
+                <input type="text" inputmode="decimal" id="mf-hrv7d-${act.id}" value="${mf.hrv7d || ''}" placeholder="—" onblur="saveManualField('${act.id}', 'hrv7d', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-bodyWeight-${act.id}')" />
+              </div>
+              <div class="manual-field-row">
+                <label>${getLang() === 'es' ? 'Banda de HRV: límite de abajo (ms)' : 'HRV band: lower limit (ms)'}</label>
+                <input type="text" inputmode="decimal" value="${state.settings.hrvBandLow || 41}" placeholder="41" onblur="tpSetHrvBand(this.value)" />
               </div>
               <div class="manual-field-row">
                 <label>${getLang() === 'es' ? 'Peso corporal (lb)' : 'Body weight (lb)'}</label>
@@ -8535,6 +9167,7 @@
 
             <div class="sitrep-label">${t('time_in_zones_label')}</div>
             <div class="card">
+              ${tpZoneTape(act)}
               ${renderHRZones(a.timeInZones?.pct || { z1: 0, z2: 0, z3: 0, z4: 0, z5: 0 })}
             </div>
 
@@ -9466,7 +10099,7 @@
       const h = sessionHeadline(session), sub = [h.big, h.small].filter(x => x && x !== '—').join(' · ');
       const badges = [session.completed ? `<span class="badge">${t('badge_done')}</span>` : '', activity ? `<span class="badge day">TCX ✓</span>` : ''].filter(Boolean).join('');
       return `<div class="session-card wk-card ${session.completed ? 'completed' : ''}" onclick="openSessionDetail(${session.day})">
-        <div class="wk-title"><span class="plan-head">${esc(head)}</span> <span class="session-tag wk-tag">${sessionTag(session)}</span></div>
+        <div class="wk-title">${tpKindIcon(tpPlanKind(session), 15)}<span class="plan-head">${esc(head)}</span> <span class="session-tag wk-tag">${sessionTag(session)}</span></div>
         ${items.length ? `<ul class="plan-list compact">${items.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}
         ${sub ? `<p class="wk-sub">${esc(sub)}</p>` : ''}
         ${badges ? `<div class="wk-badges">${badges}</div>` : ''}
@@ -12360,7 +12993,7 @@
         : (vdotRecheck.reasonEs || a.vdotInvalidReasonEs || null);
 
       // Auto-evaluation
-      const { history, sameTypeOnly: fatigueSameTypeOnly, needSameType: fatigueNeedSameType } = buildFatigueHistory(t);
+      const { history, sameTypeOnly: fatigueSameTypeOnly, needSameType: fatigueNeedSameType, family: fatigueFamily } = buildFatigueHistory(t);
       const fatigue = calcFatigueIndex({ avgHR: t.avgHR, avgPaceSecPerMi: t.avgPaceSecPerMi }, history);
       fatigue.sameTypeOnly = fatigueSameTypeOnly;
       const autoEval = calcAutoEvaluation(a, fatigue, vdotSessionType);
@@ -12380,13 +13013,16 @@
       const zonePct = z => Math.round((zSec[z]||0) / totalZoneSec * 100);
 
       const lines = [];
+      const tpKind = activityKind(t).key;
       
       // ── METADATA BLOCK (Claude parsing friendly) ─────────────────────────────
       lines.push('```');
       lines.push('ACTIVITY METADATA');
+      lines.push(`App: FitCoach ${APP_BUILD}`);
       lines.push(`Date: ${t.dateISO}`);
       lines.push(`Sport: ${isBike ? 'Biking' : 'Running'}`);
       lines.push(`Type: ${typeLabel}`);
+      lines.push(`Kind: ${tpKind} (${activityKind(t).label})`);
       if (linkedSession) lines.push(`Linked Plan Day: ${linkedSession.day}`);
       lines.push(`LTHR: ${state.profile?.lthr || 174} bpm`);
       if (isBike) {
@@ -12402,12 +13038,13 @@
         lines.push(`Work Block: ${secToMMSS(seg.workSec)} @ ${fmtPace(seg.main.paceSecPerMi)}, HR ${seg.main.avgHR} (laps ${seg.lapFrom + 1}-${seg.lapTo + 1}, ${seg.method === 'plan' ? 'matched to plan' : 'auto-detected'})`);
         if (seg.main.decoupling && seg.main.decoupling.valid) lines.push(`Aerobic Decoupling (work block): ${seg.main.decoupling.value.toFixed(1)}%`);
       } else if (a.decouplingValid && a.aerobicDecouplingPct != null) lines.push(`Aerobic Decoupling: ${a.aerobicDecouplingPct.toFixed(1)}%`);
-      lines.push(`Session Grade: ${a.sessionGrade || ND}${a.scoredOn === 'work_block' ? ' (work block)' : a.scoredOn === 'reps' ? ' (reps)' : ''}`);
+      lines.push(tpKind === 'march' ? 'Session Grade: N/A (marcha: ver los criterios de la marcha)' : `Session Grade: ${a.sessionGrade || ND}${a.scoredOn === 'work_block' ? ' (work block)' : a.scoredOn === 'reps' ? ' (reps)' : ''}`);
       lines.push('```');
       lines.push('');
       
       lines.push(`# Reporte de Actividad — ${t.dateISO}`);
       lines.push('');
+      try { tpReportHeader(t, a, linkedSession, mf, tpKind).forEach(x => lines.push(x)); } catch (e) { lines.push('> Resumen para el análisis: N/D (' + e.message + ')', ''); }
       
       // ── EXECUTIVE SUMMARY TABLE ─────────────────────────────────────────────
       lines.push('| Métrica | Valor | Estado |');
@@ -12433,8 +13070,8 @@
       lines.push('## Información General');
       lines.push('');
       lines.push(`**Fecha:** ${t.dateISO}`);
-      lines.push(`**Tipo de Entrenamiento:** ${typeLabel}`);
-      lines.push(`**Objetivo del Entrenamiento:** ${mf.sessionGoal || ND}`);
+      lines.push(`**Tipo de Entrenamiento:** ${activityKind(t).label}${linkedSession ? ` (plan: ${linkedSession.type === 'cross_training' ? 'entrenamiento cruzado' : typeLabel})` : ''}`);
+      lines.push(`**Objetivo del Entrenamiento:** ${mf.sessionGoal || (linkedSession && linkedSession.notes ? 'ver la línea del plan arriba' : ND)}`);
       lines.push('');
 
       // ── RUTA EVALUADA ─────────────────────────────────────────────────────
@@ -12451,7 +13088,7 @@
         lines.push(`**Pies:** ${mf.feetNotes || ND}`);
       }
       lines.push(`**Ubicación:** ${mf.locationName || ND}`);
-      if (t.firstGPS?.lat) lines.push(`**Coordenadas GPS (inicio):** ${t.firstGPS.lat.toFixed(5)}, ${t.firstGPS.lon.toFixed(5)}`);
+      // 2026.11.20-3: sin coordenadas en el informe (seguridad: la marcha sale de la casa). La ubicación por nombre basta.
       lines.push(`**Hora de Inicio:** ${t.startTimeISO ? new Date(t.startTimeISO).toLocaleString('es-PR') : ND}`);
       lines.push(`**Hora de Finalización:** ${t.endTimeISO ? new Date(t.endTimeISO).toLocaleString('es-PR') : ND}`);
       lines.push(`**Altitud Mínima:** ${t.altMinM != null ? t.altMinM + ' m' : ND}`);
@@ -12573,17 +13210,8 @@
       lines.push('');
       lines.push('## Zonas Cardíacas');
       lines.push('');
-      lines.push('### Configuración de Zonas (basada en LTHR)');
-      lines.push('');
       const lthr = state.profile?.lthr || 174;
-      const zoneRef = buildHRZoneReference(lthr);
-      const zoneNames = { 1: 'Z1 Recuperación', 2: 'Z2 Aeróbica', 3: 'Z3 Aeróbica Moderada', 4: 'Z4 Umbral', 5: 'Z5 Máxima' };
-      lines.push(`| Zona | Rango (LTHR ${lthr} bpm) | Objetivo |`);
-      lines.push('|------|--------------------------|----------|');
-      zoneRef.forEach(z => {
-        lines.push(`| ${zoneNames[z.num]} | ${fmtZoneRange(z)} bpm | ${z.objective.es} |`);
-      });
-      lines.push('');
+      { const zb = tpZones(lthr); lines.push(`**Zonas (umbral ${lthr}):** Z1 <${zb.z2lo} · Z2 ${zb.z2lo}–${zb.z2hi} · Z3 ${zb.z3lo}–${zb.z3hi} · Z4 ${zb.z4lo}–${zb.z4hi} · Z5 ≥${zb.z5lo}`, ''); }
       lines.push('### Tiempo en Zonas');
       lines.push('');
       lines.push('| Zona | Tiempo | % |');
@@ -12604,7 +13232,7 @@
         lines.push(`**Zonas del recorrido:** Z1 ${z.z1 || 0}% · Z2 ${z.z2 || 0}% · Z3 ${z.z3 || 0}% · Z4 ${z.z4 || 0}% · Z5 ${z.z5 || 0}%`);
         lines.push('', '| Milla | Ritmo | FC Prom | FC Máx | % en 165–172 | Desnivel |', '|---|---|---|---|---|---|');
         c.miles.forEach(m => lines.push(`| ${m.mile}${m.partial ? '*' : ''} | ${fmtPace(m.paceSecPerMi)} | ${m.avgHR || 'N/D'} | ${m.maxHR || 'N/D'} | ${m.bandPct != null ? m.bandPct + '%' : 'N/D'} | +${m.upM}/−${m.downM} m |`));
-        lines.push('', '*La nota general sigue calculándose sobre la sesión completa; para la D1/D2 cuentan el tiempo del recorrido y el equivalente 10K.*', '');
+        lines.push('', '*La nota se calcula sobre el recorrido (zonas y cadencia); para la proyección cuentan el tiempo del recorrido y el equivalente 10K.*', '');
       }
 
       // ── BLOQUE DE TRABAJO (ritmo sostenido) ─────────────────────────────
@@ -12620,7 +13248,7 @@
         }
         lines.push(`**Parte sostenida:** ${mmss(m.durSec)} · ${m.distMi.toFixed(2)} mi · ${fmtPace(m.paceSecPerMi)} · FC ${m.avgHR}/${m.maxHR} · cadencia ${m.avgCad || ND} spm`);
         lines.push(`**FC en la franja ${m.bandLo}–${m.bandHi}:** ${mmss(m.bandSec)} (${m.bandPct}%)`);
-        lines.push(`**FC sobre ${lthrR}:** ${mmss(m.aboveLthrSec)} en total · racha más larga ${m.longestAboveLthrSec} s (bajadas de menos de ${m.sampleStepSec} s no la cortan) ${m.longestAboveLthrSec > 60 ? '— **pasó la regla de 60 s**' : '(regla: bajar si pasa de 60 s seguidos)'}`);
+        lines.push(`**FC sobre ${lthrR}:** ${m.aboveLthrSec ? mmss(m.aboveLthrSec) : '0:00'} en total · racha más larga ${m.longestAboveLthrSec} s (bajadas de menos de ${m.sampleStepSec} s no la cortan) ${m.longestAboveLthrSec > 60 ? '— **pasó la regla de 60 s**' : '(regla: bajar si pasa de 60 s seguidos)'}`);
         lines.push(`**Zonas del bloque:** Z1 ${tz.pct.z1}% · Z2 ${tz.pct.z2}% · Z3 ${tz.pct.z3}% · Z4 ${tz.pct.z4}% · Z5 ${tz.pct.z5}%`);
         if (m.drift) lines.push(`**Deriva en el bloque:** ${m.drift.bpm >= 0 ? '+' : ''}${m.drift.bpm} bpm (${m.drift.pct >= 0 ? '+' : ''}${m.drift.pct}%)`);
         if (m.decoupling) {
@@ -12649,7 +13277,9 @@
       lines.push('');
       lines.push('## Deriva Cardíaca');
       lines.push('');
-      if (a.cardiacDrift && a.cardiacDriftValid === false) {
+      if (tpKind === 'march') {
+        lines.push('No aplica en la marcha con chaleco: el terreno y el paso mueven la FC más que la fatiga.');
+      } else if (a.cardiacDrift && a.cardiacDriftValid === false) {
         lines.push(`**Deriva de la sesión completa:** ${ND} — no válida: ${a.cardiacDriftInvalidReasonEs}.`);
         if (seg && seg.main.drift) lines.push(`**Deriva en el bloque de trabajo:** ${seg.main.drift.bpm >= 0 ? '+' : ''}${seg.main.drift.bpm} bpm (${seg.main.drift.pct >= 0 ? '+' : ''}${seg.main.drift.pct}%) — ver sección anterior.`);
       } else if (a.cardiacDrift) {
@@ -12663,6 +13293,7 @@
         lines.push(`**Interpretación:** ${autoEval.driftInterp || ND}`);
         lines.push('');
         lines.push('> Referencia: < 5% = Excelente | 5-8% = Normal | 8-10% = Fatiga o calor | > 10% = Exceso de intensidad');
+        if (tpKind === 'easy' || tpKind === 'long') lines.push('> La deriva usa mitades con la milla 1; para decidir, lee el **desacople** (sin la milla 1) más abajo.');
       } else {
         lines.push(ND + ' — datos insuficientes');
       }
@@ -12800,7 +13431,7 @@
         lines.push('');
       }
 
-      if (!isBike) {
+      if (!isBike && tpKind !== 'march') {
         lines.push('## Run / Walk');
         lines.push('');
         if (a.runWalk) {
@@ -12897,27 +13528,20 @@
         lines.push('');
         }
         if (A.series && A.series.length) {
-          lines.push('### Serie temporal (cada ~15 s, CSV)');
+          // 2026.11.20-3: cada ~30 s fuera de las sesiones de calidad (la mitad de líneas; para el detalle está el TCX).
+          const tpFine = TP_QUALITY.includes(tpKind);
+          lines.push(`### Serie temporal (cada ~${tpFine ? 15 : 30} s, CSV)`);
           lines.push('');
           lines.push('```csv');
           lines.push('t_sec,dist_mi,pace_sec_mi,hr,cad_spm,alt_ft');
-          A.series.forEach(r => lines.push([r.tSec, r.distMi, r.paceSecPerMi ?? '', r.hr ?? '', r.cad ?? '', r.altFt ?? ''].join(',')));
+          A.series.filter((r, i) => tpFine || i % 2 === 0).forEach(r => lines.push([r.tSec, r.distMi, r.paceSecPerMi ?? '', r.hr ?? '', r.cad ?? '', r.altFt ?? ''].join(',')));
           lines.push('```');
           lines.push('');
         }
       }
 
       // ── CADENCIA POR SEGMENTO ────────────────────────────────────────────
-      lines.push('---');
-      lines.push('');
-      lines.push('## Cadencia por Segmento');
-      lines.push('');
-      if (a.cadenceSegments?.length) {
-        a.cadenceSegments.forEach(s => lines.push(`- Segmento ${s.segment}: ${s.avgCadence} spm`));
-      } else {
-        lines.push(ND);
-      }
-      lines.push('');
+      // 2026.11.20-3: "Cadencia por segmento" quitada del informe: repetía la cadencia de los parciales.
 
       // ── POTENCIA ─────────────────────────────────────────────────────────
       lines.push('---');
@@ -12972,9 +13596,9 @@
         lines.push(`**Delta FC:** ${fatigue.hrDeltaBpm > 0 ? '+' : ''}${fatigue.hrDeltaBpm} bpm`);
         lines.push(`**Delta Pace:** ${fatigue.paceDeltaSec > 0 ? '+' : ''}${fatigue.paceDeltaSec}s/mi (${fatigue.paceDeltaSec > 0 ? 'más lento' : 'más rápido'} que base)`);
         lines.push(`**Señal:** ${fatigue.signal}`);
-        lines.push(fatigue.sameTypeOnly ? '*Comparado solo contra sesiones del mismo tipo.*' : '*⚠ Comparado contra sesiones de tipos mixtos — interpretar con cautela.*');
+        lines.push(fatigue.sameTypeOnly ? '*Comparado solo contra sesiones del mismo tipo.*' : fatigueFamily === 'aerobic' ? '*Comparado contra fáciles y largas (todavía no hay 2 del mismo tipo).*' : '*⚠ Comparado contra sesiones de tipos mixtos — interpretar con cautela.*');
       } else {
-        lines.push(fatigueNeedSameType ? 'Se necesitan al menos 2 sesiones previas del mismo tipo para comparar (las de otros tipos no sirven en una sesión estructurada).' : 'No hay sesiones previas para comparar');
+        lines.push(fatigueNeedSameType ? 'Se necesitan al menos 2 sesiones previas del mismo tipo para comparar (fácil o larga contra fáciles y largas; marcha contra marchas; calidad contra la misma calidad).' : 'No hay sesiones previas para comparar');
       }
       lines.push('');
 
@@ -12996,19 +13620,6 @@
       lines.push('---');
       lines.push('');
       lines.push('## Percepción del Esfuerzo (RPE)');
-      lines.push('');
-      lines.push('| Escala | Descripción |');
-      lines.push('|--------|-------------|');
-      lines.push('| 1 | Muy fácil |');
-      lines.push('| 2 | Caminata relajada |');
-      lines.push('| 3 | Conversacional muy cómoda |');
-      lines.push('| 4 | Fácil |');
-      lines.push('| 5 | Moderada |');
-      lines.push('| 6 | Moderadamente difícil |');
-      lines.push('| 7 | Difícil |');
-      lines.push('| 8 | Muy difícil |');
-      lines.push('| 9 | Casi máximo |');
-      lines.push('| 10 | Máximo esfuerzo |');
       lines.push('');
       lines.push(`**RPE de esta sesión:** ${mf.rpe ? mf.rpe + '/10' : ND}`);
       lines.push('');
@@ -13065,7 +13676,7 @@
           };
           const order = ['pacing', 'cadence', 'continuity', 'durability', 'cvControl',
             'hrDataQuality', 'value5K', 'valueEndurance'];
-          const rows = order.filter(k => cg[k] != null);
+          const rows = tpKind === 'march' ? [] : order.filter(k => cg[k] != null);
           if (rows.length) {
             lines.push('---');
             lines.push('');
@@ -13404,6 +14015,40 @@
       mdModalKind = mdModalKind === 'app' ? 'report' : 'app';
       const act = state.tcxSessions.find(x => x.id === mdModalActivityId);
       if (act) mdModalContent = buildModalMarkdown(act);
+      render();
+    }
+
+    // 2026.11.20-4: informe corto "Para Claude": el resumen para el análisis y solo las secciones que se usan
+    // para analizar (zonas, bloque o recorrido, parciales, desacople, caminatas, respuestas, entrenador y
+    // planeado vs. real). Sin la serie de datos ni los cuartos de milla: para el detalle va el TCX.
+    function buildClaudeReport(t) {
+      const full = buildActivityMarkdown(t).split('\n');
+      const KEEP = ['Resumen para el análisis', 'Zonas Cardíacas', 'Recorrido de la Carrera', 'Bloque de Trabajo', 'Splits Reales', 'Splits por Repetición',
+        'Decoupling Aeróbico', 'Run / Walk', 'Sensaciones del Atleta', 'Percepción del Esfuerzo', 'Después de la Sesión', 'Recomendaciones del Entrenador', 'Planeado vs Real'];
+      const out = []; let sec = null, keep = true, inCode = false, seenTitle = false;
+      for (const line of full) {
+        if (!seenTitle) { if (line.startsWith('# ')) { seenTitle = true; out.push(line.replace('Reporte de Actividad', 'Informe para Claude')); } else out.push(line); continue; }
+        if (line.startsWith('```')) inCode = !inCode;
+        if (!inCode && line.startsWith('## ')) { sec = line.slice(3).trim(); keep = KEEP.some(k => sec.startsWith(k)); }
+        if (sec === null) { if (/^\|/.test(line)) out.push(line); else if (!line.trim()) out.push(line); continue; } // tabla resumen
+        if (!keep) continue;
+        if (/:\*\*\s*N\/D\s*$/.test(line)) continue;         // respuestas vacías
+        out.push(line);
+      }
+      // Datos principales que en el informe completo están en secciones que aquí no van.
+      const a = t.analysis || {}, mf = t.manualFields || {};
+      const extra = [`**Cadencia:** ${t.avgCadSPM || 'N/D'} spm · **Desnivel:** +${t.elevGainM != null ? t.elevGainM : 'N/D'} m / −${t.elevLossM != null ? t.elevLossM : 'N/D'} m · **TSS:** ${estimateTSS(t.totalDistMi, t.totalTimeSec, t.avgHR, state.profile?.lthr || 174).toFixed(1)}${mf.rpe ? ` · **Esfuerzo:** ${mf.rpe}/10` : ''}`, ''];
+      const i = out.findIndex(l => l.startsWith('## Resumen para el análisis'));
+      if (i >= 0) out.splice(i, 0, ...extra);
+      out.push('', `*Informe corto de FitCoach ${APP_BUILD}. El informe completo y el TCX tienen la serie de datos.*`);
+      return out.join('\n').replace(/\n{3,}/g, '\n\n');
+    }
+    function exportClaudeReport(activityId) {
+      const t = state.tcxSessions.find(a => a.id === activityId);
+      if (!t) return;
+      mdModalKind = 'report';
+      mdModalActivityId = activityId;
+      mdModalContent = buildClaudeReport(t);
       render();
     }
 
@@ -14349,7 +14994,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.10-3';
+    const APP_BUILD = '2026.11.20-4';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
@@ -15689,5 +16334,39 @@
 })();
 </script>
 
+  <script id="tp-countup">
+  /* 2026.11.20-2: conteo animado de la cuenta regresiva, las estadísticas y las millas del GRIT, una vez al abrir. Solo presentación. */
+  (function () {
+    var done = {}, reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    function countUp(el, key) {
+      if (!el || done[key]) return; done[key] = 1;
+      if (reduce) return;
+      var node = null;
+      for (var i = 0; i < el.childNodes.length; i++) { if (el.childNodes[i].nodeType === 3 && /\d/.test(el.childNodes[i].nodeValue)) { node = el.childNodes[i]; break; } }
+      if (!node) return;
+      var txt = node.nodeValue, re = /\d+(?:\.\d+)?/g, t0 = performance.now(), dur = 650;
+      function step(now) {
+        if (!node.isConnected) return;
+        var k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+        node.nodeValue = k < 1 ? txt.replace(re, function (m) { var d = (m.split('.')[1] || '').length; return (parseFloat(m) * e).toFixed(d); }) : txt;
+        if (k < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+    function run() {
+      countUp(document.querySelector('.mission-clock .clock-number'), 'clock');
+      document.querySelectorAll('.mission-clock .clock-stat-val').forEach(function (el, i) { countUp(el, 'stat' + i); });
+      countUp(document.querySelector('.grit-hero .grit-big'), 'grit');
+    }
+    var queued = false;
+    function schedule() { if (queued) return; queued = true; requestAnimationFrame(function () { queued = false; try { run(); } catch (e) {} }); }
+    function start() {
+      var app = document.getElementById('app'); if (!app) return;
+      new MutationObserver(schedule).observe(app, { childList: true, subtree: true });
+      schedule();
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+  })();
+  </script>
 </body>
 </html>
