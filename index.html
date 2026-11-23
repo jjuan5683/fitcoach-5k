@@ -3593,7 +3593,7 @@
             avgHR: hrs.length ? hrs.reduce((a, b) => a + b, 0) / hrs.length : null,
             maxHR: hrs.length ? Math.max(...hrs) : null,
             avgCadence: cads.length ? cads.reduce((a, b) => a + b, 0) / cads.length : null,
-            elevGainM: Math.round(elevGain), elevLossM: Math.round(elevLoss), partial: true,
+            elevGainM: Math.round(elevGain), elevLossM: Math.round(elevLoss), partial: segDist < unitM * 0.98, // 2026.11.20-7: 0.998 mi ya no es "parcial"
             elapsedFromStartSec: (segEnd.time - startTime) / 1000
           });
         }
@@ -7860,6 +7860,14 @@
       L.push('## Resumen para el análisis', '');
       L.push(`- **Versión de la app:** FitCoach ${typeof APP_BUILD !== 'undefined' ? APP_BUILD : 'N/D'}`);
       L.push(`- **Sesión:** ${tpKindEs(t)} · ${wd} · salida ${hhmm}${linkedSession ? ` · día ${linkedSession.day} del plan` : ' · **sin vincular al plan**'}`);
+      // 2026.11.20-7: sesión doble y vínculo a un día con otra fecha.
+      const sameDay = (state.tcxSessions || []).filter(x => x.dateISO === t.dateISO).sort((x, y) => String(x.startTimeISO).localeCompare(String(y.startTimeISO)));
+      if (sameDay.length > 1) {
+        const idx = sameDay.findIndex(x => x.id === t.id) + 1;
+        const others = sameDay.filter(x => x.id !== t.id).map(x => `${tpKindEs(x)} ${x.startTimeISO ? new Date(x.startTimeISO).toLocaleTimeString('es-PR', { hour: 'numeric', minute: '2-digit' }) : ''} (${(x.totalDistMi || 0).toFixed(2)} mi)`).join(', ');
+        L.push(`- ⚠ **Sesión ${idx} de ${sameDay.length} del día.** Las otras: ${others}.`);
+      }
+      if (linkedSession && linkedSession.dateISO && linkedSession.dateISO !== t.dateISO) L.push(`- ⚠ **Vinculada a un día del plan con otra fecha (${linkedSession.dateISO}).** Si fue una sesión extra, desvincúlala.`);
       if (linkedSession && linkedSession.notes) L.push(`- **Línea del plan:** «${String(linkedSession.notes).trim().replace(/^(lun|mar|mi[eé]|jue|vie|s[aá]b|dom)\s*:\s*/i, '')}»`);
       if (!linkedSession) {
         const pd = (state.plan || []).find(p => p.dateISO === t.dateISO);
@@ -8852,7 +8860,11 @@
 
       const a = act.analysis || {};
       const linkedSession = act.linkedPlanDay ? state.plan.find(s => s.day === act.linkedPlanDay) : null;
-      const unlinkedSessions = state.plan.filter(s => s.type !== 'rest' && !s.linkedActivityId).slice(0, 30);
+      // 2026.11.20-7: solo días del plan a ±2 días de la actividad, el más cercano primero. Antes salían los 30 primeros sin
+      // vincular y una marcha de hoy se podía vincular a la del 10-nov. Una sesión extra se deja sin vincular.
+      const actIsMarch = activityKind(act).key === 'march';
+      const unlinkedSessions = state.plan.filter(s => s.type !== 'rest' && !s.linkedActivityId && act.dateISO && Math.abs(daysBetweenISO(s.dateISO, act.dateISO)) <= 2 && ((tpPlanKind(s) === 'march') === actIsMarch))
+        .sort((x, y) => Math.abs(daysBetweenISO(x.dateISO, act.dateISO)) - Math.abs(daysBetweenISO(y.dateISO, act.dateISO)));
       const gradeClass = a.sessionGrade?.replace('+', 'plus');
       const mf = act.manualFields || { aerobicTE: '', anaerobicTE: '', trainingLoad: '', humidity: '' };
       const NA = getLang() === 'es' ? 'N/D' : 'N/A';
@@ -8892,8 +8904,8 @@
                 <button class="btn btn-secondary" style="width:100%;" onclick="unlinkActivity('${act.id}')">${t('unlink')}</button>
               ` : `
                 <select class="link-session-select" id="linkSelect-${act.id}">
-                  <option value="">${t('select_plan_day')}</option>
-                  ${unlinkedSessions.map(s => `<option value="${s.day}">${getLang() === 'es' ? 'Día' : 'Day'} ${s.day} · ${s.dateISO} · ${sessionTitle(s)}</option>`).join('')}
+                  <option value="">${unlinkedSessions.length ? t('select_plan_day') : (getLang() === 'es' ? 'Sin días del plan cerca: déjala sin vincular (sesión extra)' : 'No plan days nearby: leave unlinked (extra session)')}</option>
+                  ${unlinkedSessions.map(s => `<option value="${s.day}">${s.dateISO === act.dateISO ? '● ' : ''}${getLang() === 'es' ? 'Día' : 'Day'} ${s.day} · ${s.dateISO} · ${sessionTitle(s)}</option>`).join('')}
                 </select>
                 <button class="btn btn-primary" style="width:100%;" onclick="linkActivityToSession('${act.id}', document.getElementById('linkSelect-${act.id}').value)">${t('link_activity')}</button>
               `}
@@ -12953,7 +12965,8 @@
       // ── Marcha con chaleco: FC ≤150, peso, pies ──
       if (key === 'march' && L && L.length) {
         const hs = L.filter(z => z.hr > 0), over = hs.filter(z => z.hr > 150).length;
-        if (hs.length && over / hs.length > 0.05) addBad(`${mmss(over * (ss.step || 5))} sobre 150 lpm (${Math.round(over / hs.length * 100)} % de la marcha).`, 'Pasos más cortos y menos ritmo; revisa que el chaleco quede ajustado.');
+        const mx = hs.reduce((m, z) => Math.max(m, z.hr), 0);
+        if (hs.length && (over > 0 || (act.maxHR || 0) > 150)) addBad(`FC sobre 150 lpm: ${over ? mmss(over * (ss.step || 5)) : 'unos segundos'} (máxima ${Math.max(mx, act.maxHR || 0)}).`, 'En las subidas, paso más corto hasta bajar de 150; la regla es ≤150 toda la marcha.');
         else if (hs.length) good.push('FC dentro de ≤150 lpm durante la marcha.');
         const vest = num(mf.vestLb);
         if (vest != null && vest !== 20) addBad(`Chaleco de ${vest} lb (noviembre: fijo en 20 lb, agua incluida).`, 'Vuelve a 20 lb.');
@@ -15040,7 +15053,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.20-6';
+    const APP_BUILD = '2026.11.20-7';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
