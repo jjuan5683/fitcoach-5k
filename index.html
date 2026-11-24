@@ -3314,7 +3314,7 @@ function fcCalCardHtml() {
         ['sleepHours', es ? 'sueño' : 'sleep'], ['hrv', es ? 'VFC de la noche' : 'overnight HRV'],
         ['restingHR', es ? 'FC en reposo' : 'resting HR'], ['feelsLike', es ? 'sensación térmica' : 'feels-like'],
         ['gearId', es ? 'zapato' : 'shoe'], ['hrSource', es ? 'fuente de FC' : 'HR source']
-      ].concat(gearById(mf.gearId)?.kind === 'boot' ? [['vestLb', es ? 'peso del chaleco' : 'vest weight'], ['feetNotes', es ? 'estado de los pies' : 'feet']] : [])
+      ].concat(fcIsRuck(act) ? [['vestLb', es ? 'peso del chaleco' : 'vest weight'], ['feetNotes', es ? 'estado de los pies' : 'feet']] : [])
        .filter(([k]) => mf[k] === undefined || mf[k] === null || String(mf[k]).trim() === '').map(([, l]) => l);
       if (!need.length) return `<p style="font-size:11px; color:var(--olive-text); margin:0 0 12px;">${es ? '✓ Notas del seguimiento completas.' : '✓ Follow-up notes complete.'}</p>`;
       return `<div class="card" style="border-left:3px solid var(--signal-amber);">
@@ -8098,12 +8098,19 @@ function fcCalCardHtml() {
     const addDaysISO = (iso, n) => { const d = parseISODateLocal(iso); d.setDate(d.getDate() + n); return isoFromDate(d); };
     const daysBetweenISO = (a, b) => Math.round((parseISODateLocal(b) - parseISODateLocal(a)) / 86400000);
 
+    // 2026.11.24-4: una actividad es rucking si va con botas O si su tipo es marcha (plan vinculado, cadencia y ritmo).
+    // Antes solo contaba las botas: el 24-nov una marcha con Hoka Bondi entró como 5.11 mi de running.
+    function fcIsRuck(a) {
+      if (!a || a.sport === 'biking') return false;
+      if (gearById(a.manualFields?.gearId)?.kind === 'boot') return true;
+      try { return activityKind(a).key === 'march'; } catch (e) { return false; }
+    }
     function gritMilesBetween(fromISO, toISO) {
       let run = 0, ruck = 0;
       (state.tcxSessions || []).forEach(s => {
         if (s.dateISO >= fromISO && s.dateISO <= toISO && s.sport !== 'biking') {
-          // A TCX assigned to boots is a ruck (vest walk), not a run.
-          if (gearById(s.manualFields?.gearId)?.kind === 'boot') ruck += Number(s.totalDistMi) || 0;
+          // Rucking (botas o tipo marcha) cuenta como marcha, no como running.
+          if (fcIsRuck(s)) ruck += Number(s.totalDistMi) || 0;
           else run += Number(s.totalDistMi) || 0;
         }
       });
@@ -10015,7 +10022,6 @@ function fcCalCardHtml() {
             <button class="detail-back" onclick="closeDetail()">←</button>
             <div class="detail-header-title">${getLang() === 'es' ? 'ACTIVIDAD' : 'ACTIVITY'} · ${act.dateISO}</div>
             <div style="display:flex; gap:6px;">
-              <button class="btn-small" onclick="exportGritActivityCSV('${esc(act.id)}')" title="${getLang() === 'es' ? 'CSV de esta actividad para subir al GRIT 100 (en inglés)' : 'This activity as a GRIT 100 upload CSV'}">GRIT100</button>
               <button class="btn-small" onclick="exportActivityMarkdown('${esc(act.id)}')">${t('export_md')}</button>
               <button class="btn-small tp-claude-btn" onclick="exportClaudeReport('${esc(act.id)}')" title="${getLang() === 'es' ? 'Informe corto para mandar a Claude (sin la serie de datos)' : 'Short report for Claude (no data series)'}">${getLang() === 'es' ? 'PARA CLAUDE' : 'FOR CLAUDE'}</button>
             </div>
@@ -12636,7 +12642,7 @@ function fcCalCardHtml() {
       const untyped = sessions.filter(s => !typeOf(s));
       if (untyped.length) missing.push(L('Sesiones sin tipo ni vínculo al plan (' + untyped.map(s => s.dateISO).join(', ') + '): dime qué eran (fácil, tempo, long run…) para evaluarlas bien', 'Sessions without a type or plan link (' + untyped.map(s => s.dateISO).join(', ') + '): tell me what they were (easy, tempo, long run…) so they are graded correctly'));
       sessions.forEach(s => {
-        const mf = s.manualFields || {}, boot = gearById(mf.gearId)?.kind === 'boot';
+        const mf = s.manualFields || {}, boot = fcIsRuck(s);
         const need = [['sleepHours', L('sueño', 'sleep')], ['hrv', L('VFC', 'HRV')], ['restingHR', L('FC reposo', 'resting HR')], ['rpe', 'RPE'], ['painNotes', L('dolor 0–10', 'pain 0–10')], ['feelsLike', L('sensación térmica', 'feels-like')], ['gearId', L('zapato', 'shoe')], ['hrSource', L('fuente de FC', 'HR source')]]
           .concat(boot ? [['vestLb', L('peso del chaleco', 'vest weight')], ['feetNotes', L('pies', 'feet')]] : [])
           .filter(([k]) => mf[k] == null || String(mf[k]).trim() === '').map(([, l]) => l);
@@ -13098,10 +13104,6 @@ function fcCalCardHtml() {
           <div class="md-modal-card">
             <div class="md-modal-header">
               <div class="md-modal-title">${t('md_export_title')}</div>
-              <button onclick="toggleMdKind()" aria-label="Cambiar formato de exportación" style="padding: 8px 14px; margin-right: 8px; background: var(--field-surface); border: 1px solid var(--field-line); color: var(--olive-text); cursor: pointer; font-family: var(--font-mono); font-size: 11px;">${mdModalKind === 'app' ? 'FORMATO APP ◀' : '▶ FORMATO APP'}</button>
-              ${mdModalKind === 'app' ? '' : `<button id="mdModalToggle" onclick="toggleReportMode()" style="padding: 8px 14px; margin-right: 8px; background: var(--field-surface); border: 1px solid var(--field-line); color: var(--coyote); cursor: pointer; font-size: 12px; font-family: var(--font-mono); letter-spacing: 0.5px;">
-                ${reportMode === 'full' ? 'FULL MODE ◀' : '▶ QUICK MODE'}
-              </button>`}
               <button class="md-modal-close" onclick="closeMarkdownModal()">✕</button>
             </div>
             <div class="md-modal-body">
@@ -14294,7 +14296,7 @@ function fcCalCardHtml() {
       lines.push(`**Calzado:** ${gearById(mf.gearId)?.name || ND}${mf.gearAuto ? ' (automático, sin confirmar)' : ''}`);
       lines.push(`**Fuente de FC:** ${mf.hrSource ? (HR_SOURCES[mf.hrSource]?.es || mf.hrSource) : ND}${mf.hrSource === 'optical' ? ' — ⚠ no válida para zonas, decoupling ni umbral' : ''}`);
       lines.push(`**Tipo de actividad:** ${activityKind(t).label}`);
-      if (gearById(mf.gearId)?.kind === 'boot') {
+      if (fcIsRuck(t)) {
         lines.push(`**Peso del chaleco:** ${mf.vestLb ? mf.vestLb + ' lb' : ND}`);
         lines.push(`**Pies:** ${mf.feetNotes || ND}`);
       }
@@ -15266,6 +15268,7 @@ function fcCalCardHtml() {
       const t = state.tcxSessions.find(a => a.id === activityId);
       if (!t) return;
       mdModalKind = 'report';
+      reportMode = 'full'; // 2026.11.24-3: solo informe completo (se quitó el modo rápido y el formato app)
       mdModalActivityId = activityId;
       mdModalContent = buildActivityMarkdown(t);
       render();
@@ -16204,7 +16207,7 @@ function fcCalCardHtml() {
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.24-2';
+    const APP_BUILD = '2026.11.24-4';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
