@@ -1950,6 +1950,12 @@
     .tp-mb-row { display: contents; }
     .tp-mb dt { font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.1px; color: var(--coyote-text, #d8bd7f); padding-top: 2px; white-space: nowrap; }
     .tp-mb dd { margin: 0; color: var(--paper); line-height: 1.4; }
+    .tp-byg { margin-top: 10px; padding: 10px 12px; border: 1px solid var(--coyote); border-left-width: 3px; border-radius: 4px; background: rgba(201,169,97,0.06); }
+    .tp-byg-title { font-family: var(--font-mono); font-size: 11.5px; letter-spacing: .6px; color: var(--coyote-text); margin-bottom: 6px; }
+    .tp-byg-h { font-size: 12px; font-weight: 700; margin-top: 6px; }
+    .tp-byg-h.bad { color: var(--signal-amber); } .tp-byg-h.fix { color: var(--blue-text); } .tp-byg-h.good { color: var(--olive-bright); }
+    .tp-byg ul { margin: 2px 0 0 18px; padding: 0; } .tp-byg li { font-size: 12.5px; line-height: 1.4; color: var(--paper); margin: 2px 0; }
+    .tp-byg-rep { color: #e5484d; font-weight: 700; }
     .tp-mb-cancel { font-size: 11.5px; color: var(--paper-dim); margin: 4px 0 2px; line-height: 1.45; }
     html.fc-sun .tp-mb { background: #fffdf7; border-color: #d8cfb5; border-left-color: #7a5a12; }
     html.fc-sun .tp-mb dt { color: #6b4f10; }
@@ -4529,7 +4535,8 @@
       const cdFeels = parseFloat(String(act?.manualFields?.feelsLike || '').replace(',', '.'));
       const cdCeil = !isNaN(cdFeels) && cdFeels > 80 ? 145 : 140;
       const cdOk = rm && rm.cooldown && rm.cooldown.avgHR && rm.cooldown.avgHR <= cdCeil;
-      if (rm && rm.cooldown && !cdOk && /trote\s+final/.test(notes) && rm.cooldown.paceSecPerMi > 17 * 60) {
+      // 2026.11.20-8: regla del 23-nov — caminar el trote final cuenta como cumplido; ya no es alerta.
+      if (false && rm && rm.cooldown && !cdOk && /trote\s+final/.test(notes) && rm.cooldown.paceSecPerMi > 17 * 60) {
         out.push({ type: 'info', key: 'cooldown', text: `Trote final caminado (${secToMMSS(rm.cooldown.durSec)} a ${fmtPace(rm.cooldown.paceSecPerMi)}).` });
       }
       // Perceived effort above what the plan line asks for.
@@ -6311,8 +6318,14 @@
       };
       const cooldown = () => {
         // 2026.11.10-3: techo de 145 en el reloj (con sensación >80 °F, casi siempre a las 5 pm); con fresco, 140 a ojo.
-        if (coolM) st({ durationType: 'time', durationValue: +coolM[1] * 60, intensity: 'cooldown', ...hr(100, 145),
-          label: 'Trote final', cue: 'Techo 145 con calor (140 si está fresco): si pasa, camina hasta 130 y vuelve a trotar.', fitName: 'Trote final' });
+        // 2026.11.20-8: regla del 23-nov — 3 min caminando; después trote suave solo con FC ≤135; si no, caminar (cuenta como cumplido).
+        if (coolM) {
+          const tot = +coolM[1] * 60, walk = Math.min(180, tot);
+          st({ durationType: 'time', durationValue: walk, intensity: 'cooldown', label: 'Trote final: caminar',
+            cue: '3 min caminando para bajar la FC.', fitName: 'Final caminar' });
+          if (tot > walk) st({ durationType: 'time', durationValue: tot - walk, intensity: 'cooldown', ...hr(90, 135),
+            label: 'Trote final', cue: 'Trota suave solo si la FC está en 135 o menos; si no, camina. Caminar cuenta como cumplido.', fitName: 'Trote final' });
+        }
       };
 
       // 1) Sustained-pace (tempo) with "N min a FC a b" — first 2 min at 12:00–12:30/mi (project rule).
@@ -6899,14 +6912,49 @@
       if (!/mi\b/.test(String(hl.big || '') + ' ' + String(hl.small || ''))) add(es ? 'DISTANCIA' : 'DISTANCE', T.distMi ? T.distMi + ' mi' : '');
       const q = TP_QUALITY.includes(k);
       if (q) add(es ? 'ANTES' : 'BEFORE', es ? '12–15 min en Z2 + 4 aceleraciones de 20 s' : '12–15 min Z2 + 4 × 20 s strides');
-      if (q) add(es ? 'TROTE FINAL' : 'COOL-DOWN', es ? '10 min en Z1, techo 140 (145 si la sensación pasa de 80 °F)' : '10 min Z1, cap 140 (145 above 80 °F)');
-      add(es ? 'AGUA' : 'WATER', q || k === 'long' ? (k === 'course' ? (es ? '12–16 oz, en las millas 2 y 4' : '12–16 oz, at miles 2 and 4') : '12–16 oz ' + (es ? 'durante' : 'during'))
+      if (q) add(es ? 'TROTE FINAL' : 'COOL-DOWN', es ? '3 min caminando; después trote suave solo con FC ≤135 (caminar cuenta)' : '3 min walk; then easy jog only at HR ≤135 (walking counts)');
+      add(es ? 'AGUA' : 'WATER', q || k === 'long' ? (k === 'course' ? (es ? '8 oz o más, en sorbos en las millas 2 y 4' : '8+ oz, sips at miles 2 and 4') : (es ? '8 oz o más durante, en sorbos' : '8+ oz during, in sips'))
         : k === 'march' ? (es ? '8 oz y medio guineo antes' : '8 oz and half a banana before') : (es ? 'lleva agua aunque sea fácil' : 'carry water even if easy'));
       if (k === 'course') add(es ? 'COMIDA' : 'FOOD', es ? 'completa 3–4 h antes + merienda 1.5–2 h antes' : 'full meal 3–4 h before + snack 1.5–2 h before');
       else if (q) add(es ? 'COMIDA' : 'FOOD', es ? 'merienda de 30–50 g de carbohidrato 1.5–2 h antes' : '30–50 g carb snack 1.5–2 h before');
       const cancel = es ? `Cancela o pasa a Z2 si: HRV ≤34 · FC en reposo ≥60 · sueño <6 h · dolor articular · fiebre${q ? ' · sensación >90 °F' : ''}`
         : `Cancel or go Z2 if: HRV ≤34 · resting HR ≥60 · sleep <6 h · joint pain · fever${q ? ' · feels-like >90 °F' : ''}`;
       return `<dl class="tp-mb" onclick="event.stopPropagation()">${R.join('')}</dl><p class="tp-mb-cancel">${cancel}</p>`;
+    }
+
+    // 2026.11.20-9: tarjeta "Antes de salir" (idea del atleta, 23-nov): en las sesiones de calidad,
+    // lo que falló y lo que salió bien la última vez en el mismo tipo de sesión, con cómo evitarlo hoy.
+    function tpActKindForBrief(a) {
+      const ps = (state.plan || []).find(p => p.linkedActivityId === a.id) || (state.plan || []).find(p => p.dateISO === a.dateISO);
+      if (ps) return tpPlanKind(ps);
+      try { const k = activityKind(a).key; return k === 'hill' ? 'hills' : k; } catch (e) { return 'none'; }
+    }
+    function tpBeforeYouGo(s) {
+      if (!s) return '';
+      const k = tpPlanKind(s);
+      if (!['intervals', 'hills', 'tempo', 'course'].includes(k)) return '';
+      const es = getLang() === 'es';
+      const prev = (state.tcxSessions || []).filter(a => a.dateISO < s.dateISO && tpActKindForBrief(a) === k)
+        .sort((x, y) => y.dateISO.localeCompare(x.dateISO));
+      if (!prev.length) return '';
+      let f0, f1 = null;
+      try { f0 = coachFeedback(prev[0]); } catch (e) { return ''; }
+      try { if (prev[1]) f1 = coachFeedback(prev[1]); } catch (e) { f1 = null; }
+      const head = t => String(t).split(/[:(]/)[0].trim().toLowerCase();
+      const again = t => f1 && f1.bad.some(b => head(b) === head(t));
+      const skip = /mareo|molestia en el pecho|^dormiste/i;
+      const esc = x => String(x).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
+      const bad = f0.bad.filter(b => !/^nada fuera/i.test(b)).slice(0, 3);
+      const good = f0.good.filter(g => !skip.test(g)).slice(0, 3);
+      const fix = f0.fix.slice(0, 3);
+      const day = parseISODateLocal(prev[0].dateISO).toLocaleDateString(es ? 'es-PR' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+      const li = (arr, extra) => arr.map(x => `<li>${esc(x)}${extra ? extra(x) : ''}</li>`).join('');
+      return `<div class="tp-byg" onclick="event.stopPropagation()">
+        <div class="tp-byg-title">${es ? 'ANTES DE SALIR' : 'BEFORE YOU GO'} · ${es ? 'la última vez' : 'last time'} (${day})</div>
+        ${bad.length ? `<div class="tp-byg-h bad">${es ? 'Fallaste' : 'You missed'}</div><ul>${li(bad, x => again(x) ? `<b class="tp-byg-rep"> · ${es ? '2.ª vez seguida' : '2nd time in a row'}</b>` : '')}</ul>` : `<div class="tp-byg-h good">${es ? 'Sin fallas la última vez' : 'No misses last time'}</div>`}
+        ${fix.length ? `<div class="tp-byg-h fix">${es ? 'Hoy, para evitarlo' : 'Today, to avoid it'}</div><ul>${li(fix)}</ul>` : ''}
+        ${good.length ? `<div class="tp-byg-h good">${es ? 'Mantén' : 'Keep'}</div><ul>${li(good)}</ul>` : ''}
+      </div>`;
     }
 
     function renderTodayHero() {
@@ -6936,6 +6984,7 @@
             <span style="font-size:13px; color:var(--paper-dim);">${h.small}</span>
           </div>`; })()}
           ${tpMissionBrief(todaySess)}
+          ${tpBeforeYouGo(todaySess)}
           ${todaySess.notes ? `<details class="fc-details" style="margin-top:8px;" onclick="event.stopPropagation()">
             <summary style="font-size:11px; color:var(--coyote-text); font-family:var(--font-mono); letter-spacing:.5px;">${es ? 'INSTRUCCIÓN COMPLETA' : 'FULL INSTRUCTION'} ▾</summary>
             <div style="font-size:13px; color:var(--paper); margin-top:6px;">${sessionTitleHtml(todaySess)}</div>
@@ -12805,6 +12854,19 @@
 
     // 2026.11.10-1: mensaje del entrenador a partir de los datos de la sesión y de las respuestas:
     // qué salió mal, qué salió bien y cómo mejorarlo. Solo reglas del proyecto; nada inventado.
+    // 2026.11.20-8: trote final con la regla del 23-nov. Puntos con cadencia ≥140 = trotando.
+    function cooldownFault(pts, hot) {
+      const ceil = hot ? 145 : 140, jog = pts.filter(z => z.cad >= 140);
+      const jogOver = jog.filter(z => z.hr > ceil).length / pts.length;
+      if (jogOver > 0.3) return { bad: `Trote final: trotaste ${Math.round(jogOver * 100)} % del tiempo con la FC sobre ${ceil} lpm.`,
+        fix: '3 min caminando; después trota suave solo si la FC está en 135 o menos; si no, camina (caminar cuenta como cumplido).' };
+      return null;
+    }
+    function cooldownVerdict(pts, hot) {
+      const walk = pts.filter(z => z.cad > 0 && z.cad < 140).length / pts.length;
+      const avg = Math.round(pts.reduce((x, z) => x + z.hr, 0) / pts.length);
+      return [`Trote final según la regla (${Math.round(walk * 100)} % caminando, FC promedio ${avg}): caminar cuenta como cumplido.`];
+    }
     function coachFeedback(act) {
       const a = act?.analysis || {}, mf = act?.manualFields || {};
       const key = activityKind(act).key;
@@ -12889,28 +12951,32 @@
           strides: 'Aceleraciones de 20 s rápidas y sueltas (~8:00–8:30/mi), con 1 min caminando.',
           warmup: 'Calentamiento de 12–15 min en Z2: baja el ritmo si ves 149.',
           rep1: 'Repetición 1 a esfuerzo 7, sin pico de salida.',
-          cooldown: 'Trote final suave, 15:00–16:30/mi con pasos cortos.',
+          cooldown: '3 min caminando; después trota suave solo si la FC está en 135 o menos (caminar cuenta).',
           rpe: 'Revisa calor, hidratación, comida previa y la carga de los días anteriores.'
         };
         ex.forEach(x => addBad(x.text, EXFIX[x.key]));
         if (!ex.some(x => x.key === 'strides' || x.key === 'warmup') && rm.strides && rm.strides.length >= 3) good.push('Calentamiento y aceleraciones dentro de lo planeado.');
-        // Trote final: techo de 140; 145 con sensación térmica >80 °F (decisión del 9-nov).
+        // 2026.11.20-8: regla del 23-nov — 3 min caminando; trote solo con FC ≤135; caminar cuenta como cumplido.
+        // Solo es falla trotar con la FC sobre el techo (140; 145 con calor).
         if (rm.cooldown && rm.cooldown.durSec >= 300 && L && L.length) {
           const end = L[L.length - 1].t, from = end - rm.cooldown.durSec;
           const cs = L.filter(z => z.t >= from && z.hr > 0);
-          if (cs.length >= 10) {
-            const ceil = hot ? 145 : 140, over = cs.filter(z => z.hr > ceil).length / cs.length;
-            const avg = Math.round(cs.reduce((x, z) => x + z.hr, 0) / cs.length);
-            if (over > 0.5) addBad(`Trote final: ${Math.round(over * 100)} % del tiempo sobre ${ceil} lpm (FC promedio ${avg}).`,
-              `Si pasa de ${ceil}: camina hasta 130 y retoma; los primeros 2 min del trote caminando; ritmo 15:00–16:30/mi.`);
-            else good.push(`Trote final dentro del techo de ${ceil} lpm (FC promedio ${avg}).`);
-          }
+          if (cs.length >= 10) { const v = cooldownFault(cs, hot); if (v) addBad(v.bad, v.fix); else good.push(...cooldownVerdict(cs, hot)); }
         }
       }
       if (quality && seg && seg.bandPct != null) {
         if (seg.bandPct >= 70) good.push(`${seg.bandPct} % del bloque en ${seg.bandLo}–${seg.bandHi} lpm (meta ≥70 %).`);
         else addBad(`Solo ${seg.bandPct} % del bloque en ${seg.bandLo}–${seg.bandHi} lpm (meta ≥70 %).`,
           'Después del arranque, ritmo fijo de ~10:20–10:30/mi los primeros 4 min aunque la FC marque 158–164 (no perseguirla); baja el ritmo al ver 172.');
+        // 2026.11.20-9: arranque rápido y ritmo sostenido de más después del bloque (fallas repetidas del atleta).
+        const wsg = a.workSegment;
+        if (wsg.arranque && wsg.arranque.paceSecPerMi && wsg.arranque.paceSecPerMi < 715)
+          addBad(`Arranque a ${fmtPace(wsg.arranque.paceSecPerMi)} (objetivo 12:00–12:30/mi).`, 'Los 2 min del arranque a 12:00–12:30 de verdad: el ritmo sostenido empieza después.');
+        if (wsg.endSec != null && L && L.length) {
+          let over = 0; const st5 = (L[1] && L[0]) ? Math.max(1, L[1].t - L[0].t) : 5;
+          for (const z of L.filter(z => z.t > wsg.endSec && z.t <= wsg.endSec + 600)) { if (z.hr >= 165 && z.cad >= 140) over += st5; else if (over > 0 && z.cad < 140) break; }
+          if (over >= 60) addBad(`Seguiste a ritmo sostenido ~${mmss(over)} después del fin del bloque.`, 'Cuando el reloj cambie de paso, se acabó la parte dura: tono y vibración activados y en la pantalla el tiempo que falta del paso.');
+        }
         if (seg.longestAboveLthrSec > 60) addBad(`Racha de ${seg.longestAboveLthrSec} s sobre 174 lpm (máximo 60 s).`, 'Baja el ritmo al ver 172, antes de pasar el umbral.');
         else good.push(`Racha máxima sobre 174 lpm de ${seg.longestAboveLthrSec || 0} s (≤60 s).`);
       }
@@ -12942,9 +13008,8 @@
           // Trote final después del recorrido
           const cd = L.filter(z => z.t > cs.toSec && z.hr > 0);
           if (cd.length * st >= 300) {
-            const ceil = hot ? 145 : 140, ov = cd.filter(z => z.hr > ceil).length / cd.length, walk = cd.filter(z => z.cad > 0 && z.cad < 140).length / cd.length;
-            if (ov > 0.5 && walk < 0.5) addBad(`Trote final: ${Math.round(ov * 100)} % del tiempo sobre ${ceil} lpm.`, `Si pasa de ${ceil}: camina hasta 130 y retoma.`);
-            else if (ov > 0.5) good.push(`Caminaste el trote final mientras la FC bajaba (${Math.round(walk * 100)} % caminando): correcto con la FC alta.`);
+            const v = cooldownFault(cd, hot);
+            if (v) addBad(v.bad, v.fix); else good.push(...cooldownVerdict(cd, hot));
           }
         }
       }
@@ -12983,8 +13048,9 @@
       if (quality || key === 'long') {
         const wd = num(mf.ps_waterDuring);
         if (wd == null && String(mf.ps_waterDuring || '').trim()) fix.push('Anota las onzas que tomaste durante (por ejemplo, 12), no solo la bebida.');
-        if (wd != null && wd < 12) addBad(`Agua durante la sesión: ${wd} oz (regla: 12–16 oz con calor).`, 'Reparte 12–16 oz: por ejemplo 6 antes, 4 después del calentamiento y 6 al final.');
-        else if (wd != null) good.push(`Agua durante la sesión: ${wd} oz (regla 12–16 oz).`);
+        // 2026.11.20-8: regla del 23-nov — 8 oz o más durante, en sorbos (más cantidad le cae mal al atleta).
+        if (wd != null && wd < 8) addBad(`Agua durante la sesión: ${wd} oz (regla: 8 oz o más).`, 'Sorbos de 2–3 oz: después del calentamiento, a mitad y al final del bloque.');
+        else if (wd != null) good.push(`Agua durante la sesión: ${wd} oz (regla: 8 oz o más, en sorbos).`);
       }
       const dz = ans('ps_dizzy'), ch = ans('ps_chestPain'), hl = ans('ps_heavyLegs'), old = ans('ps_warnSymptoms');
       if ((dz && dz !== 'No') || (ch && ch !== 'No') || (old && !/^(ning|no\b|nada|sin)/i.test(old))) {
@@ -15053,7 +15119,7 @@
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.20-7';
+    const APP_BUILD = '2026.11.20-9';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
