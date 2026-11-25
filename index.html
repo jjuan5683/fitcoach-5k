@@ -500,6 +500,12 @@
       margin-top: 3px;
     }
 
+    /* 2026.11.25-1: botón de escuchar en cada tarjeta */
+    .fc-say { display:inline-flex; align-items:center; justify-content:center; min-width:36px; min-height:36px; padding:0 6px; margin-left:8px; vertical-align:middle;
+      border:1px solid var(--field-line); border-radius:4px; background:var(--field-surface); color:var(--coyote-text); font-size:15px; line-height:1; cursor:pointer; flex:0 0 auto; }
+    .fc-say.on { background:var(--coyote); color:var(--black-olive); border-color:var(--coyote); }
+    .fc-say-row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .fc-say-row > .fc-say-txt { min-width:0; flex:1 1 auto; }
     .sitrep-label {
       font-family: var(--font-mono);
       font-size: 11px;
@@ -2032,6 +2038,42 @@
     html:not(.fc-sun) .card-title { color: var(--coyote-text); }
     html:not(.fc-sun) header { border-bottom: 1px solid rgba(201,169,97,.55); }
 
+
+    /* ═══ 2026.11.24-A1 · ANÁLISIS: capa visual (solo dentro de .fc-an) ═══ */
+    .fc-an-tabs { display:grid; grid-template-columns:repeat(4,1fr); gap:0; margin:0 0 16px; padding:3px; background:var(--field-dark); border:1px solid var(--field-line); border-radius:4px; }
+    .fc-an-tab { min-height:44px; padding:8px 4px; border:0; border-radius:3px; background:transparent; color:var(--paper-dim); cursor:pointer; font-family:var(--font-display); font-size:13px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; transition:background .15s, color .15s; }
+    @media (max-width: 400px) { .fc-an-tab { font-size:12px; letter-spacing:.3px; padding:8px 2px; } }
+    .fc-an-tab:hover { color:var(--paper); background:var(--field-surface); }
+    .fc-an-tab.is-on { background:var(--coyote); color:var(--black-olive); box-shadow:inset 0 -2px 0 rgba(0,0,0,.25); }
+    .fc-an-tab:focus-visible { outline:2px solid var(--fc-focus); outline-offset:1px; }
+    .fc-an .card { border-radius:4px; border-color:var(--fc-border); background:linear-gradient(180deg, var(--fc-card-bg-raised), var(--fc-card-bg)); box-shadow:0 1px 0 rgba(0,0,0,.45), 0 6px 18px rgba(0,0,0,.18); }
+    .fc-an .card::after { content:''; position:absolute; left:0; right:auto; top:0; width:42px; height:2px; background:var(--coyote); border-top-left-radius:4px; }
+    .fc-an .card-title { font-family:var(--font-display); font-size:13px; letter-spacing:2px; color:var(--coyote-text); margin-bottom:10px; }
+    .fc-an-readout { display:flex; align-items:baseline; gap:6px; flex-wrap:wrap; margin:0 0 10px; }
+    .fc-an-big { font-family:var(--font-display); font-size:34px; font-weight:600; line-height:1; color:var(--fc-text); letter-spacing:.5px; }
+    .fc-an-unit { font-family:var(--font-mono); font-size:12px; color:var(--coyote-text); text-transform:uppercase; }
+    .fc-an-when { margin-left:auto; font-family:var(--font-mono); font-size:11px; color:var(--fc-muted); text-transform:uppercase; letter-spacing:1px; }
+    .fc-an-chart canvas { display:block; width:100% !important; height:220px !important; max-height:none !important; padding:6px 0 2px; }
+    .fc-an-insight { background:color-mix(in srgb, var(--field-surface) 70%, transparent); padding:8px 10px 8px 12px !important; border-radius:0 3px 3px 0; }
+    .fc-an-insight p:first-child { font-family:var(--font-display); font-size:13px !important; letter-spacing:.5px; text-transform:uppercase; }
+    .fc-an-insight p + p { font-size:12px !important; line-height:1.5; }
+    .fc-an .stat-box { border-radius:3px; background:var(--field-surface); border-color:var(--fc-border); padding:12px 8px; }
+    .fc-an .stat-box .value { font-family:var(--font-display); font-size:26px; font-weight:600; line-height:1.1; color:var(--fc-text); }
+    .fc-an .stat-box .label { text-transform:uppercase; letter-spacing:1px; }
+    .fc-an-stats3 { grid-template-columns:repeat(3,1fr) !important; }
+    .fc-an-note { font-family:var(--font-mono); text-transform:uppercase; letter-spacing:.5px; }
+    .fc-an .card button:not(.fc-an-tab) { min-height:40px; border-radius:3px !important; }
+    .fc-an .card input, .fc-an .card select, .fc-an .card textarea { border-radius:3px !important; min-height:40px; }
+    .fc-an .card textarea { min-height:90px; font-family:var(--font-mono); }
+    html.fc-sun .fc-an .card { background:var(--fc-card-bg); box-shadow:0 1px 2px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05); }
+    html.fc-sun .fc-an-tabs { background:#fffdf7; }
+    html.fc-sun .fc-an-tab.is-on { color:#fffdf7; }
+    @media (min-width: 900px) {
+      .fc-an[data-an-tab="charts"] > div:last-child { display:grid; grid-template-columns:1fr 1fr; gap:16px; align-items:start; }
+      .fc-an[data-an-tab="charts"] > div:last-child > .card { margin-bottom:0 !important; }
+      .fc-an-tabs { max-width:640px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .fc-an-tab { transition:none; } }
 </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 </head>
@@ -2102,6 +2144,9 @@
     .fc-cal-l{margin:6px 0 4px 18px;font-size:12.5px;line-height:1.55}
     .fc-cal-l li{margin:3px 0}
     .fc-cal-l ul{margin:3px 0 3px 16px}
+    .fc-cal-steps{margin:10px 0;padding:10px 12px;border:1px solid var(--line, #444);border-left:3px solid var(--olive-bright, #7a8b4a);border-radius:6px}
+    .fc-cal-ph{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.04em;margin:12px 0 2px;color:var(--olive-bright, #9fb36a);font-weight:700}
+    .fc-lang-btn{font-weight:800;min-width:44px}
     .fc-cal-rule{border-left:3px solid var(--signal-amber);padding-left:8px}
     .fc-cal-box{border:1px solid var(--field-line);border-radius:2px;padding:8px;margin:8px 0}
     .fc-cal-sel{width:100%;min-height:44px;font-size:14px;background:var(--field-dark);color:var(--paper);border:1px solid var(--field-line);border-radius:2px;padding:6px}
@@ -2127,24 +2172,24 @@
 
 // ── 1. Reglas ──────────────────────────────────────────────────────────────
 const FC_RULES_DEFAULT = {
-  hrvNightMin:     { v: 34,  u: 'ms',  es: 'HRV de la noche: cancela si es igual o menor a', g: 'Cancelar' },
-  hrvBandLow:      { v: 41,  u: 'ms',  es: 'HRV de 7 días: límite de abajo de la banda (bajo él cancela)', g: 'Cancelar' },
-  rhrMax:          { v: 60,  u: 'lpm', es: 'FC en reposo: cancela si es igual o mayor a', g: 'Cancelar' },
-  sleepMin:        { v: 6,   u: 'h',   es: 'Sueño: cancela si es menor a', g: 'Cancelar' },
-  sleepQuality:    { v: 7,   u: 'h',   es: 'Sueño recomendado antes de una calidad', g: 'Calidad' },
-  energyMin:       { v: 4,   u: '/10', es: 'Energía igual o menor antes de una calidad: considerar Z2', g: 'Calidad' },
-  heatQualityMax:  { v: 90,  u: '°F',  es: 'Sensación térmica sobre la que se cancela la calidad', g: 'Calor' },
-  heatHot:         { v: 80,  u: '°F',  es: 'Sensación térmica sobre la que cuenta "con calor"', g: 'Calor' },
-  easyAlertHR:     { v: 145, u: 'lpm', es: 'Alerta de FC en los fáciles (desde el primer minuto)', g: 'Fáciles' },
-  marchMax:        { v: 150, u: 'lpm', es: 'Techo de FC en la marcha con chaleco', g: 'Marcha' },
-  cooldownJogMax:  { v: 135, u: 'lpm', es: 'Trote final: solo se trota con la FC en este valor o menos', g: 'Trote final' },
-  cooldownFault:   { v: 140, u: 'lpm', es: 'Trote final: falla trotar sobre este valor', g: 'Trote final' },
-  cooldownFaultHot:{ v: 145, u: 'lpm', es: 'Trote final: falla trotar sobre este valor con calor', g: 'Trote final' },
-  waterMinOz:      { v: 8,   u: 'oz',  es: 'Agua mínima durante calidad y larga (en sorbos de 2–3 oz)', g: 'Agua' },
-  calvesNoJumps:   { v: 2,   u: '/10', es: 'Pantorrillas en este valor o más: sin saltos ese día', g: 'Fuerza' },
-  thunderWaitMin:  { v: 30,  u: 'min', es: 'Truenos: esperar después del último', g: 'Cancelar' },
-  weeklyRunMaxPct: { v: 10,  u: '%',   es: 'Aumento máximo del running semanal', g: 'Volumen' },
-  easyPctMin:      { v: 75,  u: '%',   es: 'Meta de tiempo fácil (Z1–Z2) por semana', g: 'Volumen' }
+  hrvNightMin:     { v: 34,  u: 'ms',  es: 'HRV de la noche: cancela si es igual o menor a', g: 'Cancelar', en: 'Overnight HRV: cancel if equal to or below', ge: 'Cancel' },
+  hrvBandLow:      { v: 41,  u: 'ms',  es: 'HRV de 7 días: límite de abajo de la banda (bajo él cancela)', g: 'Cancelar', en: '7-day HRV: bottom of the band (below it, cancel)', ge: 'Cancel' },
+  rhrMax:          { v: 60,  u: 'lpm', es: 'FC en reposo: cancela si es igual o mayor a', g: 'Cancelar', en: 'Resting HR: cancel if equal to or above', ge: 'Cancel' },
+  sleepMin:        { v: 6,   u: 'h',   es: 'Sueño: cancela si es menor a', g: 'Cancelar', en: 'Sleep: cancel if less than', ge: 'Cancel' },
+  sleepQuality:    { v: 7,   u: 'h',   es: 'Sueño recomendado antes de una calidad', g: 'Calidad', en: 'Recommended sleep before a quality session', ge: 'Quality' },
+  energyMin:       { v: 4,   u: '/10', es: 'Energía igual o menor antes de una calidad: considerar Z2', g: 'Calidad', en: 'Energy at or below this before a quality session: consider Z2', ge: 'Quality' },
+  heatQualityMax:  { v: 90,  u: '°F',  es: 'Sensación térmica sobre la que se cancela la calidad', g: 'Calor', en: 'Heat index above which the quality session is cancelled', ge: 'Heat' },
+  heatHot:         { v: 80,  u: '°F',  es: 'Sensación térmica sobre la que cuenta "con calor"', g: 'Calor', en: 'Heat index above which it counts as "hot"', ge: 'Heat' },
+  easyAlertHR:     { v: 145, u: 'lpm', es: 'Alerta de FC en los fáciles (desde el primer minuto)', g: 'Fáciles', en: 'HR alert on easy runs (from the first minute)', ge: 'Easy runs' },
+  marchMax:        { v: 150, u: 'lpm', es: 'Techo de FC en la marcha con chaleco', g: 'Marcha', en: 'HR ceiling for the weighted-vest march', ge: 'March' },
+  cooldownJogMax:  { v: 135, u: 'lpm', es: 'Trote final: solo se trota con la FC en este valor o menos', g: 'Trote final', en: 'Cooldown: jog only with HR at or below this value', ge: 'Cooldown' },
+  cooldownFault:   { v: 140, u: 'lpm', es: 'Trote final: falla trotar sobre este valor', g: 'Trote final', en: 'Cooldown: jogging above this value is a fault', ge: 'Cooldown' },
+  cooldownFaultHot:{ v: 145, u: 'lpm', es: 'Trote final: falla trotar sobre este valor con calor', g: 'Trote final', en: 'Cooldown: jogging above this value is a fault when hot', ge: 'Cooldown' },
+  waterMinOz:      { v: 8,   u: 'oz',  es: 'Agua mínima durante calidad y larga (en sorbos de 2–3 oz)', g: 'Agua', en: 'Minimum water during quality and long runs (2–3 oz sips)', ge: 'Water' },
+  calvesNoJumps:   { v: 2,   u: '/10', es: 'Pantorrillas en este valor o más: sin saltos ese día', g: 'Fuerza', en: 'Calves at or above this value: no jumps that day', ge: 'Strength' },
+  thunderWaitMin:  { v: 30,  u: 'min', es: 'Truenos: esperar después del último', g: 'Cancelar', en: 'Thunder: wait after the last one', ge: 'Cancel' },
+  weeklyRunMaxPct: { v: 10,  u: '%',   es: 'Aumento máximo del running semanal', g: 'Volumen', en: 'Maximum weekly running increase', ge: 'Volume' },
+  easyPctMin:      { v: 75,  u: '%',   es: 'Meta de tiempo fácil (Z1–Z2) por semana', g: 'Volumen', en: 'Easy time goal (Z1–Z2) per week', ge: 'Volume' }
 };
 function fcRule(k) {
   const s = (typeof state !== 'undefined' && state && state.settings) || {};
@@ -2159,7 +2204,7 @@ function fcRulesVersion() {
 }
 function fcSetRule(k, val) {
   const n = parseFloat(String(val).replace(',', '.'));
-  if (!FC_RULES_DEFAULT[k] || !isFinite(n)) { showToast('✕ Valor no válido'); return; }
+  if (!FC_RULES_DEFAULT[k] || !isFinite(n)) { showToast(getLang() === 'es' ? '✕ Valor no válido' : '✕ Invalid value'); return; }
   const from = fcRule(k);
   if (n === from) return;
   const r = state.settings.rules || (state.settings.rules = { values: {}, log: [] });
@@ -2172,10 +2217,10 @@ function fcSetRule(k, val) {
   r.log.unshift({ dateISO: today, key: k, from, to: n });
   r.log = r.log.slice(0, 40);
   saveState(); render();
-  showToast(`✓ Regla cambiada: ${from} → ${n}`);
+  showToast((getLang() === 'es' ? '✓ Regla cambiada: ' : '✓ Rule changed: ') + `${from} → ${n}`);
 }
 function fcResetRules() {
-  if (!confirm('¿Volver todas las reglas a los valores base del 23-nov?')) return;
+  if (!confirm(getLang() === 'es' ? '¿Volver todas las reglas a los valores base del 23-nov?' : 'Reset every rule to the Nov 23 base values?')) return;
   const r = state.settings.rules || {};
   state.settings.rules = { values: {}, log: [{ dateISO: todayISO(), key: 'todas', from: 'personalizadas', to: 'base' }, ...(r.log || [])].slice(0, 40), version: todayISO() + '-base' };
   state.settings.hrvBandLow = FC_RULES_DEFAULT.hrvBandLow.v;
@@ -2185,17 +2230,21 @@ function fcRulesCardHtml() {
   const groups = {};
   Object.keys(FC_RULES_DEFAULT).forEach(k => { const g = FC_RULES_DEFAULT[k].g; (groups[g] = groups[g] || []).push(k); });
   const r = state.settings.rules || {};
-  const rows = Object.keys(groups).map(g => `<div class="fc-rl-g">${esc(g)}</div>` + groups[g].map(k => {
-    const d = FC_RULES_DEFAULT[k], v = fcRule(k), changed = v !== d.v;
-    return `<label class="fc-rl-row"><span>${esc(d.es)}${changed ? ` <b class="fc-rl-ch">(base ${d.v})</b>` : ''}</span>
-      <span class="fc-rl-in"><input type="number" inputmode="decimal" step="any" value="${v}" aria-label="${esc(d.es)}" onchange="fcSetRule('${k}', this.value)" /><small>${d.u}</small></span></label>`;
+  const es = getLang() === 'es';
+  const unit = u => es ? u : ({ lpm: 'bpm' }[u] || u);
+  const rows = Object.keys(groups).map(g => `<div class="fc-rl-g">${esc(es ? g : FC_RULES_DEFAULT[groups[g][0]].ge)}</div>` + groups[g].map(k => {
+    const d = FC_RULES_DEFAULT[k], v = fcRule(k), changed = v !== d.v, t = es ? d.es : d.en;
+    return `<label class="fc-rl-row"><span>${esc(t)}${changed ? ` <b class="fc-rl-ch">(base ${d.v})</b>` : ''}</span>
+      <span class="fc-rl-in"><input type="number" inputmode="decimal" step="any" value="${v}" aria-label="${esc(t)}" onchange="fcSetRule('${k}', this.value)" /><small>${unit(d.u)}</small></span></label>`;
   }).join('')).join('');
-  const log = (r.log || []).slice(0, 6).map(x => `<li>${esc(x.dateISO)} · ${esc(FC_RULES_DEFAULT[x.key] ? FC_RULES_DEFAULT[x.key].es : x.key)}: ${esc(String(x.from))} → ${esc(String(x.to))}</li>`).join('');
+  const log = (r.log || []).slice(0, 6).map(x => `<li>${esc(x.dateISO)} · ${esc(FC_RULES_DEFAULT[x.key] ? FC_RULES_DEFAULT[x.key][es ? 'es' : 'en'] : (x.key === 'todas' && !es ? 'all' : x.key))}: ${esc(String(x.from))} → ${esc(String(x.to))}</li>`).join('');
+  const ver = fcRulesVersion();
   return `<div class="card">
-    <p class="fc-mini">Versión de las reglas: <b>${esc(fcRulesVersion())}</b>. Se usan en el chequeo de hoy, los chequeos previos, la misión del día, el trote final, el agua y la marcha, y salen en cada informe. Cambia aquí cuando decidas algo nuevo en el chat.</p>
+    <p class="fc-mini">${es ? `Versión de las reglas: <b>${esc(ver)}</b>. Se usan en el chequeo de hoy, los chequeos previos, la misión del día, el trote final, el agua y la marcha, y salen en cada informe. Cambia aquí cuando decidas algo nuevo en el chat.`
+      : `Rules version: <b>${esc(ver.replace('base del 23-nov-2026', 'base of Nov 23, 2026'))}</b>. They drive today's check, the pre-session checks, the day's mission, the cooldown, water and the march, and they appear in every report. Change them here when you decide something new in the chat.`}</p>
     ${rows}
-    ${log ? `<div class="fc-rl-g">Últimos cambios</div><ul class="fc-mini">${log}</ul>` : ''}
-    <button type="button" class="btn btn-secondary" style="width:100%; margin-top:8px;" onclick="fcResetRules()">VOLVER A LOS VALORES BASE</button>
+    ${log ? `<div class="fc-rl-g">${es ? 'Últimos cambios' : 'Latest changes'}</div><ul class="fc-mini">${log}</ul>` : ''}
+    <button type="button" class="btn btn-secondary" style="width:100%; margin-top:8px;" onclick="fcResetRules()">${es ? 'VOLVER A LOS VALORES BASE' : 'RESET TO BASE VALUES'}</button>
   </div>`;
 }
 
@@ -2405,6 +2454,7 @@ function fcHistory(kind) {
   const avg = (arr, f) => arr.length ? Math.round(arr.reduce((x, y) => x + (y[f] || 0), 0) / arr.length) : null;
   return { hot: { n: hot.length, z3: avg(hot, 'z3'), score: avg(hot, 'score') }, cool: { n: cool.length, z3: avg(cool, 'z3'), score: avg(cool, 'score') } };
 }
+const fcT = (es, en) => (typeof getLang === 'function' && getLang() === 'es') ? es : en;
 function fcAssess() {
   const today = todayISO();
   const s = state.plan.find(p => p.dateISO === today);
@@ -2414,96 +2464,101 @@ function fcAssess() {
   const c = fcDayCheck(), i = c.inputs || {};
   const n = v => (v === '' || v == null || !isFinite(v)) ? null : Number(v);
   const F = [];
-  const add = (lvl, text, why, adj) => F.push({ lvl, text, why, adj });
+  // sev: regla de seguridad que no permite ni Z2 (dolor articular, síntomas del cuello para abajo, deshidratación)
+  const add = (lvl, text, why, adj, sev) => F.push({ lvl, text, why, adj, sev: !!sev });
+  const T = fcT;
   const hrv = n(i.hrv), h7 = n(i.hrv7d), rhr = n(i.rhr), sl = n(i.sleep), en = n(i.energy), st = n(i.stress), calves = n(i.calves), meal = n(i.mealH);
-  if (hrv != null) { if (hrv <= fcRule('hrvNightMin')) add('stop', `HRV de la noche ${hrv} ms`, `regla: cancela si ≤${fcRule('hrvNightMin')}`); else if (hrv <= fcRule('hrvBandLow')) add('note', `HRV ${hrv} ms, en el borde de abajo de tu banda`, 'vigila la FC del calentamiento'); }
-  if (h7 != null && h7 < fcRule('hrvBandLow')) add('stop', `HRV de 7 días ${h7} ms, bajo la banda`, `regla: cancela bajo ${fcRule('hrvBandLow')}`);
-  if (rhr != null) { if (rhr >= fcRule('rhrMax')) add('stop', `FC en reposo ${rhr}`, `regla: cancela si ≥${fcRule('rhrMax')}`); else if (rhr >= fcRule('rhrMax') - 2) add('note', `FC en reposo ${rhr}, a ${fcRule('rhrMax') - rhr} del límite`, 'una señal más de cansancio y cambia la decisión'); }
-  if (sl != null) { if (sl < fcRule('sleepMin')) add('stop', `Dormiste ${sl} h`, `regla: cancela con menos de ${fcRule('sleepMin')} h`); else if (q && sl < fcRule('sleepQuality')) add('adjust', `Dormiste ${sl} h antes de una calidad`, `lo recomendado es ≥${fcRule('sleepQuality')} h`, 'Arranca la parte dura en el borde de abajo del rango y no persigas el ritmo.'); }
-  if (i.pain === 'joint') add('stop', 'Dolor articular u óseo', 'regla: no se corre con dolor articular u óseo; si sigue mañana, evaluación médica');
-  else if (i.pain === 'muscle' && q) add('adjust', 'Dolor muscular antes de una calidad', 'puede cambiar la mecánica', 'Si en el calentamiento no baja a ≤2/10, pasa a Z2.');
-  if (i.sick === 'below') add('stop', 'Síntomas del cuello para abajo o fiebre', 'regla: no entrenar; después, un solo día suave antes de volver a la calidad');
-  else if (i.sick === 'above') add(q ? 'adjust' : 'note', 'Síntomas solo del cuello para arriba', 'se permite fácil si te sientes bien', q ? 'Haz Z2 en lugar de la calidad.' : 'Mantén Z2 y corta si empeora.');
-  if (i.decong === 'yes') add(q ? 'stop' : 'adjust', 'Tomaste descongestionante hoy', 'sube la FC; regla: cancelar o pasar a Z2', 'Z2 con la alerta de FC.');
-  if (i.hydr === 'bad') add('stop', 'Deshidratado (orina oscura, sed, mareo leve)', 'regla: cancelar o pasar a Z2 hasta rehidratar');
-  else if (i.hydr === 'fair') add('adjust', 'Hidratación regular', 'la deriva de FC sube con calor y poca agua', 'Toma 12–16 oz en la próxima hora y lleva agua.');
-  if (q && en != null && en <= fcRule('energyMin')) add('adjust', `Energía ${en}/10 antes de una calidad`, `regla: ≤${fcRule('energyMin')} → considerar Z2`, 'Opción: Z2 hoy y la calidad otro día si el plan deja 48 h.');
-  if (calves != null && calves >= fcRule('calvesNoJumps')) add('adjust', `Pantorrillas ${calves}/10`, `regla: ≥${fcRule('calvesNoJumps')} → sin saltos`, 'Fuerza sin saltos hoy.');
-  if (i.legs === 'yes' && q) add('adjust', 'Piernas pesadas antes de una calidad', 'señal de fatiga acumulada', 'Si en las aceleraciones siguen pesadas, pasa a Z2.');
-  if (q && meal != null) { if (meal > 3 && i.snack !== 'yes') add('adjust', `Comiste hace ${meal} h y sin merienda`, 'regla: merienda de 30–50 g de carbohidrato 1.5–2 h antes', 'Come ya un guineo o 2 galletas con miel si falta 1 h o más.'); else if (meal < 1) add('note', `Comiste hace ${meal} h`, 'muy cerca; puede caer pesado'); }
-  if (st != null && st >= 4) add('note', `Estrés ${st}/5`, 'el estrés también cuenta como carga');
-  if (i.work === 'heavy' && q) add('note', 'Día pesado en el trabajo', 'llegas con más fatiga de piernas');
+  const R = k => fcRule(k);
+  if (hrv != null) { if (hrv <= R('hrvNightMin')) add('stop', T(`HRV de la noche ${hrv} ms`, `Overnight HRV ${hrv} ms`), T(`regla: cancela si ≤${R('hrvNightMin')}`, `rule: cancel if ≤${R('hrvNightMin')}`)); else if (hrv <= R('hrvBandLow')) add('note', T(`HRV ${hrv} ms, en el borde de abajo de tu banda`, `HRV ${hrv} ms, at the bottom edge of your band`), T('vigila la FC del calentamiento', 'watch your warm-up HR')); }
+  if (h7 != null && h7 < R('hrvBandLow')) add('stop', T(`HRV de 7 días ${h7} ms, bajo la banda`, `7-day HRV ${h7} ms, below the band`), T(`regla: cancela bajo ${R('hrvBandLow')}`, `rule: cancel below ${R('hrvBandLow')}`));
+  if (rhr != null) { if (rhr >= R('rhrMax')) add('stop', T(`FC en reposo ${rhr}`, `Resting HR ${rhr}`), T(`regla: cancela si ≥${R('rhrMax')}`, `rule: cancel if ≥${R('rhrMax')}`)); else if (rhr >= R('rhrMax') - 2) add('note', T(`FC en reposo ${rhr}, a ${R('rhrMax') - rhr} del límite`, `Resting HR ${rhr}, ${R('rhrMax') - rhr} from the limit`), T('una señal más de cansancio y cambia la decisión', 'one more fatigue sign changes the decision')); }
+  if (sl != null) { if (sl < R('sleepMin')) add('stop', T(`Dormiste ${sl} h`, `You slept ${sl} h`), T(`regla: cancela con menos de ${R('sleepMin')} h`, `rule: cancel with less than ${R('sleepMin')} h`)); else if (q && sl < R('sleepQuality')) add('adjust', T(`Dormiste ${sl} h antes de una calidad`, `You slept ${sl} h before a quality session`), T(`lo recomendado es ≥${R('sleepQuality')} h`, `recommended is ≥${R('sleepQuality')} h`), T('Arranca la parte dura en el borde de abajo del rango y no persigas el ritmo.', 'Start the hard part at the bottom of the range and do not chase the pace.')); }
+  if (i.pain === 'joint') add('stop', T('Dolor articular u óseo', 'Joint or bone pain'), T('regla: no se corre con dolor articular u óseo; si sigue mañana, evaluación médica', 'rule: no running with joint or bone pain; if it persists tomorrow, medical evaluation'), null, true);
+  else if (i.pain === 'muscle' && q) add('adjust', T('Dolor muscular antes de una calidad', 'Muscle soreness before a quality session'), T('puede cambiar la mecánica', 'it can change your mechanics'), T('Si en el calentamiento no baja a ≤2/10, pasa a Z2.', 'If it does not drop to ≤2/10 in the warm-up, switch to Z2.'));
+  if (i.sick === 'below') add('stop', T('Síntomas del cuello para abajo o fiebre', 'Symptoms below the neck or fever'), T('regla: no entrenar; después, un solo día suave antes de volver a la calidad', 'rule: no training; afterwards, one easy day before returning to quality'), null, true);
+  else if (i.sick === 'above') add(q ? 'adjust' : 'note', T('Síntomas solo del cuello para arriba', 'Symptoms only above the neck'), T('se permite fácil si te sientes bien', 'easy running is allowed if you feel well'), q ? T('Haz Z2 en lugar de la calidad.', 'Do Z2 instead of the quality session.') : T('Mantén Z2 y corta si empeora.', 'Stay in Z2 and stop if it gets worse.'));
+  if (i.decong === 'yes') add(q ? 'stop' : 'adjust', T('Tomaste descongestionante hoy', 'You took a decongestant today'), T('sube la FC; regla: cancelar o pasar a Z2', 'it raises HR; rule: cancel or switch to Z2'), T('Z2 con la alerta de FC.', 'Z2 with the HR alert.'));
+  if (i.hydr === 'bad') add('stop', T('Deshidratado (orina oscura, sed, mareo leve)', 'Dehydrated (dark urine, thirst, mild dizziness)'), T('regla: cancelar o pasar a Z2 hasta rehidratar', 'rule: cancel or switch to Z2 until rehydrated'), null, true);
+  else if (i.hydr === 'fair') add('adjust', T('Hidratación regular', 'Fair hydration'), T('la deriva de FC sube con calor y poca agua', 'HR drift rises with heat and little water'), T('Toma 12–16 oz en la próxima hora y lleva agua.', 'Drink 12–16 oz in the next hour and carry water.'));
+  if (q && en != null && en <= R('energyMin')) add('adjust', T(`Energía ${en}/10 antes de una calidad`, `Energy ${en}/10 before a quality session`), T(`regla: ≤${R('energyMin')} → considerar Z2`, `rule: ≤${R('energyMin')} → consider Z2`), T('Opción: Z2 hoy y la calidad otro día si el plan deja 48 h.', 'Option: Z2 today and the quality session another day if the plan leaves 48 h.'));
+  if (calves != null && calves >= R('calvesNoJumps')) add('adjust', T(`Pantorrillas ${calves}/10`, `Calves ${calves}/10`), T(`regla: ≥${R('calvesNoJumps')} → sin saltos`, `rule: ≥${R('calvesNoJumps')} → no jumps`), T('Fuerza sin saltos hoy.', 'Strength without jumps today.'));
+  if (i.legs === 'yes' && q) add('adjust', T('Piernas pesadas antes de una calidad', 'Heavy legs before a quality session'), T('señal de fatiga acumulada', 'sign of accumulated fatigue'), T('Si en las aceleraciones siguen pesadas, pasa a Z2.', 'If they still feel heavy in the strides, switch to Z2.'));
+  if (q && meal != null) { if (meal > 3 && i.snack !== 'yes') add('adjust', T(`Comiste hace ${meal} h y sin merienda`, `Last meal ${meal} h ago and no snack`), T('regla: merienda de 30–50 g de carbohidrato 1.5–2 h antes', 'rule: 30–50 g carbohydrate snack 1.5–2 h before'), T('Come ya un guineo o 2 galletas con miel si falta 1 h o más.', 'Eat a banana or 2 crackers with honey now if there is 1 h or more to go.')); else if (meal < 1) add('note', T(`Comiste hace ${meal} h`, `Last meal ${meal} h ago`), T('muy cerca; puede caer pesado', 'very close; it may sit heavy')); }
+  if (st != null && st >= 4) add('note', T(`Estrés ${st}/5`, `Stress ${st}/5`), T('el estrés también cuenta como carga', 'stress also counts as load'));
+  if (i.work === 'heavy' && q) add('note', T('Día pesado en el trabajo', 'Heavy day at work'), T('llegas con más fatiga de piernas', 'you arrive with more leg fatigue'));
   const fe = fcFeels(c);
   const wxS = c.wx && c.wx.session, wxN = c.wx && c.wx.now;
   const thunder = (wxN && fcWxCode(wxN.code).thunder) || (wxS && fcWxCode(wxS.code).thunder);
-  if (thunder) add('wait', 'Pronóstico de truenos', `regla: esperar ${fcRule('thunderWaitMin')} min después del último trueno`);
+  if (thunder) add('wait', T('Pronóstico de truenos', 'Thunder in the forecast'), T(`regla: esperar ${R('thunderWaitMin')} min después del último trueno`, `rule: wait ${R('thunderWaitMin')} min after the last thunder`));
   if (fe && run) {
-    if (q && fe.v > fcRule('heatQualityMax')) add('stop', `Sensación térmica ${fe.v} °F`, `regla: sobre ${fcRule('heatQualityMax')} °F se cancela la calidad`, 'Muévela a una hora más fresca o hazla otro día.');
-    else if (fe.v > fcRule('heatHot')) add('adjust', `Sensación térmica ${fe.v} °F`, q ? `con calor la FC sube al mismo ritmo; manda la FC, no el ritmo` : `con calor: alerta de FC en ${fcRule('easyAlertHR')}`, q ? 'Agua en sorbos desde el calentamiento; no persigas el ritmo del día fresco.' : `Arranca a 12:50–13:10/mi y deja que mande la alerta de ${fcRule('easyAlertHR')}.`);
+    if (q && fe.v > R('heatQualityMax')) add('stop', T(`Sensación térmica ${fe.v} °F`, `Heat index ${fe.v} °F`), T(`regla: sobre ${R('heatQualityMax')} °F se cancela la calidad`, `rule: above ${R('heatQualityMax')} °F the quality session is cancelled`), T('Muévela a una hora más fresca o hazla otro día.', 'Move it to a cooler time or do it another day.'));
+    else if (fe.v > R('heatHot')) add('adjust', T(`Sensación térmica ${fe.v} °F`, `Heat index ${fe.v} °F`), q ? T('con calor la FC sube al mismo ritmo; manda la FC, no el ritmo', 'in heat HR rises at the same pace; HR rules, not pace') : T(`con calor: alerta de FC en ${R('easyAlertHR')}`, `hot: HR alert at ${R('easyAlertHR')}`), q ? T('Agua en sorbos desde el calentamiento; no persigas el ritmo del día fresco.', 'Sip water from the warm-up on; do not chase your cool-day pace.') : T(`Arranca a 12:50–13:10/mi y deja que mande la alerta de ${R('easyAlertHR')}.`, `Start at 12:50–13:10/mi and let the ${R('easyAlertHR')} alert lead.`));
   }
   // 48 h desde la última calidad
   if (q) {
     const lastQ = (state.tcxSessions || []).filter(a => a.dateISO < today && TP_QUALITY.includes(typeof tpActKindForBrief === 'function' ? tpActKindForBrief(a) : '')).sort((a, b) => b.dateISO.localeCompare(a.dateISO))[0];
-    if (lastQ && lastQ.endTimeISO) { const hrs = (Date.now() - new Date(lastQ.endTimeISO).getTime()) / 3600000; if (hrs < 44) add('adjust', `Tu última calidad fue hace ${Math.round(hrs)} h`, 'regla: 48 h entre calidades', 'Mueve la calidad o hazla Z2.'); }
+    if (lastQ && lastQ.endTimeISO) { const hrs = (Date.now() - new Date(lastQ.endTimeISO).getTime()) / 3600000; if (hrs < 44) add('adjust', T(`Tu última calidad fue hace ${Math.round(hrs)} h`, `Your last quality session was ${Math.round(hrs)} h ago`), T('regla: 48 h entre calidades', 'rule: 48 h between quality sessions'), T('Mueve la calidad o hazla Z2.', 'Move the quality session or make it Z2.')); }
   }
   const acwr = typeof getACWR === 'function' ? getACWR() : null;
-  if (acwr && acwr.ratio > 1.5) add('adjust', `Carga aguda alta (ACWR ${acwr.ratio})`, 'más de 1.5 = riesgo alto', 'Quita la opcional y no alargues la sesión.');
-  else if (acwr && acwr.ratio > 1.3) add('note', `Carga aguda elevada (ACWR ${acwr.ratio})`, 'entre 1.3 y 1.5', 'Nada de opcional extra hoy.');
+  if (acwr && acwr.ratio > 1.5) add('adjust', T(`Carga aguda alta (ACWR ${acwr.ratio})`, `High acute load (ACWR ${acwr.ratio})`), T('más de 1.5 = riesgo alto', 'over 1.5 = high risk'), T('Quita la opcional y no alargues la sesión.', 'Drop the optional session and do not extend this one.'));
+  else if (acwr && acwr.ratio > 1.3) add('note', T(`Carga aguda elevada (ACWR ${acwr.ratio})`, `Elevated acute load (ACWR ${acwr.ratio})`), T('entre 1.3 y 1.5', 'between 1.3 and 1.5'), T('Nada de opcional extra hoy.', 'No extra optional session today.'));
   const L = typeof getCurrentLoadStatus === 'function' ? getCurrentLoadStatus() : null;
-  if (L && L.tsb <= -20) add('note', `Frescura (TSB) ${L.tsb}`, 'la más baja del mes fue −19.5');
+  if (L && L.tsb <= -20) add('note', T(`Frescura (TSB) ${L.tsb}`, `Freshness (TSB) ${L.tsb}`), T('la más baja del mes fue −19.5', 'the lowest of the month was −19.5'));
   const has = l => F.some(f => f.lvl === l);
   const level = has('stop') ? 'stop' : has('wait') ? 'wait' : has('adjust') ? 'adjust' : 'go';
   const filled = ['hrv', 'rhr', 'sleep', 'energy'].filter(k => n(i[k]) != null).length;
   return { s, kind, q, run, F, level, fe, filled };
 }
 function fcRecText(A) {
+  const T = fcT;
   const k = A.kind, mi = A.s && A.s.dist ? parseFloat(A.s.dist) : null;
-  if (!A.s || k === 'rest') return { head: 'Hoy es descanso', body: 'Si los datos están mal, el descanso es justo lo que hace falta. No hay que ajustar nada.' };
-  const severe = A.F.some(f => f.lvl === 'stop' && /articular|cuello para abajo|Deshidratado/.test(f.text));
+  if (!A.s || k === 'rest') return { head: T('Hoy es descanso', 'Today is rest'), body: T('Si los datos están mal, el descanso es justo lo que hace falta. No hay que ajustar nada.', 'If the numbers are off, rest is exactly what you need. Nothing to adjust.') };
+  const severe = A.F.some(f => f.lvl === 'stop' && f.sev);
   if (A.level === 'stop') {
-    if (severe) return { head: 'No entrenes hoy', body: 'Hay una regla de seguridad activa. Descansa; la sesión no es deuda. Si hay dolor de pecho, mareo o fiebre, evaluación médica.' };
-    if (A.q) return { head: 'Cambia la calidad por Z2 (o descansa)', body: `Fácil de ${mi ? Math.min(mi, 4).toFixed(1) : '3.0'} mi con FC 130–148 y alerta en ${fcRule('easyAlertHR')}. La calidad se mueve si el plan deja 48 h antes de la próxima; si no, se salta (no es deuda).` };
-    return { head: 'Descansa o haz Z2 corta', body: `Máximo 30 min en Z2 con alerta en ${fcRule('easyAlertHR')}, o descanso. Las millas perdidas no son deuda.` };
+    if (severe) return { head: T('No entrenes hoy', 'Do not train today'), body: T('Hay una regla de seguridad activa. Descansa; la sesión no es deuda. Si hay dolor de pecho, mareo o fiebre, evaluación médica.', 'A safety rule is active. Rest; the session is not owed. With chest pain, dizziness or fever, get a medical evaluation.') };
+    if (A.q) return { head: T('Cambia la calidad por Z2 (o descansa)', 'Swap the quality session for Z2 (or rest)'), body: T(`Fácil de ${mi ? Math.min(mi, 4).toFixed(1) : '3.0'} mi con FC 130–148 y alerta en ${fcRule('easyAlertHR')}. La calidad se mueve si el plan deja 48 h antes de la próxima; si no, se salta (no es deuda).`, `Easy ${mi ? Math.min(mi, 4).toFixed(1) : '3.0'} mi at HR 130–148 with the alert at ${fcRule('easyAlertHR')}. The quality session moves if the plan leaves 48 h before the next one; otherwise it is skipped (not owed).`) };
+    return { head: T('Descansa o haz Z2 corta', 'Rest or do a short Z2'), body: T(`Máximo 30 min en Z2 con alerta en ${fcRule('easyAlertHR')}, o descanso. Las millas perdidas no son deuda.`, `At most 30 min in Z2 with the alert at ${fcRule('easyAlertHR')}, or rest. Missed miles are not owed.`) };
   }
-  if (A.level === 'wait') return { head: `Espera ${fcRule('thunderWaitMin')} min después del último trueno`, body: 'Si la tormenta sigue, haz la sesión otro rato o mañana según las reglas de 48 h.' };
-  if (A.level === 'adjust') return { head: 'Haz la sesión con ajustes', body: A.F.filter(f => f.adj).map(f => f.adj).filter((x, j, a) => a.indexOf(x) === j).join(' ') };
-  return { head: 'Haz la sesión como está escrita', body: 'Nada de lo que escribiste toca una regla. Lo de siempre: arranque controlado y cuando suene el fin del paso, se acabó.' };
+  if (A.level === 'wait') return { head: T(`Espera ${fcRule('thunderWaitMin')} min después del último trueno`, `Wait ${fcRule('thunderWaitMin')} min after the last thunder`), body: T('Si la tormenta sigue, haz la sesión otro rato o mañana según las reglas de 48 h.', 'If the storm continues, do the session later or tomorrow following the 48 h rules.') };
+  if (A.level === 'adjust') return { head: T('Haz la sesión con ajustes', 'Do the session with adjustments'), body: A.F.filter(f => f.adj).map(f => f.adj).filter((x, j, a) => a.indexOf(x) === j).join(' ') };
+  return { head: T('Haz la sesión como está escrita', 'Do the session as written'), body: T('Nada de lo que escribiste toca una regla. Lo de siempre: arranque controlado y cuando suene el fin del paso, se acabó.', 'Nothing you entered hits a rule. As always: controlled start, and when the step-end alert sounds, you are done.') };
 }
 function fcExpect(A) {
+  const T = fcT;
   const mi = A.s && A.s.dist ? parseFloat(A.s.dist) : 0;
   const tssW = fcEstTSS(A.kind, mi);
   const adjKind = (A.level === 'stop' && A.run) ? 'easy' : A.kind;
   const adjMi = A.level === 'stop' ? (A.q ? Math.min(mi || 3, 4) : Math.min(mi || 2.5, 2.5)) : mi;
-  const severe = A.F.some(f => f.lvl === 'stop' && /articular|cuello para abajo|Deshidratado/.test(f.text));
+  const severe = A.F.some(f => f.lvl === 'stop' && f.sev);
   const tssA = severe ? 0 : fcEstTSS(adjKind, adjMi);
   const pW = fcProjectTSB(tssW), pA = fcProjectTSB(tssA);
   const hot = A.fe && A.fe.v > fcRule('heatHot');
   const heat = A.fe ? heatAdjustmentFromIndex(A.fe.v) : null;
   const H = fcHistory(A.q ? A.kind : 'easy');
   const W = [], J = [];
-  if (pW) W.push(`Carga estimada: TSS ≈${tssW} → frescura (TSB) mañana ≈ ${pW.tsb} (hoy ${pW.now}) [E].`);
-  if (pA) J.push(`Carga estimada: TSS ≈${tssA} → TSB mañana ≈ ${pA.tsb} [E].`);
+  if (pW) W.push(T(`Carga estimada: TSS ≈${tssW} → frescura (TSB) mañana ≈ ${pW.tsb} (hoy ${pW.now}) [E].`, `Estimated load: TSS ≈${tssW} → freshness (TSB) tomorrow ≈ ${pW.tsb} (today ${pW.now}) [E].`));
+  if (pA) J.push(T(`Carga estimada: TSS ≈${tssA} → TSB mañana ≈ ${pA.tsb} [E].`, `Estimated load: TSS ≈${tssA} → TSB tomorrow ≈ ${pA.tsb} [E].`));
   if (hot && heat) {
-    W.push(`Calor: al mismo ritmo, la FC sube ~${heat.bpmAdd || 15} lpm (tu dato medido: ~+9 lpm a igual ritmo) y el ritmo a la misma FC se pone ~${heat.paceAddSec || 35} s/mi más lento [E].`);
-    if (!A.q && H.hot.n) W.push(`Tu historial en fáciles con calor (${H.hot.n}): Z3 promedio ${H.hot.z3} %${H.cool.n ? ` contra ${H.cool.z3} % en fresco (${H.cool.n})` : ''}. Si corres por ritmo, lo más probable es repetirlo [M].`);
-    if (A.q && H.hot.n) W.push(`Tus calidades del mismo tipo con calor (${H.hot.n}): nota promedio ${H.hot.score}${H.cool.n ? ` contra ${H.cool.score} en fresco` : ''} [M].`);
-    J.push(A.q ? 'Con agua en sorbos desde el calentamiento y sin perseguir el ritmo de un día fresco: la FC manda, el % en la franja se sostiene y no te pasas de la parte dura [E].'
-      : `Con la alerta en ${fcRule('easyAlertHR')} y arranque lento: Z3 bajo 10 %, el estímulo aeróbico se mantiene y no te cansas para la próxima calidad [E].`);
+    W.push(T(`Calor: al mismo ritmo, la FC sube ~${heat.bpmAdd || 15} lpm (tu dato medido: ~+9 lpm a igual ritmo) y el ritmo a la misma FC se pone ~${heat.paceAddSec || 35} s/mi más lento [E].`, `Heat: at the same pace HR rises ~${heat.bpmAdd || 15} bpm (your measured value: ~+9 bpm at equal pace) and pace at the same HR gets ~${heat.paceAddSec || 35} s/mi slower [E].`));
+    if (!A.q && H.hot.n) W.push(T(`Tu historial en fáciles con calor (${H.hot.n}): Z3 promedio ${H.hot.z3} %${H.cool.n ? ` contra ${H.cool.z3} % en fresco (${H.cool.n})` : ''}. Si corres por ritmo, lo más probable es repetirlo [M].`, `Your history on hot easy runs (${H.hot.n}): average Z3 ${H.hot.z3} %${H.cool.n ? ` vs ${H.cool.z3} % when cool (${H.cool.n})` : ''}. If you run by pace, you will most likely repeat it [M].`));
+    if (A.q && H.hot.n) W.push(T(`Tus calidades del mismo tipo con calor (${H.hot.n}): nota promedio ${H.hot.score}${H.cool.n ? ` contra ${H.cool.score} en fresco` : ''} [M].`, `Your quality sessions of this type in heat (${H.hot.n}): average score ${H.hot.score}${H.cool.n ? ` vs ${H.cool.score} when cool` : ''} [M].`));
+    J.push(A.q ? T('Con agua en sorbos desde el calentamiento y sin perseguir el ritmo de un día fresco: la FC manda, el % en la franja se sostiene y no te pasas de la parte dura [E].', 'With sips of water from the warm-up and without chasing a cool-day pace: HR leads, time in band holds and you do not overrun the hard part [E].')
+      : T(`Con la alerta en ${fcRule('easyAlertHR')} y arranque lento: Z3 bajo 10 %, el estímulo aeróbico se mantiene y no te cansas para la próxima calidad [E].`, `With the alert at ${fcRule('easyAlertHR')} and a slow start: Z3 under 10 %, the aerobic stimulus holds and you stay fresh for the next quality session [E].`));
   }
   const stopF = A.F.filter(f => f.lvl === 'stop');
   if (stopF.length && A.run) {
-    W.push(`Con ${stopF.map(f => f.text).join('; ')}: más FC para el mismo esfuerzo y más riesgo de no cumplir el criterio; una calidad no cumplida se repite (y dos seguidas bajan un nivel) [E].`);
-    W.push('Recuperación más larga (48–72 h) y más riesgo de lesión o de enfermarte si hay síntomas [H].');
-    J.push(A.q ? 'La calidad no cuenta como no cumplida: el nivel se queda donde está y se hace cuando el cuerpo responda [regla].' : 'Pierdes pocas millas; no son deuda [regla].');
-    if (mi && adjMi < mi) J.push(`GRIT: ${(mi - adjMi).toFixed(1)} mi menos hoy; el margen del mes lo absorbe si va adelantado.`);
+    W.push(T(`Con ${stopF.map(f => f.text).join('; ')}: más FC para el mismo esfuerzo y más riesgo de no cumplir el criterio; una calidad no cumplida se repite (y dos seguidas bajan un nivel) [E].`, `With ${stopF.map(f => f.text).join('; ')}: higher HR for the same effort and more risk of missing the criterion; a missed quality session is repeated (and two in a row drop a level) [E].`));
+    W.push(T('Recuperación más larga (48–72 h) y más riesgo de lesión o de enfermarte si hay síntomas [H].', 'Longer recovery (48–72 h) and more risk of injury or illness if there are symptoms [H].'));
+    J.push(A.q ? T('La calidad no cuenta como no cumplida: el nivel se queda donde está y se hace cuando el cuerpo responda [regla].', 'The quality session does not count as missed: the level stays where it is and you do it when your body responds [regla].') : T('Pierdes pocas millas; no son deuda [regla].', 'You lose a few miles; they are not owed [regla].'));
+    if (mi && adjMi < mi) J.push(T(`GRIT: ${(mi - adjMi).toFixed(1)} mi menos hoy; el margen del mes lo absorbe si va adelantado.`, `GRIT: ${(mi - adjMi).toFixed(1)} mi less today; the month's margin absorbs it if you are ahead.`));
   }
   const adjF = A.F.filter(f => f.lvl === 'adjust');
   if (adjF.length && !stopF.length) {
-    W.push(`Sin ajustar (${adjF.map(f => f.text).join('; ')}): es probable salir rápido o terminar con la FC alta; es la falla que más se repite (hacer más de lo escrito) [M/E].`);
-    J.push('Con los ajustes: misma distancia y mismo nivel, menos riesgo de que la sesión salga "cumplida con fallas" [E].');
+    W.push(T(`Sin ajustar (${adjF.map(f => f.text).join('; ')}): es probable salir rápido o terminar con la FC alta; es la falla que más se repite (hacer más de lo escrito) [M/E].`, `Without adjusting (${adjF.map(f => f.text).join('; ')}): you will likely start fast or finish with high HR; it is your most repeated fault (doing more than written) [M/E].`));
+    J.push(T('Con los ajustes: misma distancia y mismo nivel, menos riesgo de que la sesión salga "cumplida con fallas" [E].', 'With the adjustments: same distance and level, less risk of the session ending "completed with faults" [E].'));
   }
-  if (!W.length) W.push('Sesión normal: si se cumple el criterio, sube de nivel [regla].');
-  if (!J.length) J.push('No hace falta ajustar; seguir el plan es la mejor opción hoy.');
+  if (!W.length) W.push(T('Sesión normal: si se cumple el criterio, sube de nivel [regla].', 'Normal session: if the criterion is met, you move up a level [regla].'));
+  if (!J.length) J.push(T('No hace falta ajustar; seguir el plan es la mejor opción hoy.', 'No adjustment needed; following the plan is the best option today.'));
   return { W, J, same: A.level === 'go' };
 }
 function fcCheckDecide(choice) {
@@ -2533,71 +2588,91 @@ function fcUndoZ2() {
 function fcSel(k, val, opts) {
   return `<div class="fc-chips" role="group">${opts.map(([v, l]) => `<button type="button" class="fc-chip${String(val) === String(v) ? ' on' : ''}" aria-pressed="${String(val) === String(v)}" onclick="fcCheckSet('${k}', ${String(val) === String(v) ? "''" : `'${v}'`})">${l}</button>`).join('')}</div>`;
 }
+// 2026.11.25-1: teclado solo de números y "Siguiente" pasa al próximo campo sin cerrar el teclado
+// (antes onchange → render() rehacía la tarjeta y el teclado se cerraba). Mismo patrón que "Estado del atleta".
+const FC_NUM_ORDER = ['hrv', 'hrv7d', 'rhr', 'sleep', 'energy', 'stress', 'calves', 'mealH', 'feelsManual'];
+const FC_NUM_DEC = { sleep: 1, mealH: 1 };
+function fcNumKey(ev, k) {
+  if (!(ev.key === 'Enter' || ev.keyCode === 13)) return;
+  ev.preventDefault();
+  const nx = FC_NUM_ORDER[FC_NUM_ORDER.indexOf(k) + 1];
+  _focusAfterRender = nx ? 'fc-in-' + nx : null;
+  ev.target.blur();
+}
+function fcNumSave(k, el) {
+  const raw = String(el.value || '').replace(',', '.').trim();
+  const v = raw === '' ? '' : Number(raw);
+  const cur = (fcDayCheck().inputs || {})[k];
+  if ((cur == null ? '' : cur) === v || (raw !== '' && isNaN(v))) return;
+  fcCheckSet(k, v);
+}
 function fcNum(k, val, label, ph, unit) {
-  return `<label class="fc-cf"><span>${label}</span><span class="fc-cf-in"><input type="number" inputmode="decimal" step="any" placeholder="${ph}" value="${val == null ? '' : esc(String(val))}" onchange="fcCheckSet('${k}', this.value === '' ? '' : Number(this.value))" /><small>${unit}</small></span></label>`;
+  const last = k === FC_NUM_ORDER[FC_NUM_ORDER.length - 1];
+  return `<label class="fc-cf"><span>${label}</span><span class="fc-cf-in"><input type="text" id="fc-in-${k}" inputmode="${FC_NUM_DEC[k] ? 'decimal' : 'numeric'}" ${FC_NUM_DEC[k] ? '' : 'pattern="[0-9]*"'} autocomplete="off" enterkeyhint="${last ? 'done' : 'next'}" placeholder="${ph}" value="${val == null ? '' : esc(String(val))}" onkeydown="fcNumKey(event, '${k}')" onblur="fcNumSave('${k}', this)" /><small>${unit}</small></span></label>`;
 }
 function fcConditionsCardHtml() {
   const c = fcDayCheck(), i = c.inputs || {};
   const A = fcAssess(), R = fcRecText(A), E = fcExpect(A);
   const col = { stop: 'var(--rust-bright)', wait: 'var(--signal-amber)', adjust: 'var(--signal-amber)', go: 'var(--olive-bright)' }[A.level];
-  const lab = { stop: 'ROJO', wait: 'ESPERA', adjust: 'AJUSTA', go: 'VERDE' }[A.level];
+  const es = getLang() === 'es';
+  const lab = (es ? { stop: 'ROJO', wait: 'ESPERA', adjust: 'AJUSTA', go: 'VERDE' } : { stop: 'RED', wait: 'WAIT', adjust: 'ADJUST', go: 'GREEN' })[A.level];
   const wx = c.wx, now = wx && wx.now, ses = wx && wx.session;
   const age = wx ? Math.round((Date.now() - wx.at) / 60000) : null;
   const wxHtml = wx ? `<div class="fc-wx">
-      <div><b>Ahora</b> ${Math.round(now.t)} °F · ${now.rh} % · índice ${calcHeatIndex(now.t, now.rh)} °F · ${esc(fcWxCode(now.code).txt)} · viento ${Math.round(now.wind)} mph${now.uv != null ? ' · UV ' + Math.round(now.uv) : ''}</div>
-      ${ses ? `<div><b>A las ${String(ses.hour).padStart(2, '0')}:00</b> ${Math.round(ses.t)} °F · ${ses.rh} % · índice <b>${calcHeatIndex(ses.t, ses.rh)} °F</b> · ${esc(fcWxCode(ses.code).txt)}${ses.pp != null ? ' · lluvia ' + ses.pp + ' %' : ''}</div>` : ''}
+      <div><b>${es ? 'Ahora' : 'Now'}</b> ${Math.round(now.t)} °F · ${now.rh} % · ${es ? 'índice' : 'index'} ${calcHeatIndex(now.t, now.rh)} °F · ${esc(fcWxCode(now.code).txt)} · ${es ? 'viento' : 'wind'} ${Math.round(now.wind)} mph${now.uv != null ? ' · UV ' + Math.round(now.uv) : ''}</div>
+      ${ses ? `<div><b>${es ? 'A las' : 'At'} ${String(ses.hour).padStart(2, '0')}:00</b> ${Math.round(ses.t)} °F · ${ses.rh} % · ${es ? 'índice' : 'index'} <b>${calcHeatIndex(ses.t, ses.rh)} °F</b> · ${esc(fcWxCode(ses.code).txt)}${ses.pp != null ? (es ? ' · lluvia ' : ' · rain ') + ses.pp + ' %' : ''}</div>` : ''}
       <div class="fc-wx-h">${(wx.hours || []).map(h => `<span><b>${String(h.hour).padStart(2, '0')}h</b>${calcHeatIndex(h.t, h.rh)}°${fcWxCode(h.code).thunder ? ' ⚡' : h.pp >= 50 ? ' ☂' : ''}</span>`).join('')}</div>
-      <div class="fc-mini">${esc(wx.place || '')} · hace ${age} min · la regla usa el índice de calor (sensación térmica)</div>
-    </div>` : '<p class="fc-mini">Toca CLIMA AHORA para traer temperatura, humedad, índice de calor, lluvia y truenos de tu ubicación.</p>';
+      <div class="fc-mini">${esc(wx.place || '')} · ${es ? `hace ${age} min · la regla usa el índice de calor (sensación térmica)` : `${age} min ago · the rule uses the heat index (feels-like)`}</div>
+    </div>` : `<p class="fc-mini">${es ? 'Toca CLIMA AHORA para traer temperatura, humedad, índice de calor, lluvia y truenos de tu ubicación.' : 'Tap WEATHER NOW to pull temperature, humidity, heat index, rain and thunder for your location.'}</p>`;
   const flags = A.F.length ? `<ul class="fc-flags">${A.F.map(f => `<li class="fc-f-${f.lvl}"><b>${esc(f.text)}</b> — ${esc(f.why)}</li>`).join('')}</ul>` : '';
   const dec = c.decision;
   const s = A.s;
   return `<div class="card fc-cond" onclick="event.stopPropagation()">
-    <div class="card-title">CONDICIONES DE HOY${s ? ' · ' + esc(shortSessionTitle ? shortSessionTitle(s) : (s.type || '')) : ''}</div>
+    <div class="card-title">${es ? 'CONDICIONES DE HOY' : "TODAY'S CONDITIONS"}${s ? ' · ' + esc(shortSessionTitle ? shortSessionTitle(s) : (s.type || '')) : ''}</div>
     <div class="fc-row2">
-      <button type="button" class="btn btn-primary" style="flex:1;" onclick="fcFetchWx()">CLIMA AHORA</button>
-      <label class="fc-cf fc-hour"><span>Hora de la sesión</span><input type="time" value="${esc(fcSessionHour(s))}" onchange="fcCheckSet('hour', this.value); fcFetchWx();" /></label>
+      <button type="button" class="btn btn-primary" style="flex:1;" onclick="fcFetchWx()">${es ? 'CLIMA AHORA' : 'WEATHER NOW'}</button>
+      <label class="fc-cf fc-hour"><span>${es ? 'Hora de la sesión' : 'Session time'}</span><input type="time" value="${esc(fcSessionHour(s))}" onchange="fcCheckSet('hour', this.value); fcFetchWx();" /></label>
     </div>
     <p id="fc-wx-status" class="fc-mini" aria-live="polite"></p>
     ${wxHtml}
     <div class="fc-grid">
-      ${fcNum('hrv', i.hrv, 'HRV de la noche', '45', 'ms')}
-      ${fcNum('hrv7d', i.hrv7d, 'HRV de 7 días', '47', 'ms')}
-      ${fcNum('rhr', i.rhr, 'FC en reposo', '55', 'lpm')}
-      ${fcNum('sleep', i.sleep, 'Sueño', '7.2', 'h')}
-      ${fcNum('energy', i.energy, 'Energía', '8', '/10')}
-      ${fcNum('stress', i.stress, 'Estrés', '1', '/5')}
-      ${fcNum('calves', i.calves, 'Pantorrillas', '0', '/10')}
-      ${fcNum('mealH', i.mealH, 'Comiste hace', '2', 'h')}
-      ${fcNum('feelsManual', i.feelsManual, 'Sensación (a mano)', 'auto', '°F')}
+      ${fcNum('hrv', i.hrv, es ? 'HRV de la noche' : 'Overnight HRV', '45', 'ms')}
+      ${fcNum('hrv7d', i.hrv7d, es ? 'HRV de 7 días' : '7-day HRV', '47', 'ms')}
+      ${fcNum('rhr', i.rhr, es ? 'FC en reposo' : 'Resting HR', '55', es ? 'lpm' : 'bpm')}
+      ${fcNum('sleep', i.sleep, es ? 'Sueño' : 'Sleep', '7.2', 'h')}
+      ${fcNum('energy', i.energy, es ? 'Energía' : 'Energy', '8', '/10')}
+      ${fcNum('stress', i.stress, es ? 'Estrés' : 'Stress', '1', '/5')}
+      ${fcNum('calves', i.calves, es ? 'Pantorrillas' : 'Calves', '0', '/10')}
+      ${fcNum('mealH', i.mealH, es ? 'Comiste hace' : 'Last meal', '2', 'h')}
+      ${fcNum('feelsManual', i.feelsManual, es ? 'Sensación (a mano)' : 'Feels-like (manual)', 'auto', '°F')}
     </div>
-    <div class="fc-q"><span>Dolor</span>${fcSel('pain', i.pain, [['none', 'Ninguno'], ['muscle', 'Muscular'], ['joint', 'Articular u óseo']])}</div>
-    <div class="fc-q"><span>Enfermedad</span>${fcSel('sick', i.sick, [['none', 'Nada'], ['above', 'Cuello arriba'], ['below', 'Cuello abajo o fiebre']])}</div>
-    <div class="fc-q"><span>Hidratación</span>${fcSel('hydr', i.hydr, [['good', 'Bien'], ['fair', 'Regular'], ['bad', 'Mal']])}</div>
-    <div class="fc-q"><span>Piernas pesadas</span>${fcSel('legs', i.legs, [['no', 'No'], ['yes', 'Sí']])}</div>
-    <div class="fc-q"><span>Merienda 1.5–2 h antes</span>${fcSel('snack', i.snack, [['yes', 'Sí'], ['no', 'No']])}</div>
-    <div class="fc-q"><span>Descongestionante hoy</span>${fcSel('decong', i.decong, [['no', 'No'], ['yes', 'Sí']])}</div>
-    <div class="fc-q"><span>Trabajo hoy</span>${fcSel('work', i.work, [['light', 'Liviano'], ['normal', 'Normal'], ['heavy', 'Pesado']])}</div>
+    <div class="fc-q"><span>${es ? 'Dolor' : 'Pain'}</span>${fcSel('pain', i.pain, es ? [['none', 'Ninguno'], ['muscle', 'Muscular'], ['joint', 'Articular u óseo']] : [['none', 'None'], ['muscle', 'Muscle'], ['joint', 'Joint or bone']])}</div>
+    <div class="fc-q"><span>${es ? 'Enfermedad' : 'Illness'}</span>${fcSel('sick', i.sick, es ? [['none', 'Nada'], ['above', 'Cuello arriba'], ['below', 'Cuello abajo o fiebre']] : [['none', 'None'], ['above', 'Above the neck'], ['below', 'Below the neck or fever']])}</div>
+    <div class="fc-q"><span>${es ? 'Hidratación' : 'Hydration'}</span>${fcSel('hydr', i.hydr, es ? [['good', 'Bien'], ['fair', 'Regular'], ['bad', 'Mal']] : [['good', 'Good'], ['fair', 'Fair'], ['bad', 'Poor']])}</div>
+    <div class="fc-q"><span>${es ? 'Piernas pesadas' : 'Heavy legs'}</span>${fcSel('legs', i.legs, [['no', 'No'], ['yes', es ? 'Sí' : 'Yes']])}</div>
+    <div class="fc-q"><span>${es ? 'Merienda 1.5–2 h antes' : 'Snack 1.5–2 h before'}</span>${fcSel('snack', i.snack, [['yes', es ? 'Sí' : 'Yes'], ['no', 'No']])}</div>
+    <div class="fc-q"><span>${es ? 'Descongestionante hoy' : 'Decongestant today'}</span>${fcSel('decong', i.decong, [['no', 'No'], ['yes', es ? 'Sí' : 'Yes']])}</div>
+    <div class="fc-q"><span>${es ? 'Trabajo hoy' : 'Work today'}</span>${fcSel('work', i.work, es ? [['light', 'Liviano'], ['normal', 'Normal'], ['heavy', 'Pesado']] : [['light', 'Light'], ['normal', 'Normal'], ['heavy', 'Heavy']])}</div>
     <div class="fc-verdict" style="border-color:${col};">
       <div class="fc-v-tag" style="background:${col};">${lab}</div>
       <div class="fc-v-head">${esc(R.head)}</div>
       <p>${esc(R.body)}</p>
-      ${A.filled < 4 ? `<p class="fc-mini">Faltan ${4 - A.filled} de los 4 datos básicos (HRV, FC en reposo, sueño, energía): la recomendación es parcial.</p>` : ''}
-      ${A.fe ? `<p class="fc-mini">Sensación térmica usada: ${A.fe.v} °F (${esc(A.fe.src)}).</p>` : ''}
+      ${A.filled < 4 ? `<p class="fc-mini">${es ? `Faltan ${4 - A.filled} de los 4 datos básicos (HRV, FC en reposo, sueño, energía): la recomendación es parcial.` : `${4 - A.filled} of the 4 basic inputs are missing (HRV, resting HR, sleep, energy): the recommendation is partial.`}</p>` : ''}
+      ${A.fe ? `<p class="fc-mini">${es ? 'Sensación térmica usada' : 'Heat index used'}: ${A.fe.v} °F (${esc(A.fe.src)}).</p>` : ''}
     </div>
     ${flags}
     <div class="fc-exp">
-      <div><div class="fc-exp-h">Si sigues el plan como está</div><ul>${E.W.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
-      ${E.same ? '' : `<div><div class="fc-exp-h ok">Si aplicas el ajuste</div><ul>${E.J.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`}
+      <div><div class="fc-exp-h">${es ? 'Si sigues el plan como está' : 'If you follow the plan as written'}</div><ul>${E.W.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
+      ${E.same ? '' : `<div><div class="fc-exp-h ok">${es ? 'Si aplicas el ajuste' : 'If you apply the adjustment'}</div><ul>${E.J.map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>`}
     </div>
-    <p class="fc-mini">[M] medido en tus datos · [E] estimación · [H] hipótesis · [regla] regla del plan. Esto no diagnostica: dolor de pecho, mareo o FC anormal = detener y evaluación médica.</p>
-    ${dec ? `<p class="fc-dec">Decisión anotada: <b>${dec.choice === 'adjusted' ? 'ajustar' : 'seguir el plan'}</b>${dec.applied ? ' · hoy cambiado a Z2' : ''}.</p>` : ''}
+    <p class="fc-mini">${es ? '[M] medido en tus datos · [E] estimación · [H] hipótesis · [regla] regla del plan. Esto no diagnostica: dolor de pecho, mareo o FC anormal = detener y evaluación médica.' : '[M] measured in your data · [E] estimate · [H] hypothesis · [regla] plan rule. This does not diagnose: chest pain, dizziness or abnormal HR = stop and get a medical evaluation.'}</p>
+    ${dec ? `<p class="fc-dec">${es ? 'Decisión anotada' : 'Decision logged'}: <b>${dec.choice === 'adjusted' ? (es ? 'ajustar' : 'adjust') : (es ? 'seguir el plan' : 'follow the plan')}</b>${dec.applied ? (es ? ' · hoy cambiado a Z2' : ' · today changed to Z2') : ''}.</p>` : ''}
     <div class="fc-row2">
-      ${A.level !== 'go' && s ? `<button type="button" class="btn btn-secondary" style="flex:1;" onclick="fcCheckDecide('written')">SEGUIR EL PLAN</button>
-      <button type="button" class="btn btn-primary" style="flex:1;" onclick="fcCheckDecide('adjusted')">APLICAR EL AJUSTE</button>` : ''}
+      ${A.level !== 'go' && s ? `<button type="button" class="btn btn-secondary" style="flex:1;" onclick="fcCheckDecide('written')">${es ? 'SEGUIR EL PLAN' : 'FOLLOW THE PLAN'}</button>
+      <button type="button" class="btn btn-primary" style="flex:1;" onclick="fcCheckDecide('adjusted')">${es ? 'APLICAR EL AJUSTE' : 'APPLY THE ADJUSTMENT'}</button>` : ''}
     </div>
-    ${A.level === 'stop' && A.run && !(dec && dec.applied) && !A.F.some(f => f.lvl === 'stop' && /articular|cuello para abajo|Deshidratado/.test(f.text)) ? `<button type="button" class="btn btn-secondary" style="width:100%; margin-top:6px;" onclick="fcApplyZ2()">CAMBIAR HOY A Z2 EN EL PLAN</button>` : ''}
-    ${c.prevLine ? `<button type="button" class="btn btn-secondary" style="width:100%; margin-top:6px;" onclick="fcUndoZ2()">DESHACER EL CAMBIO A Z2</button>` : ''}
+    ${A.level === 'stop' && A.run && !(dec && dec.applied) && !A.F.some(f => f.lvl === 'stop' && f.sev) ? `<button type="button" class="btn btn-secondary" style="width:100%; margin-top:6px;" onclick="fcApplyZ2()">${es ? 'CAMBIAR HOY A Z2 EN EL PLAN' : 'CHANGE TODAY TO Z2 IN THE PLAN'}</button>` : ''}
+    ${c.prevLine ? `<button type="button" class="btn btn-secondary" style="width:100%; margin-top:6px;" onclick="fcUndoZ2()">${es ? 'DESHACER EL CAMBIO A Z2' : 'UNDO THE Z2 CHANGE'}</button>` : ''}
   </div>`;
 }
 function fcTodayBanner() {
@@ -2606,7 +2681,8 @@ function fcTodayBanner() {
   const A = fcAssess();
   if (A.level !== 'stop' || (c.decision && c.decision.applied)) return '';
   const R = fcRecText(A);
-  return `<div class="fc-banner" role="status"><b>CHEQUEO EN ROJO:</b> ${esc(R.head)}. ${c.decision && c.decision.choice === 'written' ? 'Decidiste seguir el plan: sale anotado en el informe.' : 'Mira la tarjeta Condiciones de hoy.'}</div>`;
+  const es = getLang() === 'es';
+  return `<div class="fc-banner" role="status"><b>${es ? 'CHEQUEO EN ROJO' : 'RED CHECK'}:</b> ${esc(R.head)}. ${c.decision && c.decision.choice === 'written' ? (es ? 'Decidiste seguir el plan: sale anotado en el informe.' : 'You chose to follow the plan: it is logged in the report.') : (es ? 'Mira la tarjeta Condiciones de hoy.' : "See the Today's conditions card.")}</div>`;
 }
 // Para el informe y para llenar la actividad.
 function fcCheckReportLines(iso) {
@@ -2632,13 +2708,13 @@ function fcPrefillFromCheck(act) {
 
 // ── 4. Fallas que se repiten ───────────────────────────────────────────────
 const FC_FAULT_CATS = [
-  ['fast', 'Hacer más de lo escrito / salir rápido', /arranque|saliste|más rápid|de más|primera repetici|seguiste a ritmo|milla 1 con fc/i],
-  ['z3', 'Z3 en los fáciles', /\bz3\b/i],
-  ['cool', 'Trote final fuera de la regla', /trote final/i],
-  ['water', 'Agua durante bajo la regla', /agua/i],
-  ['food', 'Merienda o comida fuera de tiempo', /merienda|comida|comiste/i],
-  ['vest', 'Marcha: FC sobre el techo o trote con chaleco', /chaleco|sobre 150/i],
-  ['reps', 'Repeticiones fuera de zona', /z4.?z5|repeticiones/i]
+  ['fast', 'Hacer más de lo escrito / salir rápido', /arranque|saliste|más rápid|de más|primera repetici|seguiste a ritmo|milla 1 con fc/i, 'Doing more than written / starting fast'],
+  ['z3', 'Z3 en los fáciles', /\bz3\b/i, 'Z3 on easy runs'],
+  ['cool', 'Trote final fuera de la regla', /trote final/i, 'Cooldown outside the rule'],
+  ['water', 'Agua durante bajo la regla', /agua/i, 'Water during below the rule'],
+  ['food', 'Merienda o comida fuera de tiempo', /merienda|comida|comiste/i, 'Snack or meal mistimed'],
+  ['vest', 'Marcha: FC sobre el techo o trote con chaleco', /chaleco|sobre 150/i, 'March: HR over the ceiling or jogging with the vest'],
+  ['reps', 'Repeticiones fuera de zona', /z4.?z5|repeticiones/i, 'Reps out of zone']
 ];
 let _fcFaultCache = null;
 function fcFaultTally(days) {
@@ -2665,15 +2741,17 @@ function fcFaultTally(days) {
 }
 function fcFaultsCardHtml() {
   const L = fcFaultTally(45);
-  if (!L.length) return `<div class="card"><p class="fc-mini">Sin fallas registradas en los últimos 45 días (o todavía no hay actividades analizadas).</p></div>`;
-  const fmt = iso => parseISODateLocal(iso).toLocaleDateString('es-PR', { day: 'numeric', month: 'short' });
+  const es = getLang() === 'es';
+  if (!L.length) return `<div class="card"><p class="fc-mini">${es ? 'Sin fallas registradas en los últimos 45 días (o todavía no hay actividades analizadas).' : 'No faults logged in the last 45 days (or no analyzed activities yet).'}</p></div>`;
+  const fmt = iso => parseISODateLocal(iso).toLocaleDateString(es ? 'es-PR' : 'en-US', { day: 'numeric', month: 'short' });
+  const nm = f => { const c = !es && FC_FAULT_CATS.find(x => x[0] === f.key); return c ? c[3] : (typeof fcTx === 'function' ? fcTx(f.name) : f.name); };
   const top = L[0];
   return `<div class="card">
-    ${top.dates.length >= 3 ? `<div class="fc-fault-top"><b>Atácala primero:</b> ${esc(top.name)} (${top.dates.length} veces). ${top.fix ? esc(top.fix) : ''}</div>` : ''}
-    <table class="fc-ft"><thead><tr><th>Falla</th><th>Veces</th><th>Cuándo</th></tr></thead><tbody>
-    ${L.slice(0, 7).map(f => `<tr class="${f.dates.length >= 3 ? 'hot' : ''}"><td>${esc(f.name)}</td><td>${f.dates.length}</td><td>${f.dates.slice(-4).map(fmt).join(', ')}</td></tr>`).join('')}
+    ${top.dates.length >= 3 ? `<div class="fc-fault-top"><b>${es ? 'Atácala primero' : 'Tackle it first'}:</b> ${esc(nm(top))} (${top.dates.length} ${es ? 'veces' : 'times'}). ${top.fix ? esc(typeof fcTx === 'function' ? fcTx(top.fix) : top.fix) : ''}</div>` : ''}
+    <table class="fc-ft"><thead><tr><th>${es ? 'Falla' : 'Fault'}</th><th>${es ? 'Veces' : 'Times'}</th><th>${es ? 'Cuándo' : 'When'}</th></tr></thead><tbody>
+    ${L.slice(0, 7).map(f => `<tr class="${f.dates.length >= 3 ? 'hot' : ''}"><td>${esc(nm(f))}</td><td>${f.dates.length}</td><td>${f.dates.slice(-4).map(fmt).join(', ')}</td></tr>`).join('')}
     </tbody></table>
-    <p class="fc-mini">Sale del mensaje del entrenador de cada actividad de los últimos 45 días. Cuenta una vez por sesión.</p>
+    <p class="fc-mini">${es ? 'Sale del mensaje del entrenador de cada actividad de los últimos 45 días. Cuenta una vez por sesión.' : "Built from the coach's message for each activity in the last 45 days. Counted once per session."}</p>
   </div>`;
 }
 
@@ -2833,8 +2911,8 @@ function fcPsQuestionHtml(act, x, es, wizard) {
   const chips = x.opts.map((o, k) => `<button type="button" class="btn-small fc-ps-chip" aria-pressed="${hit === k}" style="${hit === k ? on : ''}" onclick="${pick}('${act.id}', '${x.id}', ${k})">${esc(es ? o.v : o.en)}</button>`).join('');
   const inId = `mf-${x.id}-${act.id}`;
   const input = wizard
-    ? `<input type="text" id="${inId}" value="${esc(hit < 0 ? cur : '')}" placeholder="${es ? 'Otra respuesta… (Enter = siguiente)' : 'Other answer… (Enter = next)'}" oninput="_fcPs.draft['${act.id}|${x.id}'] = this.value" onkeydown="if(event.key==='Enter'){event.preventDefault(); fcPsNext('${act.id}', 1);}" style="width:100%;" enterkeyhint="next" />`
-    : `<input type="text" id="${inId}" value="${esc(hit < 0 ? cur : '')}" placeholder="${es ? 'Otra respuesta…' : 'Other answer…'}" onblur="savePostCustom('${act.id}', '${x.id}', this.value)" style="width:100%;" />`;
+    ? `<input type="text" id="${inId}" ${x.kind === 'num' ? 'inputmode="decimal" enterkeyhint="next"' : 'enterkeyhint="next"'} value="${esc(hit < 0 ? cur : '')}" placeholder="${es ? 'Otra respuesta… (Enter = siguiente)' : 'Other answer… (Enter = next)'}" oninput="_fcPs.draft['${act.id}|${x.id}'] = this.value" onkeydown="if(event.key==='Enter'){event.preventDefault(); fcPsNext('${act.id}', 1);}" style="width:100%;" enterkeyhint="next" />`
+    : `<input type="text" id="${inId}" ${x.kind === 'num' ? 'inputmode="decimal"' : ''} value="${esc(hit < 0 ? cur : '')}" placeholder="${es ? 'Otra respuesta…' : 'Other answer…'}" onblur="savePostCustom('${act.id}', '${x.id}', this.value)" style="width:100%;" />`;
   return `<div class="form-group" style="margin-top:12px;">
     <label class="form-label" for="${inId}" style="margin-bottom:6px;${wizard ? 'font-size:15px;' : ''}">${esc(es ? x.es : x.en)}</label>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">${chips}</div>${input}</div>`;
@@ -2937,69 +3015,71 @@ function fcSegStats(L, t0, t1) {
   return { hr: hrs.length ? hrs.reduce((s, p) => s + p.hr, 0) / hrs.length : 0, speed: dur > 0 ? dist / dur : 0, dist, dur, pts };
 }
 function fcLthrFromAct(act) {
-  const S = sessionSamples(act); if (!S) return { err: 'La actividad no tiene datos segundo a segundo.' };
+  const es = getLang() === 'es';
+  const S = sessionSamples(act); if (!S) return { err: es ? 'La actividad no tiene datos segundo a segundo.' : 'The activity has no second-by-second data.' };
   const L = S.list, step = S.step, end = L[L.length - 1].t;
-  if (end < 1800) return { err: 'La actividad dura menos de 30 min.' };
+  if (end < 1800) return { err: es ? 'La actividad dura menos de 30 min.' : 'The activity is shorter than 30 min.' };
   // Ventana de 30 min: una vuelta de 29–31 min, o dos seguidas de 10 + 20; si no, la de más distancia.
   let start = null, how = '';
   const laps = typeof lapTimeline === 'function' ? lapTimeline(act) : [];
   const one = laps.find(l => l.dur >= 1740 && l.dur <= 1860);
-  if (one) { start = one.start; how = 'vuelta de 30 min del reloj'; }
+  if (one) { start = one.start; how = es ? 'vuelta de 30 min del reloj' : '30-min watch lap'; }
   else {
     for (let k = 0; k + 1 < laps.length; k++) {
-      if (Math.abs(laps[k].dur - 600) <= 45 && Math.abs(laps[k + 1].dur - 1200) <= 60) { start = laps[k].start; how = 'vueltas de 10 + 20 min'; break; }
+      if (Math.abs(laps[k].dur - 600) <= 45 && Math.abs(laps[k + 1].dur - 1200) <= 60) { start = laps[k].start; how = es ? 'vueltas de 10 + 20 min' : '10 + 20 min laps'; break; }
     }
   }
   if (start == null) {
     let best = -1;
     for (let t = 0; t + 1800 <= end; t += step * 2) { const s = fcSegStats(L, t, t + 1800); if (s && s.dist > best) { best = s.dist; start = t; } }
-    how = 'los 30 min más rápidos de la actividad (no se encontró la vuelta)';
+    how = es ? 'los 30 min más rápidos de la actividad (no se encontró la vuelta)' : 'the fastest 30 min of the activity (no matching lap found)';
   }
   const all = fcSegStats(L, start, start + 1800), first = fcSegStats(L, start, start + 600), last = fcSegStats(L, start + 600, start + 1800);
-  if (!all || !last) return { err: 'No hay datos suficientes en la ventana de 30 min.' };
+  if (!all || !last) return { err: es ? 'No hay datos suficientes en la ventana de 30 min.' : 'Not enough data in the 30-min window.' };
   const parts = [];
   for (let t = start; t < start + 1800; t += 300) { const s = fcSegStats(L, t, t + 300); if (s && s.speed > 0) parts.push(s.speed); }
   const mean = parts.reduce((a, b) => a + b, 0) / (parts.length || 1);
   const cv = parts.length ? Math.sqrt(parts.reduce((a, b) => a + (b - mean) ** 2, 0) / parts.length) / mean * 100 : 0;
   let stopSec = 0, run = 0;
   for (let k = 1; k < all.pts.length; k++) { const v = (all.pts[k].d - all.pts[k - 1].d) / step; if (v < 1.2) { run += step; if (run > 20) stopSec += step; } else run = 0; }
-  const warn = [];
-  if (stopSec > 30) warn.push(`Hubo ~${Math.round(stopSec)} s detenido o caminando dentro de los 30 min: la prueba no vale.`);
-  if (cv > 6) warn.push(`Ritmo disparejo (CV ${cv.toFixed(1)} % entre tramos de 5 min): saliste rápido o te caíste; repítela.`);
-  if (first.hr >= last.hr) warn.push('La FC no subió de los primeros 10 min a los últimos 20: probablemente no fue un esfuerzo máximo sostenido.');
+  const warn = []; let invalid = false;
+  if (stopSec > 30) { invalid = true; warn.push(es ? `Hubo ~${Math.round(stopSec)} s detenido o caminando dentro de los 30 min: la prueba no vale.` : `~${Math.round(stopSec)} s stopped or walking inside the 30 min: the test is not valid.`); }
+  if (cv > 6) { invalid = true; warn.push(es ? `Ritmo disparejo (CV ${cv.toFixed(1)} % entre tramos de 5 min): saliste rápido o te caíste; repítela.` : `Uneven pace (CV ${cv.toFixed(1)} % across 5-min blocks): you started too fast or faded; repeat it.`); }
+  if (first.hr >= last.hr) warn.push(es ? 'La FC no subió de los primeros 10 min a los últimos 20: probablemente no fue un esfuerzo máximo sostenido.' : 'HR did not rise from the first 10 min to the last 20: probably not a maximal sustained effort.');
   const fl = Number(String(act.manualFields && act.manualFields.feelsLike || '').match(/\d+/));
-  if (fl && fl > 78) warn.push(`Sensación térmica ${fl} °F: el calor sube la FC; el umbral puede salir alto. Ideal ≤75 °F.`);
+  if (fl && fl > 78) warn.push(es ? `Sensación térmica ${fl} °F: el calor sube la FC; el umbral puede salir alto. Ideal ≤75 °F.` : `Heat index ${fl} °F: heat raises HR, so the threshold may read high. Ideal ≤75 °F.`);
   const hs = act.manualFields && act.manualFields.hrSource;
-  if (hs === 'optical') warn.push('FC del sensor óptico: no vale para calibrar. Usa la banda.');
-  return { lthr: Math.round(last.hr), first10: Math.round(first.hr), avg30: Math.round(all.hr), paceSec: all.speed > 0 ? 1609.344 / all.speed : 0, cv, how, warn, valid: !warn.some(w => /no vale|repítela|óptico/.test(w)) };
+  if (hs === 'optical') { invalid = true; warn.push(es ? 'FC del sensor óptico: no vale para calibrar. Usa la banda.' : 'Optical wrist HR: not valid for calibration. Use the chest strap.'); }
+  return { lthr: Math.round(last.hr), first10: Math.round(first.hr), avg30: Math.round(all.hr), paceSec: all.speed > 0 ? 1609.344 / all.speed : 0, cv, how, warn, valid: !invalid };
 }
 function fcDriftFromAct(act) {
-  const S = sessionSamples(act); if (!S) return { err: 'La actividad no tiene datos segundo a segundo.' };
+  const es = getLang() === 'es';
+  const S = sessionSamples(act); if (!S) return { err: es ? 'La actividad no tiene datos segundo a segundo.' : 'The activity has no second-by-second data.' };
   const L = S.list, end = L[L.length - 1].t;
   const laps = typeof lapTimeline === 'function' ? lapTimeline(act) : [];
   let start, dur, how;
   const lap = laps.filter(l => l.dur >= 3000).sort((a, b) => b.dur - a.dur)[0];
-  if (lap) { start = lap.start; dur = Math.min(lap.dur, 3600); how = 'vuelta larga del reloj'; }
-  else if (end >= 900 + 2700) { start = 900; dur = Math.min(3600, end - 900); how = 'desde el minuto 15 (calentamiento fuera)'; }
-  else return { err: 'Hace falta una parte continua de 45–60 min (mejor 60) después del calentamiento.' };
+  if (lap) { start = lap.start; dur = Math.min(lap.dur, 3600); how = es ? 'vuelta larga del reloj' : 'long watch lap'; }
+  else if (end >= 900 + 2700) { start = 900; dur = Math.min(3600, end - 900); how = es ? 'desde el minuto 15 (calentamiento fuera)' : 'from minute 15 (warm-up excluded)'; }
+  else return { err: es ? 'Hace falta una parte continua de 45–60 min (mejor 60) después del calentamiento.' : 'It needs a continuous 45–60 min block (60 is best) after the warm-up.' };
   const h1 = fcSegStats(L, start, start + dur / 2), h2 = fcSegStats(L, start + dur / 2, start + dur), st = fcSegStats(L, start, start + 300);
-  if (!h1 || !h2 || !h1.speed || !h2.speed) return { err: 'No hay datos suficientes.' };
+  if (!h1 || !h2 || !h1.speed || !h2.speed) return { err: es ? 'No hay datos suficientes.' : 'Not enough data.' };
   const ef1 = h1.speed / h1.hr, ef2 = h2.speed / h2.hr;
   const dec = (ef1 - ef2) / ef1 * 100;
   const paceChg = (h1.speed / h2.speed - 1) * 100;
   const startHR = st ? Math.round(st.hr) : Math.round(h1.hr);
   const warn = [];
-  if (dur < 3300) warn.push(`La parte continua duró ${Math.round(dur / 60)} min; el protocolo pide 60.`);
-  if (Math.abs(paceChg) > 4) warn.push(`El ritmo cambió ${paceChg.toFixed(1)} % entre mitades: la prueba de ritmo fijo pide mantenerlo (±2 %).`);
+  if (dur < 3300) warn.push(es ? `La parte continua duró ${Math.round(dur / 60)} min; el protocolo pide 60.` : `The continuous block lasted ${Math.round(dur / 60)} min; the protocol asks for 60.`);
+  if (Math.abs(paceChg) > 4) warn.push(es ? `El ritmo cambió ${paceChg.toFixed(1)} % entre mitades: la prueba de ritmo fijo pide mantenerlo (±2 %).` : `Pace changed ${paceChg.toFixed(1)} % between halves: the fixed-pace test asks you to hold it (±2 %).`);
   const elev = (act.elevGainFt || 0) / ((act.totalDistMi || 1));
-  if (elev > 40) warn.push(`Desnivel de ~${Math.round(elev)} ft por milla: en terreno con subidas la prueba no es comparable. Hazla en plano.`);
+  if (elev > 40) warn.push(es ? `Desnivel de ~${Math.round(elev)} ft por milla: en terreno con subidas la prueba no es comparable. Hazla en plano.` : `~${Math.round(elev)} ft of climb per mile: on hilly ground the test is not comparable. Do it on the flat.`);
   const fl = Number(String(act.manualFields && act.manualFields.feelsLike || '').match(/\d+/));
-  if (fl && fl > 78) warn.push(`Sensación térmica ${fl} °F: el calor sube la deriva por sí solo. Ideal ≤75 °F.`);
-  if (act.analysis && act.analysis.walkPct >= 5) warn.push('Caminaste ≥5 % del tiempo: la prueba no vale.');
-  let verdict, top;
-  if (dec <= 3.5) { verdict = `Deriva ${dec.toFixed(1)} % (≤3.5 %): empezaste por debajo del umbral aeróbico. La Z2 puede llegar a ${startHR} o un poco más; repítela otro día empezando ~3 lpm más alto para afinar.`; top = startHR; }
-  else if (dec <= 5) { verdict = `Deriva ${dec.toFixed(1)} % (3.5–5 %): ${startHR} lpm es tu umbral aeróbico. Techo de Z2 = ${startHR}.`; top = startHR; }
-  else { verdict = `Deriva ${dec.toFixed(1)} % (>5 %): empezaste por encima del umbral aeróbico. Techo de Z2 provisional = ${startHR - 4}; repítela empezando ahí.`; top = startHR - 4; }
+  if (fl && fl > 78) warn.push(es ? `Sensación térmica ${fl} °F: el calor sube la deriva por sí solo. Ideal ≤75 °F.` : `Heat index ${fl} °F: heat raises the drift by itself. Ideal ≤75 °F.`);
+  if (act.analysis && act.analysis.walkPct >= 5) warn.push(es ? 'Caminaste ≥5 % del tiempo: la prueba no vale.' : 'You walked ≥5 % of the time: the test is not valid.');
+  let verdict, top; const d = dec.toFixed(1);
+  if (dec <= 3.5) { verdict = es ? `Deriva ${d} % (≤3.5 %): empezaste por debajo del umbral aeróbico. La Z2 puede llegar a ${startHR} o un poco más; repítela otro día empezando ~3 lpm más alto para afinar.` : `Drift ${d} % (≤3.5 %): you started below the aerobic threshold. Z2 can reach ${startHR} or a bit more; repeat it another day starting ~3 bpm higher to fine-tune.`; top = startHR; }
+  else if (dec <= 5) { verdict = es ? `Deriva ${d} % (3.5–5 %): ${startHR} lpm es tu umbral aeróbico. Techo de Z2 = ${startHR}.` : `Drift ${d} % (3.5–5 %): ${startHR} bpm is your aerobic threshold. Z2 ceiling = ${startHR}.`; top = startHR; }
+  else { verdict = es ? `Deriva ${d} % (>5 %): empezaste por encima del umbral aeróbico. Techo de Z2 provisional = ${startHR - 4}; repítela empezando ahí.` : `Drift ${d} % (>5 %): you started above the aerobic threshold. Provisional Z2 ceiling = ${startHR - 4}; repeat it starting there.`; top = startHR - 4; }
   return { dec, hr1: Math.round(h1.hr), hr2: Math.round(h2.hr), pace1: 1609.344 / h1.speed, pace2: 1609.344 / h2.speed, startHR, top, verdict, how, warn, valid: warn.length === 0, minutes: Math.round(dur / 60) };
 }
 function fcCalSet(k, v) { state.settings.cal = state.settings.cal || {}; state.settings.cal[k] = v; saveState(); render(); }
@@ -3009,52 +3089,167 @@ function fcLogCal(key, from, to) {
   r.version = todayISO() + '-' + (r.log.filter(x => x.dateISO === todayISO()).length);
 }
 function fcApplyLthr(n) {
+  const es = getLang() === 'es';
   n = Math.round(Number(n)); if (!state.profile || !(n > 140 && n < 205)) return;
   const old = state.profile.lthr || 174;
-  if (todayISO() <= FC_CAL.raceISO && !confirm(`Regla del plan: el umbral queda fijo en ${old} hasta después de la carrera del 13-dic.\n\n¿Cambiarlo a ${n} de todos modos? (se anota como decisión tuya)`)) return;
-  if (!confirm(`¿Cambiar el umbral de ${old} a ${n}?\nLas zonas se recalculan desde el umbral (los límites a mano se borran). Las actividades viejas guardan sus zonas.\nCámbialo también en el reloj: Ajustes de usuario → Zonas de frecuencia cardíaca → Umbral de lactato.`)) return;
+  if (todayISO() <= FC_CAL.raceISO && !confirm(es ? `Regla del plan: el umbral queda fijo en ${old} hasta después de la carrera del 13-dic.\n\n¿Cambiarlo a ${n} de todos modos? (se anota como decisión tuya)` : `Plan rule: the threshold stays at ${old} until after the Dec 13 race.\n\nChange it to ${n} anyway? (logged as your decision)`)) return;
+  if (!confirm(es ? `¿Cambiar el umbral de ${old} a ${n}?\nLas zonas se recalculan desde el umbral (los límites a mano se borran). Las actividades viejas guardan sus zonas.\nCámbialo también en el reloj: Ajustes de usuario → Zonas de frecuencia cardíaca → Umbral de lactato.` : `Change the threshold from ${old} to ${n}?\nZones are recalculated from the threshold (manual limits are cleared). Old activities keep their zones.\nChange it on the watch too: User settings → Heart rate zones → Lactate threshold.`)) return;
   state.profile.lthr = n; delete state.profile.zoneBounds;
   fcLogCal('umbral (LTHR)', old, n);
-  saveState(); render(); showToast(`✓ Umbral ${old} → ${n}`);
+  saveState(); render(); showToast((es ? '✓ Umbral ' : '✓ Threshold ') + `${old} → ${n}`);
 }
 function fcApplyZ2Top(top) {
+  const es = getLang() === 'es';
   top = Math.round(Number(top)); if (!state.profile) return;
   const f = Object.assign({}, zoneFloors(state.profile.lthr)), oldTop = f.z3 - 1;
   const nb = { z2: f.z2, z3: top + 1, z4: f.z4, z5: f.z5 };
-  if (!(nb.z2 < nb.z3 && nb.z3 < nb.z4 && nb.z4 < nb.z5)) { showToast('✕ Ese techo no cabe entre la Z2 y la Z4'); return; }
-  if (todayISO() <= FC_CAL.raceISO && !confirm('Regla del plan: las zonas quedan fijas hasta después de la carrera. ¿Cambiar de todos modos?')) return;
-  if (!confirm(`¿Techo de Z2 de ${oldTop} a ${top}? (Z3 empezará en ${top + 1})`)) return;
+  if (!(nb.z2 < nb.z3 && nb.z3 < nb.z4 && nb.z4 < nb.z5)) { showToast(es ? '✕ Ese techo no cabe entre la Z2 y la Z4' : '✕ That ceiling does not fit between Z2 and Z4'); return; }
+  if (todayISO() <= FC_CAL.raceISO && !confirm(es ? 'Regla del plan: las zonas quedan fijas hasta después de la carrera. ¿Cambiar de todos modos?' : 'Plan rule: zones stay fixed until after the race. Change anyway?')) return;
+  if (!confirm(es ? `¿Techo de Z2 de ${oldTop} a ${top}? (Z3 empezará en ${top + 1})` : `Z2 ceiling from ${oldTop} to ${top}? (Z3 will start at ${top + 1})`)) return;
   state.profile.zoneBounds = nb;
   fcLogCal('techo de Z2', oldTop, top);
-  saveState(); render(); showToast(`✓ Techo de Z2 ${oldTop} → ${top}`);
+  saveState(); render(); showToast((es ? '✓ Techo de Z2 ' : '✓ Z2 ceiling ') + `${oldTop} → ${top}`);
+}
+// 2026.11.25-2: guía paso a paso (visible, sin abrir nada) + todo el texto en español o inglés según el idioma.
+function fcCalGuideHtml(es, f, lthr) {
+  const top = f.z3 - 1, cj = fcRule('cooldownJogMax');
+  if (es) return `
+    <div class="fc-cal-steps">
+      <div class="fc-rl-g">Cómo hacer la calibración, paso a paso</div>
+      <p class="fc-mini">Son dos pruebas en días distintos. Primero el umbral (te da todas las zonas) y 3 días después la Z2 (afina el techo de la zona fácil). Cada paso dice qué hacer y cómo saber que salió bien.</p>
+      <div class="fc-cal-ph">A · La semana antes (14–18 dic)</div>
+      <ol class="fc-cal-l">
+        <li>Solo carreras fáciles de 30–40 min en Z1–Z2, o descanso. Nada de calidad ni fuerza de piernas.</li>
+        <li>Revisa cada mañana HRV y FC en reposo. Para hacer la prueba: HRV dentro de tu banda y FC en reposo ≤57.</li>
+        <li>Escoge el lugar: plano y sin tráfico (parque de softball, vueltas de 0.20 mi). Nunca el recorrido de la carrera ni una ida y vuelta con cuesta.</li>
+      </ol>
+      <div class="fc-cal-ph">B · La noche antes</div>
+      <ol class="fc-cal-l">
+        <li>Moja y carga la banda HRM 600. Usa la misma banda en las dos pruebas y en las próximas.</li>
+        <li>En el reloj, confirma: umbral en ${lthr}, <b>detección automática del umbral apagada</b>, zonas por umbral. (El nombre exacto del menú en el Instinct 3: POR CONFIRMAR en tu reloj.)</li>
+        <li>Pon la ropa y los zapatos: Rebel para el umbral, Novablast para la Z2. Los mismos cada vez que repitas la prueba.</li>
+        <li>Duerme 7 h o más. Si duermes menos de 6 h, la prueba se mueve 24–48 h.</li>
+      </ol>
+      <div class="fc-cal-ph">C · Prueba 1, umbral · ${esc(FC_CAL.lthrDay)}, al amanecer (~60 min)</div>
+      <ol class="fc-cal-l">
+        <li><b>Al levantarte:</b> 12–16 oz de agua. 60–90 min antes, 30–50 g de carbohidrato (un guineo, o 2 galletas con miel). Sin cafeína.</li>
+        <li><b>Antes de salir:</b> llena la tarjeta Condiciones de hoy. Si sale en rojo, o la sensación térmica pasa de 78 °F, no la hagas: muévela.</li>
+        <li><b>Calentamiento, 15 min:</b> trote en Z2 (130–148); en los últimos 3 min sube poco a poco hasta ~150.</li>
+        <li><b>4 aceleraciones de 20 s:</b> rápidas y sueltas, 60 s caminando entre cada una. Después, 2 min caminando.</li>
+        <li><b>Aprieta VUELTA y empieza los 30 min.</b> Es el esfuerzo más fuerte que puedas sostener parejo los 30 min, como una carrera de 30 min.</li>
+        <li><b>Minutos 0–5:</b> esfuerzo 7–8 de 10. Si ves menos de 9:50/mi en los primeros 3 min, frena: salir rápido es tu falla número uno. Guía [E]: 10:00–10:20/mi.</li>
+        <li><b>Minuto 10:</b> aprieta VUELTA (así quedan 10 + 20 min; la app lee los últimos 20).</li>
+        <li><b>Minutos 10–25:</b> esfuerzo 8–9 de 10, ritmo parejo. No mires la FC para decidir; corre por esfuerzo.</li>
+        <li><b>Minutos 25–30:</b> esfuerzo 9 de 10. Puedes apretar un poco, sin embalaje final. A los 30 min aprieta VUELTA.</li>
+        <li><b>Sin parar en ningún momento.</b> Más de 30 s detenido o caminando = la prueba no vale.</li>
+        <li><b>Final:</b> 3 min caminando; trote muy suave solo si la FC está en ${cj} o menos; si no, camina 7–10 min.</li>
+        <li><b>Al llegar:</b> sube el TCX, contesta la sensación térmica y la banda usada, y escoge la actividad en "Leer la prueba 1".</li>
+        <li><b>Cómo leerlo:</b> umbral = FC media de los últimos 20 min. Si queda a menos de 3 lpm de ${lthr}, no se cambia nada. Si la app dice "no vale", repítela otro día; no apliques el número. Qué esperar [H]: tu 5K del 4-oct (31:06) se corrió a 185 de media y conversas a 160–165, así que el umbral puede salir por encima de 174.</li>
+        <li><b>Si aplicas el umbral nuevo:</b> cámbialo también en el reloj ese mismo día. Las 24 h siguientes, solo fácil o descanso.</li>
+      </ol>
+      <div class="fc-cal-ph">D · Prueba 2, Z2 por deriva · ${esc(FC_CAL.z2Day)}, al amanecer (~85 min)</div>
+      <ol class="fc-cal-l">
+        <li><b>Con el umbral nuevo ya puesto</b> en la app y en el reloj. Descanso o una fácil corta los 2 días antes.</li>
+        <li><b>Escoge la FC de arranque:</b> el techo de Z2 que tengas (hoy ${top}); la primera vez, 3 lpm por debajo (${top - 3}).</li>
+        <li><b>Calentamiento, 15–20 min:</b> empieza en Z1 y sube poco a poco hasta la FC de arranque. Cuando la FC se quede estable 2–3 min en ese número, mira el ritmo que llevas.</li>
+        <li><b>Aprieta VUELTA y empieza los 60 min.</b> Pon en el reloj una alerta de ritmo de ±10 s/mi alrededor de ese ritmo.</li>
+        <li><b>Durante los 60 min:</b> el mismo ritmo de principio a fin, en plano. <b>No corrijas por la FC</b>: que suba lo que tenga que subir. Esa subida es lo que se mide.</li>
+        <li><b>Agua:</b> sorbos de 2–3 oz solo en los minutos 20 y 40, iguales cada vez que repitas la prueba. Sin caminar.</li>
+        <li><b>A los 60 min:</b> aprieta VUELTA y camina 5 min.</li>
+        <li><b>Al llegar:</b> sube el TCX y escoge la actividad en "Leer la prueba 2".</li>
+        <li><b>Cómo leerlo:</b> la app compara ritmo por latido de la 1.ª mitad y la 2.ª. Deriva ≤3.5 % = empezaste bajo; repítela otro día con +3 lpm. 3.5–5 % = esa FC de arranque es tu techo de Z2. Más de 5 % = empezaste alto; techo provisional = arranque − 4, y repítela con ese número.</li>
+        <li><b>No vale si:</b> hizo más de 78 °F, hubo cuestas, caminaste 5 % o más, el ritmo cambió más de ±2 % entre mitades o te paraste.</li>
+      </ol>
+      <div class="fc-cal-ph">E · Después</div>
+      <ol class="fc-cal-l">
+        <li>Anota en el chat el umbral y el techo de Z2 que salieron, y la sensación térmica de cada prueba.</li>
+        <li>Repite las dos ${esc(FC_CAL.nextLthr)} (Z2 ${esc(FC_CAL.nextZ2)}), siempre con el mismo lugar, hora, banda y zapatos.</li>
+      </ol>
+    </div>`;
+  return `
+    <div class="fc-cal-steps">
+      <div class="fc-rl-g">How to run the calibration, step by step</div>
+      <p class="fc-mini">Two tests on different days. First the threshold (it sets every zone), then 3 days later Z2 (it fine-tunes the ceiling of the easy zone). Each step says what to do and how to tell it went right.</p>
+      <div class="fc-cal-ph">A · The week before (Dec 14–18)</div>
+      <ol class="fc-cal-l">
+        <li>Only easy runs of 30–40 min in Z1–Z2, or rest. No quality work and no leg strength.</li>
+        <li>Check HRV and resting HR every morning. To run the test: HRV inside your band and resting HR ≤57.</li>
+        <li>Pick the place: flat and traffic-free (softball park, 0.20 mi laps). Never the race course or an out-and-back with a hill.</li>
+      </ol>
+      <div class="fc-cal-ph">B · The night before</div>
+      <ol class="fc-cal-l">
+        <li>Wet and charge the HRM 600 strap. Use the same strap for both tests and every repeat.</li>
+        <li>On the watch, confirm: threshold at ${lthr}, <b>automatic threshold detection off</b>, zones based on threshold. (Exact menu name on the Instinct 3: TO BE CONFIRMED on your watch.)</li>
+        <li>Lay out clothes and shoes: Rebel for the threshold test, Novablast for Z2. The same pair every time you repeat it.</li>
+        <li>Sleep 7 h or more. With less than 6 h, move the test 24–48 h.</li>
+      </ol>
+      <div class="fc-cal-ph">C · Test 1, threshold · Saturday Dec 19, at dawn (~60 min)</div>
+      <ol class="fc-cal-l">
+        <li><b>When you wake up:</b> 12–16 oz of water. 60–90 min before, 30–50 g of carbohydrate (a banana, or 2 crackers with honey). No caffeine.</li>
+        <li><b>Before you go:</b> fill in Today's conditions. If it comes out red, or the heat index is above 78 °F, don't do it: move it.</li>
+        <li><b>Warm-up, 15 min:</b> jog in Z2 (130–148); in the last 3 min build gradually to ~150.</li>
+        <li><b>4 strides of 20 s:</b> fast and relaxed, 60 s walking between them. Then walk 2 min.</li>
+        <li><b>Press LAP and start the 30 min.</b> It is the hardest effort you can hold evenly for 30 min, like a 30-min race.</li>
+        <li><b>Minutes 0–5:</b> effort 7–8 out of 10. If you see faster than 9:50/mi in the first 3 min, ease off: going out fast is your number-one fault. Guide [E]: 10:00–10:20/mi.</li>
+        <li><b>Minute 10:</b> press LAP (that leaves 10 + 20 min; the app reads the last 20).</li>
+        <li><b>Minutes 10–25:</b> effort 8–9 out of 10, even pace. Don't use HR to decide; run by effort.</li>
+        <li><b>Minutes 25–30:</b> effort 9 out of 10. You can press a little, no final sprint. At 30 min press LAP.</li>
+        <li><b>Never stop.</b> More than 30 s stopped or walking = the test is not valid.</li>
+        <li><b>Cooldown:</b> walk 3 min; very easy jog only if HR is at ${cj} or lower; otherwise walk 7–10 min.</li>
+        <li><b>Back home:</b> upload the TCX, answer the heat index and strap used, and pick the activity under "Read test 1".</li>
+        <li><b>How to read it:</b> threshold = average HR of the last 20 min. If it is within 3 bpm of ${lthr}, change nothing. If the app says "not valid", repeat it another day; don't apply the number. What to expect [H]: your Oct 4 5K (31:06) was run at an average of 185 and you can talk at 160–165, so the threshold may come out above 174.</li>
+        <li><b>If you apply the new threshold:</b> change it on the watch the same day. For the next 24 h, only easy running or rest.</li>
+      </ol>
+      <div class="fc-cal-ph">D · Test 2, Z2 by drift · Tuesday Dec 22, at dawn (~85 min)</div>
+      <ol class="fc-cal-l">
+        <li><b>With the new threshold already set</b> in the app and on the watch. Rest or one short easy run in the 2 days before.</li>
+        <li><b>Pick the starting HR:</b> your current Z2 ceiling (today ${top}); the first time, 3 bpm below it (${top - 3}).</li>
+        <li><b>Warm-up, 15–20 min:</b> start in Z1 and build gradually to the starting HR. When HR holds steady for 2–3 min on that number, note the pace you are running.</li>
+        <li><b>Press LAP and start the 60 min.</b> Set a pace alert of ±10 s/mi around that pace on the watch.</li>
+        <li><b>During the 60 min:</b> the same pace from start to finish, on the flat. <b>Do not correct for HR</b>: let it rise as much as it rises. That rise is what is measured.</li>
+        <li><b>Water:</b> 2–3 oz sips only at minutes 20 and 40, the same every time you repeat it. No walking.</li>
+        <li><b>At 60 min:</b> press LAP and walk 5 min.</li>
+        <li><b>Back home:</b> upload the TCX and pick the activity under "Read test 2".</li>
+        <li><b>How to read it:</b> the app compares pace per heartbeat in the 1st and 2nd halves. Drift ≤3.5 % = you started low; repeat another day +3 bpm. 3.5–5 % = that starting HR is your Z2 ceiling. Over 5 % = you started high; provisional ceiling = start − 4, and repeat with that number.</li>
+        <li><b>Not valid if:</b> it was hotter than 78 °F, there were hills, you walked 5 % or more, pace changed more than ±2 % between halves, or you stopped.</li>
+      </ol>
+      <div class="fc-cal-ph">E · Afterwards</div>
+      <ol class="fc-cal-l">
+        <li>Write the threshold and Z2 ceiling you got, and each test's heat index, in the chat.</li>
+        <li>Repeat both in the week of Feb 1–7, 2027 (Z2 3–4 days after that test), always with the same place, time, strap and shoes.</li>
+      </ol>
+    </div>`;
 }
 function fcCalCardHtml() {
+  const es = getLang() === 'es', bpm = es ? 'lpm' : 'bpm';
   const p = state.profile || {}, lthr = p.lthr || 174, f = zoneFloors(lthr), cal = state.settings.cal || {};
   const acts = fcCalActs();
-  const opt = sel => `<option value="">— escoge la actividad de la prueba —</option>` + acts.map(a => `<option value="${esc(a.id)}" ${sel === a.id ? 'selected' : ''}>${esc(a.dateISO)} · ${(a.totalDistMi || 0).toFixed(2)} mi · ${Math.round(a.totalTimeSec / 60)} min</option>`).join('');
+  const opt = sel => `<option value="">${es ? '— escoge la actividad de la prueba —' : '— choose the test activity —'}</option>` + acts.map(a => `<option value="${esc(a.id)}" ${sel === a.id ? 'selected' : ''}>${esc(a.dateISO)} · ${(a.totalDistMi || 0).toFixed(2)} mi · ${Math.round(a.totalTimeSec / 60)} min</option>`).join('');
   const la = cal.lthrAct ? state.tcxSessions.find(a => a.id === cal.lthrAct) : null;
   const za = cal.z2Act ? state.tcxSessions.find(a => a.id === cal.z2Act) : null;
   const R1 = la ? fcLthrFromAct(la) : null, R2 = za ? fcDriftFromAct(za) : null;
   const zoneRow = (L) => { const q = { z2: Math.round(L * ZONE_PCT.z2), z3: Math.round(L * ZONE_PCT.z3), z4: Math.round(L * ZONE_PCT.z4), z5: Math.round(L * ZONE_PCT.z5) };
-    return `Z1 &lt;${q.z2} · Z2 ${q.z2}–${q.z3 - 1} · Z3 ${q.z3}–${q.z4 - 1} · Z4 ${q.z4}–${L} (sostenido ${q.z4}–${L - 2}) · Z5 ≥${q.z5}`; };
+    return `Z1 &lt;${q.z2} · Z2 ${q.z2}–${q.z3 - 1} · Z3 ${q.z3}–${q.z4 - 1} · Z4 ${q.z4}–${L} (${es ? 'sostenido' : 'sustained'} ${q.z4}–${L - 2}) · Z5 ≥${q.z5}`; };
   const W = arr => arr && arr.length ? `<ul class="fc-cal-w">${arr.map(w => `<li>${esc(w)}</li>`).join('')}</ul>` : '';
   const res1 = R1 ? (R1.err ? `<p class="fc-cal-bad">${esc(R1.err)}</p>` : `<div class="fc-cal-res">
-      <div><b>Umbral medido: ${R1.lthr} lpm</b> (FC media de los últimos 20 min; actual ${lthr}, diferencia ${R1.lthr - lthr >= 0 ? '+' : ''}${R1.lthr - lthr})</div>
-      <div class="fc-mini">Primeros 10 min ${R1.first10} · 30 min ${R1.avg30} · ritmo ${secToMMSS(Math.round(R1.paceSec))}/mi · CV ${R1.cv.toFixed(1)} % · ${esc(R1.how)}</div>
-      <div class="fc-mini">Zonas con ${R1.lthr}: ${zoneRow(R1.lthr)}</div>${W(R1.warn)}
-      ${Math.abs(R1.lthr - lthr) < 3 ? '<p class="fc-mini">Menos de 3 lpm de diferencia: no cambies nada; tu umbral está bien.</p>' : R1.valid ? `<button type="button" class="btn btn-primary" style="width:100%;margin-top:6px;" onclick="fcApplyLthr(${R1.lthr})">APLICAR UMBRAL ${R1.lthr}</button>` : '<p class="fc-cal-bad">Repite la prueba antes de cambiar el umbral.</p>'}
+      <div><b>${es ? 'Umbral medido' : 'Measured threshold'}: ${R1.lthr} ${bpm}</b> (${es ? `FC media de los últimos 20 min; actual ${lthr}, diferencia` : `average HR of the last 20 min; current ${lthr}, difference`} ${R1.lthr - lthr >= 0 ? '+' : ''}${R1.lthr - lthr})</div>
+      <div class="fc-mini">${es ? 'Primeros 10 min' : 'First 10 min'} ${R1.first10} · 30 min ${R1.avg30} · ${es ? 'ritmo' : 'pace'} ${secToMMSS(Math.round(R1.paceSec))}/mi · CV ${R1.cv.toFixed(1)} % · ${esc(R1.how)}</div>
+      <div class="fc-mini">${es ? 'Zonas con' : 'Zones with'} ${R1.lthr}: ${zoneRow(R1.lthr)}</div>${W(R1.warn)}
+      ${Math.abs(R1.lthr - lthr) < 3 ? `<p class="fc-mini">${es ? 'Menos de 3 lpm de diferencia: no cambies nada; tu umbral está bien.' : 'Less than 3 bpm apart: change nothing; your threshold is right.'}</p>` : R1.valid ? `<button type="button" class="btn btn-primary" style="width:100%;margin-top:6px;" onclick="fcApplyLthr(${R1.lthr})">${es ? 'APLICAR UMBRAL' : 'APPLY THRESHOLD'} ${R1.lthr}</button>` : `<p class="fc-cal-bad">${es ? 'Repite la prueba antes de cambiar el umbral.' : 'Repeat the test before changing the threshold.'}</p>`}
     </div>`) : '';
   const res2 = R2 ? (R2.err ? `<p class="fc-cal-bad">${esc(R2.err)}</p>` : `<div class="fc-cal-res">
       <div><b>${esc(R2.verdict)}</b></div>
-      <div class="fc-mini">${R2.minutes} min (${esc(R2.how)}) · 1.ª mitad ${secToMMSS(Math.round(R2.pace1))}/mi a ${R2.hr1} · 2.ª mitad ${secToMMSS(Math.round(R2.pace2))}/mi a ${R2.hr2} · FC al empezar ${R2.startHR}</div>${W(R2.warn)}
-      ${R2.dec <= 3.5 && R2.top <= f.z3 - 1 ? `<p class="fc-mini">No bajes la Z2 por esto: empezaste en ${R2.startHR}, por debajo de tu techo actual (${f.z3 - 1}). Repítela empezando en ${f.z3 - 1}.</p>` : R2.top !== f.z3 - 1 ? (R2.valid ? `<button type="button" class="btn btn-primary" style="width:100%;margin-top:6px;" onclick="fcApplyZ2Top(${R2.top})">APLICAR TECHO DE Z2 ${R2.top}</button>` : '<p class="fc-cal-bad">Corrige lo de arriba y repítela antes de cambiar la Z2.</p>') : '<p class="fc-mini">Coincide con tu techo actual de Z2: no hay que cambiar nada.</p>'}
+      <div class="fc-mini">${R2.minutes} min (${esc(R2.how)}) · ${es ? '1.ª mitad' : '1st half'} ${secToMMSS(Math.round(R2.pace1))}/mi ${es ? 'a' : 'at'} ${R2.hr1} · ${es ? '2.ª mitad' : '2nd half'} ${secToMMSS(Math.round(R2.pace2))}/mi ${es ? 'a' : 'at'} ${R2.hr2} · ${es ? 'FC al empezar' : 'starting HR'} ${R2.startHR}</div>${W(R2.warn)}
+      ${R2.dec <= 3.5 && R2.top <= f.z3 - 1 ? `<p class="fc-mini">${es ? `No bajes la Z2 por esto: empezaste en ${R2.startHR}, por debajo de tu techo actual (${f.z3 - 1}). Repítela empezando en ${f.z3 - 1}.` : `Don't lower Z2 because of this: you started at ${R2.startHR}, below your current ceiling (${f.z3 - 1}). Repeat it starting at ${f.z3 - 1}.`}</p>` : R2.top !== f.z3 - 1 ? (R2.valid ? `<button type="button" class="btn btn-primary" style="width:100%;margin-top:6px;" onclick="fcApplyZ2Top(${R2.top})">${es ? 'APLICAR TECHO DE Z2' : 'APPLY Z2 CEILING'} ${R2.top}</button>` : `<p class="fc-cal-bad">${es ? 'Corrige lo de arriba y repítela antes de cambiar la Z2.' : 'Fix the items above and repeat it before changing Z2.'}</p>`) : `<p class="fc-mini">${es ? 'Coincide con tu techo actual de Z2: no hay que cambiar nada.' : 'It matches your current Z2 ceiling: nothing to change.'}</p>`}
     </div>`) : '';
   const lastCal = ((state.settings.rules || {}).log || []).find(x => /umbral|Z2/.test(x.key));
-  return `<div class="card fc-cal">
-    <p><b>Hoy:</b> umbral ${lthr} lpm · ${zoneRow(lthr)}${p.zoneBounds ? ' (límites a mano en el perfil)' : ''}. Z2 validada el 27-oct con 30 min a ritmo fijo (deriva 0.1 %).${lastCal ? ` Último cambio: ${esc(lastCal.dateISO)} (${esc(lastCal.key)} ${lastCal.from} → ${lastCal.to}).` : ''}</p>
-    <p class="fc-cal-rule">Regla del plan: <b>nada de calibrar ni cambiar zonas antes del 10K del 13-dic.</b> Una prueba de 30 min a fondo es una sesión de calidad que no está en el plan, y cambiar las zonas a 3 semanas de la carrera mueve todas las referencias del bloque.</p>
-
-    <details open><summary>Calendario recomendado</summary>
+  const keyEn = k => es ? k : String(k).replace('umbral (LTHR)', 'threshold (LTHR)').replace('techo de Z2', 'Z2 ceiling');
+  const head = es
+    ? `<p><b>Hoy:</b> umbral ${lthr} lpm · ${zoneRow(lthr)}${p.zoneBounds ? ' (límites a mano en el perfil)' : ''}. Z2 validada el 27-oct con 30 min a ritmo fijo (deriva 0.1 %).${lastCal ? ` Último cambio: ${esc(lastCal.dateISO)} (${esc(lastCal.key)} ${lastCal.from} → ${lastCal.to}).` : ''}</p>
+    <p class="fc-cal-rule">Regla del plan: <b>nada de calibrar ni cambiar zonas antes del 10K del 13-dic.</b> Una prueba de 30 min a fondo es una sesión de calidad que no está en el plan, y cambiar las zonas a 3 semanas de la carrera mueve todas las referencias del bloque.</p>`
+    : `<p><b>Today:</b> threshold ${lthr} bpm · ${zoneRow(lthr)}${p.zoneBounds ? ' (manual limits in the profile)' : ''}. Z2 validated on Oct 27 with 30 min at a fixed pace (0.1 % drift).${lastCal ? ` Last change: ${esc(lastCal.dateISO)} (${esc(keyEn(lastCal.key))} ${lastCal.from} → ${lastCal.to}).` : ''}</p>
+    <p class="fc-cal-rule">Plan rule: <b>no calibration and no zone changes before the Dec 13 10K.</b> An all-out 30-min test is a quality session that is not in the plan, and changing zones 3 weeks from the race moves every reference in the block.</p>`;
+  const calTable = es ? `<details><summary>Calendario recomendado</summary>
     <table class="fc-ft"><thead><tr><th>Cuándo</th><th>Qué</th><th>Por qué ese día</th></tr></thead><tbody>
       <tr><td>14–18 dic</td><td>Solo fáciles en Z1–Z2 (30–40 min) o descanso</td><td>Recuperar del 10K; la HRV y la FC en reposo vuelven a su banda en 3–5 días</td></tr>
       <tr><td><b>${FC_CAL.lthrDay}</b>, 5:15–6:30 am</td><td><b>Prueba 1: umbral (30 min)</b></td><td>6 días después de la carrera, ≥72 h sin calidad, día libre, amanecer fresco</td></tr>
@@ -3062,9 +3257,17 @@ function fcCalCardHtml() {
       <tr><td><b>${FC_CAL.z2Day}</b>, 5:15–7:00 am</td><td><b>Prueba 2: Z2 por deriva (60 min)</b></td><td>Martes libre; se hace con el umbral nuevo ya puesto</td></tr>
       <tr><td>${FC_CAL.nextLthr}</td><td>Repetir las dos (umbral primero, Z2 ${FC_CAL.nextZ2})</td><td>Cada 6–8 semanas de entrenamiento</td></tr>
     </tbody></table>
-    <p class="fc-mini"><b>Repite antes de tiempo si:</b> (a) en 3 fáciles con clima parecido la FC baja ≥5 lpm al mismo ritmo; (b) 3 fáciles seguidas con desacople &lt;3 %; (c) en el ritmo sostenido la franja 165–172 se siente ≤6/10 dos veces; (d) volviste de ≥2 semanas sin entrenar o de una enfermedad (primero 1 semana normal); (e) cambiaste de banda o de reloj.</p></details>
-
-    <details><summary>Condiciones que valen para las dos pruebas</summary><ul class="fc-cal-l">
+    <p class="fc-mini"><b>Repite antes de tiempo si:</b> (a) en 3 fáciles con clima parecido la FC baja ≥5 lpm al mismo ritmo; (b) 3 fáciles seguidas con desacople &lt;3 %; (c) en el ritmo sostenido la franja 165–172 se siente ≤6/10 dos veces; (d) volviste de ≥2 semanas sin entrenar o de una enfermedad (primero 1 semana normal); (e) cambiaste de banda o de reloj.</p></details>`
+    : `<details><summary>Recommended calendar</summary>
+    <table class="fc-ft"><thead><tr><th>When</th><th>What</th><th>Why that day</th></tr></thead><tbody>
+      <tr><td>Dec 14–18</td><td>Only easy Z1–Z2 runs (30–40 min) or rest</td><td>Recover from the 10K; HRV and resting HR return to their band in 3–5 days</td></tr>
+      <tr><td><b>Sat Dec 19</b>, 5:15–6:30 am</td><td><b>Test 1: threshold (30 min)</b></td><td>6 days after the race, ≥72 h without quality, day off, cool dawn</td></tr>
+      <tr><td>Dec 20–21</td><td>Rest and one short easy run</td><td>48 h before test 2</td></tr>
+      <tr><td><b>Tue Dec 22</b>, 5:15–7:00 am</td><td><b>Test 2: Z2 by drift (60 min)</b></td><td>Free Tuesday; done with the new threshold already set</td></tr>
+      <tr><td>Week of Feb 1–7, 2027</td><td>Repeat both (threshold first, Z2 3–4 days later)</td><td>Every 6–8 weeks of training</td></tr>
+    </tbody></table>
+    <p class="fc-mini"><b>Repeat early if:</b> (a) in 3 easy runs in similar weather HR drops ≥5 bpm at the same pace; (b) 3 easy runs in a row with decoupling &lt;3 %; (c) at threshold pace the 165–172 band feels ≤6/10 twice; (d) you come back from ≥2 weeks off or an illness (first 1 normal week); (e) you changed strap or watch.</p></details>`;
+  const conds = es ? `<details><summary>Condiciones que valen para las dos pruebas</summary><ul class="fc-cal-l">
       <li><b>Hora:</b> al amanecer (5:15–6:30 am), sensación térmica ≤75 °F. Con más de 78 °F la FC sale alta: muévela de día. Anota la sensación térmica.</li>
       <li><b>Lugar:</b> plano y sin tráfico: parque de softball (vueltas de 0.20 mi) o el falso plano. Nunca en el recorrido ni en ida y vuelta con cuesta.</li>
       <li><b>Banda:</b> HRM 600 mojada, ajustada; la misma en todas las pruebas. Reloj con la detección automática del umbral <b>apagada</b>.</li>
@@ -3074,39 +3277,28 @@ function fcCalCardHtml() {
       <li><b>Agua:</b> 12–16 oz al levantarte. En la prueba 2, sorbos de 2–3 oz en los minutos 20 y 40, iguales en cada repetición.</li>
       <li><b>Antes:</b> ≥72 h sin calidad para el umbral; ≥48 h para la Z2; nada de fuerza de piernas el día antes.</li>
       <li><b>Solo:</b> sin grupo ni conversación; con gente la FC no se compara.</li>
-    </ul></details>
-
-    <details><summary>Prueba 1 · Umbral (LTHR) · ~60 min en total</summary><ol class="fc-cal-l">
-      <li><b>Calentamiento (15 min):</b> trote en Z2 (130–148), los últimos 3 min subiendo hasta ~150.</li>
-      <li><b>Aceleraciones (4 × 20 s):</b> rápidas y sueltas, 60 s caminando entre cada una. Después, 2 min caminando.</li>
-      <li><b>Prueba (30 min seguidos, solo):</b> el esfuerzo más fuerte que puedas sostener <b>parejo</b> los 30 min, como una carrera de 30 min. Aprieta VUELTA al empezar, a los 10 min y a los 30 min (quedan vueltas de 10 + 20 min).
-        <ul><li>Min 0–5: controlado, esfuerzo 7–8/10. Tu falla número uno es salir rápido: si ves menos de 9:50/mi en los primeros 3 min, frena. Guía [E]: 10:00–10:20/mi.</li>
-        <li>Min 5–25: esfuerzo 8–9/10, ritmo parejo. La FC sube despacio; no persigas un número.</li>
-        <li>Min 25–30: esfuerzo 9/10, puedes apretar un poco. Nada de embalaje final.</li>
-        <li>Sin pararte. Si te detienes más de 30 s, la prueba no vale.</li></ul></li>
-      <li><b>Final:</b> 3 min caminando y 7–10 min de trote muy suave solo con FC ≤${fcRule('cooldownJogMax')}.</li>
-      <li><b>Lectura:</b> umbral = FC media de los últimos 20 min. Escoge la actividad abajo y la app lo calcula (también revisa si saliste rápido, si te paraste o si hizo calor).</li>
-      <li><b>Qué esperar [H]:</b> tu 5K del 4-oct (31:06) se corrió a 185 de media y conversas a 160–165, así que el umbral puede salir por encima de 174. Si sale a menos de 3 lpm de 174, no se cambia nada.</li>
-      <li><b>Las 24 h siguientes:</b> solo fácil o descanso; 48 h antes de la próxima calidad.</li>
-    </ol></details>
-
-    <details><summary>Prueba 2 · Z2 por deriva (umbral aeróbico) · ~85 min en total</summary><ol class="fc-cal-l">
-      <li><b>Con el umbral nuevo ya aplicado.</b> FC de arranque = techo actual de Z2 (${f.z3 - 1}) o el que salga del umbral nuevo; la primera vez, 3 lpm por debajo de ese techo.</li>
-      <li><b>Calentamiento (15–20 min):</b> empieza en Z1 y sube poco a poco hasta la FC de arranque. Cuando la FC esté <b>estable 2–3 min</b> en ese número, aprieta VUELTA.</li>
-      <li><b>Prueba (60 min):</b> mantén <b>el mismo ritmo</b> de ese momento los 60 min en plano (alerta de ritmo ±10 s/mi en el reloj). No corrijas por la FC: que suba lo que tenga que subir. Sin caminar; sorbos solo en los minutos 20 y 40.</li>
-      <li><b>Final:</b> aprieta VUELTA a los 60 min y camina 5 min.</li>
-      <li><b>Lectura (la app la calcula):</b> deriva = cuánto empeora el ritmo por latido de la 1.ª mitad a la 2.ª.
-        <ul><li>≤3.5 %: empezaste por debajo; la Z2 puede subir. Repite otro día con +3 lpm.</li>
-        <li>3.5–5 %: la FC de arranque es tu umbral aeróbico = <b>techo de Z2</b>.</li>
-        <li>&gt;5 %: empezaste por encima; techo provisional = FC de arranque − 4. Repite con ese número.</li></ul></li>
-      <li><b>No vale si:</b> hizo más de 78 °F, hubo cuestas, caminaste ≥5 %, el ritmo cambió más de ±2 % entre mitades o paraste.</li>
-    </ol></details>
-
-    <div class="fc-cal-box"><div class="fc-rl-g">Leer la prueba 1 (umbral)</div>
-      <select aria-label="Actividad de la prueba de umbral" onchange="fcCalSet('lthrAct', this.value)" class="fc-cal-sel">${opt(cal.lthrAct)}</select>${res1}</div>
-    <div class="fc-cal-box"><div class="fc-rl-g">Leer la prueba 2 (Z2 por deriva)</div>
-      <select aria-label="Actividad de la prueba de Z2" onchange="fcCalSet('z2Act', this.value)" class="fc-cal-sel">${opt(cal.z2Act)}</select>${res2}</div>
-    <p class="fc-mini">Fuentes de los protocolos: prueba de 30 min de Joe Friel (FC media de los últimos 20 min ≈ umbral) y prueba de deriva de FC de Uphill Athlete (60 min estables; ≤5 % = por debajo del umbral aeróbico). Los ritmos guía son estimaciones [E] con tus sesiones de noviembre.</p>
+    </ul></details>`
+    : `<details><summary>Conditions that apply to both tests</summary><ul class="fc-cal-l">
+      <li><b>Time:</b> at dawn (5:15–6:30 am), heat index ≤75 °F. Above 78 °F HR reads high: move it to another day. Write down the heat index.</li>
+      <li><b>Place:</b> flat and traffic-free: softball park (0.20 mi laps) or the false flat. Never the race course or an out-and-back with a hill.</li>
+      <li><b>Strap:</b> HRM 600, wet and snug; the same in every test. Automatic threshold detection on the watch <b>off</b>.</li>
+      <li><b>Shoes:</b> the same every time (Rebel for threshold, Novablast for Z2).</li>
+      <li><b>Body:</b> sleep ≥7 h, HRV inside its band, resting HR ≤57, no pain, energy ≥7. If one fails, postpone 24–48 h. Use Today's conditions.</li>
+      <li><b>Food and caffeine:</b> the same every time. No caffeine before (your Celsius is at 9 am). Threshold: 30–50 g of carbohydrate 60–90 min before. Z2: water and your usual.</li>
+      <li><b>Water:</b> 12–16 oz when you wake up. In test 2, 2–3 oz sips at minutes 20 and 40, the same each repeat.</li>
+      <li><b>Before:</b> ≥72 h without quality for the threshold test; ≥48 h for Z2; no leg strength the day before.</li>
+      <li><b>Alone:</b> no group or conversation; with people HR is not comparable.</li>
+    </ul></details>`;
+  return `<div class="card fc-cal">
+    ${head}
+    ${fcCalGuideHtml(es, f, lthr)}
+    ${calTable}
+    ${conds}
+    <div class="fc-cal-box"><div class="fc-rl-g">${es ? 'Leer la prueba 1 (umbral)' : 'Read test 1 (threshold)'}</div>
+      <select aria-label="${es ? 'Actividad de la prueba de umbral' : 'Threshold test activity'}" onchange="fcCalSet('lthrAct', this.value)" class="fc-cal-sel">${opt(cal.lthrAct)}</select>${res1}</div>
+    <div class="fc-cal-box"><div class="fc-rl-g">${es ? 'Leer la prueba 2 (Z2 por deriva)' : 'Read test 2 (Z2 by drift)'}</div>
+      <select aria-label="${es ? 'Actividad de la prueba de Z2' : 'Z2 test activity'}" onchange="fcCalSet('z2Act', this.value)" class="fc-cal-sel">${opt(cal.z2Act)}</select>${res2}</div>
+    <p class="fc-mini">${es ? 'Fuentes de los protocolos: prueba de 30 min de Joe Friel (FC media de los últimos 20 min ≈ umbral) y prueba de deriva de FC de Uphill Athlete (60 min estables; ≤5 % = por debajo del umbral aeróbico). Los ritmos guía son estimaciones [E] con tus sesiones de noviembre.' : 'Protocol sources: Joe Friel\'s 30-min test (average HR of the last 20 min ≈ threshold) and Uphill Athlete\'s HR drift test (60 steady min; ≤5 % = below the aerobic threshold). Guide paces are estimates [E] from your November sessions.'}</p>
   </div>`;
 }
 
@@ -4148,7 +4340,12 @@ function fcCalCardHtml() {
     };
 
     const ZONE_COLORS = { 1: '#6b9bbd', 2: '#78a84a', 3: '#d4942e', 4: '#c9a961', 5: '#d0675b' }; // 2026.11.01: legibles como texto (≥4.5:1)
-    const ZONE_LABELS = { 1: 'Z1 RECOVERY', 2: 'Z2 AEROBIC', 3: 'Z3 TEMPO', 4: 'Z4 THRESH', 5: 'Z5 MAX' };
+    // 2026.11.25-2: según el idioma escogido
+    const ZONE_LABELS = {
+      get 1() { return getLang() === 'es' ? 'Z1 RECUPERACIÓN' : 'Z1 RECOVERY'; }, get 2() { return getLang() === 'es' ? 'Z2 AERÓBICA' : 'Z2 AEROBIC'; },
+      get 3() { return getLang() === 'es' ? 'Z3 MODERADA' : 'Z3 TEMPO'; }, get 4() { return getLang() === 'es' ? 'Z4 UMBRAL' : 'Z4 THRESH'; },
+      get 5() { return getLang() === 'es' ? 'Z5 MÁXIMA' : 'Z5 MAX'; }
+    };
     const ZONE_OBJECTIVES = {
       1: { en: 'Active recovery, warm-up and cool-down', es: 'Recuperación activa, calentamiento y enfriamiento' },
       2: { en: 'Aerobic base building and cardiovascular efficiency', es: 'Construcción de base aeróbica y eficiencia cardiovascular' },
@@ -6785,6 +6982,12 @@ function fcCalCardHtml() {
       saveState();
       render();
     }
+    function fcSwitchLang() {
+      try { if (typeof fcSayStop === 'function') fcSayStop(); } catch (e) {}
+      _focusAfterRender = 'fc-lang-btn';
+      toggleLang();
+      showToast(getLang() === 'es' ? '✓ Idioma: español' : '✓ Language: English');
+    }
 
     function updateLTHR(newLTHR) {
       if (!state.profile) return;
@@ -6847,7 +7050,7 @@ function fcCalCardHtml() {
       summary_label: { en: 'SUMMARY', es: 'RESUMEN' },
       stat_distance: { en: 'Distance', es: 'Distancia' },
       stat_time: { en: 'Time', es: 'Tiempo' },
-      stat_avg_pace: { en: 'Avg Pace', es: 'Pace Promedio' },
+      stat_avg_pace: { en: 'Avg Pace', es: 'Ritmo promedio' },
       stat_avg_hr: { en: 'Avg HR', es: 'FC Promedio' },
       stat_max_hr: { en: 'Max HR', es: 'FC Máxima' },
       stat_avg_cad: { en: 'Avg Cadence', es: 'Cadencia Promedio' },
@@ -6955,10 +7158,10 @@ function fcCalCardHtml() {
       pace_ref_sub: { en: 'Auto-updates with your current 5K time', es: 'Se actualiza automáticamente con tu tiempo actual de 5K' },
       pace_ref_col_type: { en: 'Type', es: 'Tipo' },
       pace_ref_col_session: { en: 'Session', es: 'Sesión' },
-      pace_ref_col_pace: { en: 'Pace', es: 'Pace' },
+      pace_ref_col_pace: { en: 'Pace', es: 'Ritmo' },
       pace_ref_col_zone: { en: 'HR Zone', es: 'Zona FC' },
       pace_ref_effort_only: { en: 'Effort-based (grade varies pace)', es: 'Basado en esfuerzo (la pendiente varía el pace)' },
-      pace_override_header: { en: 'My Pace Override', es: 'Mi Pace Override' },
+      pace_override_header: { en: 'My Pace Override', es: 'Mi ritmo personalizado' },
       pace_override_edit: { en: 'EDIT PACE', es: 'EDITAR PACE' },
       pace_override_apply: { en: 'APPLY', es: 'APLICAR' },
       pace_override_cancel: { en: 'CANCEL', es: 'CANCELAR' },
@@ -7010,7 +7213,7 @@ function fcCalCardHtml() {
       stats_injuries: { en: 'Injuries', es: 'Lesiones' },
       stats_reports: { en: 'Reports', es: 'Reportes' },
       stats_context: { en: 'Context', es: 'Contexto' },
-      stats_pace_trend: { en: 'Pace Trend', es: 'Tendencia de Pace' },
+      stats_pace_trend: { en: 'Pace Trend', es: 'Tendencia del ritmo' },
       stats_hr_trend: { en: 'Heart Rate Trend', es: 'Tendencia FC' },
       stats_vdot_trend: { en: 'VDOT & 5K Prediction', es: 'VDOT y Predicción 5K' },
       stats_no_data: { en: 'No data yet', es: 'Sin datos aún' },
@@ -8026,7 +8229,7 @@ function fcCalCardHtml() {
       const good = f0.good.filter(g => !skip.test(g)).slice(0, 3);
       const fix = f0.fix.slice(0, 3);
       const day = parseISODateLocal(prev[0].dateISO).toLocaleDateString(es ? 'es-PR' : 'en-US', { weekday: 'short', day: 'numeric', month: 'short' });
-      const li = (arr, extra) => arr.map(x => `<li>${esc(x)}${extra ? extra(x) : ''}</li>`).join('');
+      const li = (arr, extra) => arr.map(x => `<li>${esc(fcTx(x))}${extra ? extra(x) : ''}</li>`).join('');
       return `<div class="tp-byg" onclick="event.stopPropagation()">
         <div class="tp-byg-title">${es ? 'ANTES DE SALIR' : 'BEFORE YOU GO'} · ${es ? 'la última vez' : 'last time'} (${day})</div>
         ${bad.length ? `<div class="tp-byg-h bad">${es ? 'Fallaste' : 'You missed'}</div><ul>${li(bad, x => again(x) ? `<b class="tp-byg-rep"> · ${es ? '2.ª vez seguida' : '2nd time in a row'}</b>` : '')}</ul>` : `<div class="tp-byg-h good">${es ? 'Sin fallas la última vez' : 'No misses last time'}</div>`}
@@ -9340,7 +9543,7 @@ function fcCalCardHtml() {
       const segs = [1, 2, 3, 4, 5].map(k => { const p = (sec[k] || 0) / tot * 100; return p > 0 ? `<span style="width:${p.toFixed(2)}%;background:${ZONE_COLORS[k]}" title="Z${k} ${secToMMSS(Math.round(sec[k]))}">${p >= 9 ? 'Z' + k : ''}</span>` : ''; }).join('');
       const legend = [1, 2, 3, 4, 5].map(k => `<span><i style="background:${ZONE_COLORS[k]}"></i>Z${k} ${Math.round((sec[k] || 0) / 60)}′</span>`).join('');
       const cs = tpCeilingStats(act);
-      const ceil = cs ? `<p class="tp-zt-ceil ${cs.longestSec > (activityKind(act).key === 'tempo' ? 60 : 0) ? 'bad' : 'ok'}">${es ? 'Techo' : 'Cap'} ${cs.ceil} ${es ? 'lpm' : 'bpm'} (${cs.scope}): ${cs.overSec ? `${secToMMSS(cs.overSec)} ${es ? 'por encima' : 'above'} · ${es ? 'racha' : 'streak'} ${secToMMSS(cs.longestSec)}${cs.firstSec != null ? ` · ${es ? 'primera vez al min' : 'first at min'} ${secToMMSS(cs.firstSec)}` : ''}` : (es ? 'nunca lo pasó ✓' : 'never above ✓')}</p>` : '';
+      const ceil = cs ? `<p class="tp-zt-ceil ${cs.longestSec > (activityKind(act).key === 'tempo' ? 60 : 0) ? 'bad' : 'ok'}">${es ? 'Techo' : 'Cap'} ${cs.ceil} ${es ? 'lpm' : 'bpm'} (${es ? cs.scope : ({ 'sesión completa': 'whole session', 'bloque de trabajo': 'work block', 'recorrido': 'course' }[cs.scope] || cs.scope)}): ${cs.overSec ? `${secToMMSS(cs.overSec)} ${es ? 'por encima' : 'above'} · ${es ? 'racha' : 'streak'} ${secToMMSS(cs.longestSec)}${cs.firstSec != null ? ` · ${es ? 'primera vez al min' : 'first at min'} ${secToMMSS(cs.firstSec)}` : ''}` : (es ? 'nunca lo pasó ✓' : 'never above ✓')}</p>` : '';
       return `<div class="tp-ztape">${segs}</div><div class="tp-zt-legend">${legend}</div>${ceil}`;
     }
 
@@ -10067,7 +10270,7 @@ function fcCalCardHtml() {
               <div class="stat-box"><div class="value">${secToMMSS(act.totalTimeSec)}</div><div class="label">${t('stat_time')}</div></div>
               <div class="stat-box"><div class="value">${act.sport === 'biking' ? (act.avgSpeedMph||0).toFixed(1)+' mph' : fmtPace(act.avgPaceSecPerMi)}</div><div class="label">${act.sport === 'biking' ? (getLang()==='es'?'VELOCIDAD':'SPEED') : t('stat_avg_pace')}</div></div>
               ${a.workSegment?.main ? `<div class="stat-box"><div class="value">${fmtPace(a.workSegment.main.paceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'RITMO DEL BLOQUE' : 'WORK BLOCK PACE'}</div></div>`
-                : (act.workPaceSecPerMi && !a.courseSegment) ? `<div class="stat-box"><div class="value">${fmtPace(act.workPaceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'PACE REPETICIONES' : 'REPS PACE'}</div></div>` : ''}
+                : (act.workPaceSecPerMi && !a.courseSegment) ? `<div class="stat-box"><div class="value">${fmtPace(act.workPaceSecPerMi)}</div><div class="label">${getLang()==='es' ? 'RITMO DE REPETICIONES' : 'REPS PACE'}</div></div>` : ''}
               <div class="stat-box"><div class="value">${act.avgHR} bpm</div><div class="label">${t('stat_avg_hr')}</div></div>
               <div class="stat-box"><div class="value">${act.maxHR} bpm</div><div class="label">${t('stat_max_hr')}</div></div>
               <div class="stat-box"><div class="value">${act.avgCadSPM} spm</div><div class="label">${t('stat_avg_cad')}</div></div>
@@ -10257,15 +10460,15 @@ function fcCalCardHtml() {
               <div class="card-title">${t('manual_entry_title')}</div>
               <div class="manual-field-row">
                 <label>${t('field_aerobic_te')}</label>
-                <input type="text" id="mf-aerobicTE-${act.id}" value="${mf.aerobicTE}" placeholder="e.g. 3.2" onblur="saveManualField('${act.id}', 'aerobicTE', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-anaerobicTE-${act.id}')" />
+                <input type="text" inputmode="decimal" id="mf-aerobicTE-${act.id}" value="${mf.aerobicTE}" placeholder="e.g. 3.2" onblur="saveManualField('${act.id}', 'aerobicTE', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-anaerobicTE-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${t('field_anaerobic_te')}</label>
-                <input type="text" id="mf-anaerobicTE-${act.id}" value="${mf.anaerobicTE}" placeholder="e.g. 1.1" onblur="saveManualField('${act.id}', 'anaerobicTE', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-trainingLoad-${act.id}')" />
+                <input type="text" inputmode="decimal" id="mf-anaerobicTE-${act.id}" value="${mf.anaerobicTE}" placeholder="e.g. 1.1" onblur="saveManualField('${act.id}', 'anaerobicTE', this.value)" enterkeyhint="next" onkeydown="handleEnterNext(event, 'mf-trainingLoad-${act.id}')" />
               </div>
               <div class="manual-field-row">
                 <label>${t('field_training_load')}</label>
-                <input type="text" id="mf-trainingLoad-${act.id}" value="${mf.trainingLoad}" placeholder="e.g. 84" onblur="saveManualField('${act.id}', 'trainingLoad', this.value)" enterkeyhint="done" onkeydown="handleEnterNext(event, null)" />
+                <input type="text" inputmode="numeric" pattern="[0-9]*" id="mf-trainingLoad-${act.id}" value="${mf.trainingLoad}" placeholder="e.g. 84" onblur="saveManualField('${act.id}', 'trainingLoad', this.value)" enterkeyhint="done" onkeydown="handleEnterNext(event, null)" />
               </div>
             </div>
 
@@ -10340,7 +10543,7 @@ function fcCalCardHtml() {
                 <div class="stat-box"><div class="value">${a.runWalk?.walkSegments?.length ?? 0}</div><div class="label">${t('stat_walk_breaks')}</div></div>
               </div>
               ${a.runWalk?.walkSegments?.length ? a.runWalk.walkSegments.map(w => `
-                <span class="walk-tag">@${secToMMSSOffset(w.startOffsetSec)} for ${Math.round(w.durationSec)}s</span>
+                <span class="walk-tag">@${secToMMSSOffset(w.startOffsetSec)} ${getLang() === 'es' ? 'por' : 'for'} ${Math.round(w.durationSec)} s</span>
               `).join('') : ''}
             </div>
 
@@ -10386,7 +10589,7 @@ function fcCalCardHtml() {
                 ${a.keyFindings.map(f => `
                   <div class="finding-line finding-${f.type}">
                     <span>${f.type === 'pos' ? '▲' : f.type === 'warn' ? '◆' : '✕'}</span>
-                    <span>${f.text}</span>
+                    <span>${fcTx(f.text)}</span>
                   </div>
                 `).join('')}
               </div>
@@ -10401,7 +10604,7 @@ function fcCalCardHtml() {
       if (!splits || !splits.length) return `<p style="font-size:12px; color: var(--paper-dim);">${getLang() === 'es' ? 'Sin splits disponibles.' : 'No splits available.'}</p>`;
       return `
         <table class="splits-table">
-          <thead><tr><th>#</th><th>${getLang() === 'es' ? 'PACE' : 'PACE'}</th><th>FC</th><th>${getLang() === 'es' ? 'CAD' : 'CAD'}</th><th>ELEV</th></tr></thead>
+          <thead><tr><th>#</th><th>${getLang() === 'es' ? 'RITMO' : 'PACE'}</th><th>FC</th><th>${getLang() === 'es' ? 'CAD' : 'CAD'}</th><th>ELEV</th></tr></thead>
           <tbody>
             ${splits.map(s => `
               <tr>
@@ -10452,6 +10655,18 @@ function fcCalCardHtml() {
       `;
     }
 
+    const FC_PVA_EN = [
+      [/^En objetivo$/, 'On target'], [/^Por encima$/, 'Above'], [/^Por debajo$/, 'Below'], [/^Más rápido$/, 'Faster'], [/^Más lento$/, 'Slower'], [/^Informativo$/, 'Info'],
+      [/^Distancia del recorrido$/, 'Course distance'], [/^Distancia$/, 'Distance'], [/^Duración total \(según pasos\)$/, 'Total duration (from steps)'], [/^Duración$/, 'Duration'],
+      [/^FC máxima$/, 'Max HR'], [/^Trote con chaleco$/, 'Jogging with the vest'], [/^Bloque de ritmo sostenido$/, 'Threshold block'], [/^Ritmo del bloque$/, 'Block pace'],
+      [/^guiado por FC$/, 'HR-guided'], [/^Repeticiones$/, 'Reps'], [/^Ritmo de las repeticiones$/, 'Rep pace'], [/^por esfuerzo$/, 'by effort'],
+      [/^Consistencia entre repeticiones$/, 'Rep consistency'], [/^Tiempo en Z4–Z5 \(repeticiones\)$/, 'Time in Z4–Z5 (reps)'], [/^Tiempo en Z4 \(bloque\)$/, 'Time in Z4 (block)'],
+      [/^Tiempo sobre umbral$/, 'Time above threshold'], [/^Tiempo en Z3 \(zona gris\)$/, 'Time in Z3 (grey zone)'],
+      [/^Milla 1 en /, 'Mile 1 in '], [/^Millas 2–5 sobre /, 'Miles 2–5 above '], [/^Milla 6 sobre /, 'Mile 6 above '],
+      [/ en el bloque$/, ' in the block'], [/\(regla de 60 s\)/, '(60 s rule)'], [/del tiempo/g, 'of the time'], [/ seguidos$/, ' in a row'],
+      [/racha máx\./g, 'max streak'], [/· total/g, '· total'], [/\blpm\b/g, 'bpm'], [/\(sesión completa\)/g, '(whole session)'], [/nunca por encima/g, 'never above']
+    ];
+    function fcPvaEn(x) { let o = String(x == null ? '' : x); FC_PVA_EN.forEach(([r, e]) => { o = o.replace(r, e); }); return o; }
     function renderPlanVsActualBlock(plannedSession, activity) {
       // Same rows as the Markdown report (planVsActualRows), so the card and the export agree.
       if (normalizeSessionType(plannedSession.type) !== 'rest') {
@@ -10459,7 +10674,9 @@ function fcCalCardHtml() {
         try { rows = planVsActualRows(plannedSession, activity); } catch (e) { console.warn(e); }
         if (rows.length) {
           const cls = v => v === 'En objetivo' ? 'delta-good' : v === 'Informativo' ? 'delta-neutral' : 'delta-bad';
-          const esc = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+          // 2026.11.25-2: las filas se escriben en español (también van al informe); en inglés se traducen solo al mostrarlas.
+          const escH = s => String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+          const esc = getLang() === 'es' ? escH : (s => escH(fcPvaEn(s)));
           return `
         <div class="sitrep-label">${t('planned_vs_actual_label')}</div>
         <div class="card">
@@ -10997,11 +11214,11 @@ function fcCalCardHtml() {
           </div>
           <div class="manual-field-row">
             <label for="manualSessDuration">${es?'Duración (min)':'Duration (min)'}</label>
-            <input type="number" id="manualSessDuration" placeholder="45" min="5" max="600" />
+            <input type="number" inputmode="numeric" id="manualSessDuration" placeholder="45" min="5" max="600" />
           </div>
           <div class="manual-field-row">
             <label for="manualSessHR">${es?'FC Promedio (opcional)':'Avg HR (optional)'}</label>
-            <input type="number" id="manualSessHR" placeholder="120" />
+            <input type="number" inputmode="numeric" id="manualSessHR" placeholder="120" />
           </div>
           <div class="form-group" style="margin-top:8px;">
             <label class="form-label" for="manualSessNotes" style="margin-bottom:4px;">${es?'Notas':'Notes'}</label>
@@ -11423,19 +11640,19 @@ function fcCalCardHtml() {
       ];
 
       return `
-        <div class="view-container">
+        <div class="view-container fc-an" data-an-tab="${statsTab}">
           <div class="sitrep-label">${getLang()==='es' ? 'PROGRESO Y ANÁLISIS' : 'PROGRESS & ANALYTICS'}</div>
-          
-          <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:6px; margin-bottom:16px;">
+          <!-- 2026.11.24-A1: solo presentación; mismas funciones y mismo estado -->
+          <div class="fc-an-tabs" role="group" aria-label="${getLang()==='es' ? 'Secciones de análisis' : 'Analytics sections'}">
             ${tabs.map(tab => `
-              <button onclick="switchStatsTab('${tab.id}')" 
-                style="padding:10px; font-size:11px; border-radius:2px; border:1px solid var(--field-line); cursor:pointer; font-weight:600; background:${statsTab===tab.id?'var(--coyote)':'var(--field-dark)'}; color:${statsTab===tab.id?'var(--black-olive)':'var(--paper-dim)'};" aria-pressed="${statsTab===tab.id}">
+              <button type="button" onclick="switchStatsTab('${tab.id}')" 
+                class="fc-an-tab${statsTab===tab.id?' is-on':''}" aria-pressed="${statsTab===tab.id}">
                 ${tab.label}
               </button>
             `).join('')}
           </div>
 
-          ${statsTab === 'charts' ? '<p style="font-size:11px;color:var(--paper-dim);margin:0 0 8px;">Solo corridas: el rucking no entra en el progreso (sí en el GRIT).</p>' + fcEfficiencyCardHtml() + renderStatsCharts() : ''}
+          ${statsTab === 'charts' ? '<p class="fc-an-note" style="font-size:11px;color:var(--paper-dim);margin:0 0 8px;">Solo corridas: el rucking no entra en el progreso (sí en el GRIT).</p>' + fcEfficiencyCardHtml() + renderStatsCharts() : ''}
           ${statsTab === 'injuries' ? renderStatsInjuries() : ''}
           ${statsTab === 'reports' ? renderStatsReports() : ''}
           ${statsTab === 'context' ? renderStatsContext() : ''}
@@ -11481,7 +11698,7 @@ function fcCalCardHtml() {
         else if (improved) { color='var(--blue-text)'; icon='▲'; verb = lang==='es'?'mejorando':'improving'; }
         else { color='var(--signal-amber)'; icon='▼'; verb = lang==='es'?'retrocediendo':'declining'; }
         const fmt = opts.fmt || (v => v.toFixed(0));
-        return `<div style="border-left:3px solid ${color}; padding-left:10px; margin-top:10px;">
+        return `<div class="fc-an-insight" style="border-left:3px solid ${color}; padding-left:10px; margin-top:10px;">
           <p style="font-size:11px; color:${color}; font-weight:600;">${icon} ${opts.name}: ${verb} (${pctChange>0?'+':''}${pctChange.toFixed(1)}%)</p>
           <p style="font-size:11px; color:var(--paper-dim); margin-top:2px;">
             ${lang==='es'?'Primeras':'First'} ${fmt(firstAvg)} → ${lang==='es'?'últimas':'latest'} ${fmt(lastAvg)}${opts.unit||''}.
@@ -11491,13 +11708,13 @@ function fcCalCardHtml() {
       };
 
       const paceInsight = insight(paceData, x=>x.avgPaceSecPerMi, {
-        lowerIsBetter:true, name: lang==='es'?'Pace':'Pace', unit:'/mi',
+        lowerIsBetter:true, name: lang==='es'?'Ritmo':'Pace', unit:'/mi',
         fmt: v=>secToMMSS(v),
         goodMsg: lang==='es'?'Tu ritmo promedio está bajando — señal de mejor forma. Mantén el volumen fácil.':'Your average pace is dropping — a sign of improving fitness. Keep the easy volume.',
         badMsg: lang==='es'?'Tu ritmo promedio está subiendo. Puede ser fatiga acumulada o calor — revisa descanso e hidratación.':'Your average pace is creeping up. Could be accumulated fatigue or heat — check rest and hydration.'
       });
       const hrInsight = insight(hrData, x=>x.avgHR, {
-        lowerIsBetter:true, name:'HR', unit:' bpm',
+        lowerIsBetter:true, name: lang==='es'?'FC':'HR', unit: lang==='es'?' lpm':' bpm',
         goodMsg: lang==='es'?'FC promedio bajando a paces similares = mejor eficiencia aeróbica. Excelente.':'Average HR dropping at similar paces = better aerobic efficiency. Excellent.',
         badMsg: lang==='es'?'FC promedio subiendo. Si el pace no bajó, vigila fatiga, calor o falta de sueño.':'Average HR rising. If pace did not drop, watch for fatigue, heat, or poor sleep.'
       });
@@ -11510,24 +11727,27 @@ function fcCalCardHtml() {
       return `
         <div style="space-y:3;">
           ${paceData.length >= 2 ? `
-            <div class="card" style="margin-bottom:16px;">
+            <div class="card fc-an-chart" style="margin-bottom:16px;">
               <div class="card-title">${t('stats_pace_trend')}</div>
+              ${fcAnReadout(secToMMSS(paceData[paceData.length-1].avgPaceSecPerMi), '/mi', paceData[paceData.length-1].dateISO, lang)}
               <canvas id="paceChart" role="img" aria-label="${lang==='es'?'Gráfica de tendencia del ritmo promedio de las sesiones recientes':'Average pace trend across recent sessions'}" style="max-height:240px;"></canvas><p class="fc-chart-hint">${lang==='es'?'Cada punto representa una sesión registrada. Compara la tendencia, no una sola actividad.':'Each point represents a recorded session. Compare the trend, not a single workout.'}</p>
               ${paceInsight}
             </div>
           ` : ''}
           
           ${hrData.length >= 2 ? `
-            <div class="card" style="margin-bottom:16px;">
+            <div class="card fc-an-chart" style="margin-bottom:16px;">
               <div class="card-title">${t('stats_hr_trend')}</div>
+              ${fcAnReadout(String(hrData[hrData.length-1].avgHR), lang==='es'?'lpm':'bpm', hrData[hrData.length-1].dateISO, lang)}
               <canvas id="hrChart" role="img" aria-label="${lang==='es'?'Gráfica de tendencia de frecuencia cardíaca promedio':'Average heart-rate trend'}" style="max-height:240px;"></canvas><p class="fc-chart-hint">${lang==='es'?'Observa la frecuencia cardíaca junto al ritmo y las condiciones de cada sesión.':'Read heart rate alongside pace and each session’s conditions.'}</p>
               ${hrInsight}
             </div>
           ` : ''}
           
           ${vdotData.length >= 2 ? `
-            <div class="card" style="margin-bottom:16px;">
+            <div class="card fc-an-chart" style="margin-bottom:16px;">
               <div class="card-title">${t('stats_vdot_trend')}</div>
+              ${fcAnReadout(String(vdotData[vdotData.length-1].analysis.vdot), 'VDOT', vdotData[vdotData.length-1].dateISO, lang)}
               <canvas id="vdotChart" role="img" aria-label="${lang==='es'?'Gráfica de tendencia de VDOT estimado':'Estimated VDOT trend'}" style="max-height:240px;"></canvas><p class="fc-chart-hint">${lang==='es'?'VDOT es una estimación de rendimiento; no sustituye una prueba de carrera.':'VDOT is a performance estimate, not a substitute for a race test.'}</p>
               ${vdotInsight}
             </div>
@@ -11536,6 +11756,11 @@ function fcCalCardHtml() {
           ${renderStatsSummaryCard()}
         </div>
       `;
+    }
+
+    // 2026.11.24-A1: lectura grande del último punto de una gráfica (no calcula nada nuevo)
+    function fcAnReadout(val, unit, dateISO, lang) {
+      return `<div class="fc-an-readout"><span class="fc-an-big">${val}</span><span class="fc-an-unit">${unit}</span><span class="fc-an-when">${lang==='es'?'última':'latest'} · ${(dateISO||'').slice(5)}</span></div>`;
     }
 
     // Weekly volume + consistency summary with dynamic verdict
@@ -11560,9 +11785,9 @@ function fcCalCardHtml() {
       else { verdict = lang==='es'?'Volumen bajó vs. semana pasada — normal en semana de descarga o si hubo descanso.':'Volume dropped vs last week — normal on a deload or rest week.'; vColor='var(--paper-dim)'; }
 
       return `
-        <div class="card" style="margin-bottom:16px;">
+        <div class="card fc-an-summary" style="margin-bottom:16px;">
           <div class="card-title">${lang==='es'?'RESUMEN SEMANAL':'WEEKLY SUMMARY'}</div>
-          <div class="stat-grid">
+          <div class="stat-grid fc-an-stats3">
             <div class="stat-box"><div class="value">${miThis.toFixed(1)}</div><div class="label">${lang==='es'?'mi esta sem':'mi this wk'}</div></div>
             <div class="stat-box"><div class="value">${miLast.toFixed(1)}</div><div class="label">${lang==='es'?'mi sem pasada':'mi last wk'}</div></div>
             <div class="stat-box"><div class="value" style="color:${deltaMi>=0?'var(--blue-text)':'var(--paper-dim)'};">${deltaMi>=0?'+':''}${deltaMi.toFixed(1)}</div><div class="label">Δ mi</div></div>
@@ -11674,6 +11899,8 @@ function fcCalCardHtml() {
       const COLOR_RUST = '#d0675b';
       const COLOR_BLUE = '#4f8fbf';
       Chart.defaults.color = fcInk().tick;
+      // 2026.11.24-A1: tipografía, cuadrícula y globo de las gráficas de Análisis
+      const _an = fcAnChartLook();
 
       // Destroy previous instances to prevent Chart.js "Canvas already in use" errors
       if (_paceChartInstance) { _paceChartInstance.destroy(); _paceChartInstance = null; }
@@ -11687,7 +11914,7 @@ function fcCalCardHtml() {
           data: {
             labels: paceData.map(t => t.dateISO.slice(5)),
             datasets: [{
-              label: 'Pace (sec/mi)',
+              label: getLang()==='es' ? 'Ritmo' : 'Pace',
               data: paceData.map(t => t.avgPaceSecPerMi),
               borderColor: COLOR_OLIVE,
               backgroundColor: 'rgba(61,90,31,0.12)',
@@ -11703,7 +11930,7 @@ function fcCalCardHtml() {
             maintainAspectRatio: false,
             plugins: {
               legend: { display: false },
-              tooltip: { callbacks: { label: (ctx) => 'Pace: ' + secToMMSS(ctx.parsed.y) + '/mi' } }
+              tooltip: { callbacks: { label: (ctx) => (getLang()==='es' ? 'Ritmo: ' : 'Pace: ') + secToMMSS(ctx.parsed.y) + '/mi' } }
             },
             scales: {
               y: { reverse: true, grid: { color: fcInk().grid }, ticks: { callback: (v) => secToMMSS(v) } },
@@ -11720,8 +11947,8 @@ function fcCalCardHtml() {
           data: {
             labels: hrData.map(t => t.dateISO.slice(5)),
             datasets: [
-              { label: 'Avg HR', data: hrData.map(t => t.avgHR), borderColor: COLOR_COYOTE, tension: 0.3, borderWidth: 2, pointRadius: 2 },
-              { label: 'Max HR', data: hrData.map(t => t.maxHR), borderColor: COLOR_RUST, tension: 0.3, borderWidth: 1, borderDash: [5,5], pointRadius: 2 }
+              { label: getLang()==='es' ? 'FC media' : 'Avg HR', data: hrData.map(t => t.avgHR), borderColor: COLOR_COYOTE, tension: 0.3, borderWidth: 2, pointRadius: 2 },
+              { label: getLang()==='es' ? 'FC máxima' : 'Max HR', data: hrData.map(t => t.maxHR), borderColor: COLOR_RUST, tension: 0.3, borderWidth: 1, borderDash: [5,5], pointRadius: 2 }
             ]
           },
           options: {
@@ -11741,7 +11968,7 @@ function fcCalCardHtml() {
             labels: vdotData.map(t => t.dateISO.slice(5)),
             datasets: [
               { label: 'VDOT', data: vdotData.map(t => t.analysis.vdot), borderColor: COLOR_BLUE, tension: 0.3, borderWidth: 2, pointRadius: 3, yAxisID: 'y' },
-              { label: 'Pred 5K (min)', data: vdotData.map(t => t.analysis.predicted5KSec ? Math.round(t.analysis.predicted5KSec / 60 * 10) / 10 : null), borderColor: COLOR_COYOTE, borderDash: [5,5], tension: 0.3, borderWidth: 1, pointRadius: 2, yAxisID: 'y1' }
+              { label: getLang()==='es' ? '5K estimado (min)' : 'Pred 5K (min)', data: vdotData.map(t => t.analysis.predicted5KSec ? Math.round(t.analysis.predicted5KSec / 60 * 10) / 10 : null), borderColor: COLOR_COYOTE, borderDash: [5,5], tension: 0.3, borderWidth: 1, pointRadius: 2, yAxisID: 'y1' }
             ]
           },
           options: {
@@ -11756,6 +11983,46 @@ function fcCalCardHtml() {
           }
         });
       }
+      [_paceChartInstance, _hrChartInstance, _vdotChartInstance].forEach(fcAnStyleChart);
+    }
+
+    // 2026.11.24-A1: apariencia común de las gráficas de Análisis. No toca datos ni escalas.
+    function fcAnChartLook() {
+      const ink = fcInk();
+      const sun = document.documentElement.classList.contains('fc-sun');
+      return {
+        ink,
+        mono: { family: "'JetBrains Mono', monospace", size: 12 },
+        tip: {
+          backgroundColor: sun ? '#fffdf7' : '#0f140c',
+          borderColor: sun ? '#b9b29b' : '#9c8651', borderWidth: 1,
+          titleColor: sun ? '#6b4f10' : '#dec78e', bodyColor: sun ? '#1d1f17' : '#f0efe5',
+          titleFont: { family: "'Oswald', sans-serif", size: 13, weight: '600' },
+          bodyFont: { family: "'JetBrains Mono', monospace", size: 12 },
+          padding: 10, cornerRadius: 3, displayColors: true, boxPadding: 4
+        }
+      };
+    }
+    function fcAnStyleChart(ch) {
+      // Solo asigna propiedades sueltas: copiar las opciones de Chart.js (proxys) causa recursión.
+      if (!ch) return;
+      const L = fcAnChartLook(), o = ch.options, T = L.tip;
+      const tt = o.plugins.tooltip;
+      ['backgroundColor','borderColor','borderWidth','titleColor','bodyColor','titleFont','bodyFont','padding','cornerRadius','boxPadding'].forEach(k => { tt[k] = T[k]; });
+      const lg = o.plugins.legend;
+      if (lg && lg.display) {
+        lg.labels.usePointStyle = true; lg.labels.pointStyle = 'line'; lg.labels.boxWidth = 24; lg.labels.padding = 14;
+        lg.labels.color = getComputedStyle(document.documentElement).getPropertyValue('--fc-text').trim() || L.ink.tick; lg.labels.font = { family: "'Oswald', sans-serif", size: 13 }; lg.labels.boxHeight = 3;
+      }
+      o.interaction.mode = 'index'; o.interaction.intersect = false;
+      Object.keys(o.scales || {}).forEach(k => {
+        const sc = o.scales[k];
+        sc.ticks.color = L.ink.tick; sc.ticks.font = L.mono; sc.ticks.maxTicksLimit = 6;
+        if (k === 'x') { sc.ticks.maxRotation = 0; sc.ticks.autoSkip = true; sc.ticks.maxTicksLimit = 5; }
+        if (sc.grid) sc.grid.drawBorder = false;
+      });
+      ch.data.datasets.forEach(ds => { ds.pointHoverRadius = 6; ds.pointBorderWidth = 0; });
+      ch.update('none');
     }
 
     // ── INJURIES SECTION ────────────────────────────────────────────────────
@@ -13069,6 +13336,8 @@ function fcCalCardHtml() {
           </div>
           <div class="header-right">
             <!-- 2026.11.08-6: force refresh replaces the A+/A− toggle; larger bold text is always on -->
+            <!-- 2026.11.25-2: idioma a la vista; también cambia la voz de los botones 🔊 -->
+            <button type="button" id="fc-lang-btn" class="status-pill fc-a11y-toggle fc-lang-btn" onclick="fcSwitchLang()" aria-label="${getLang() === 'es' ? 'Idioma: español. Toca para cambiar a inglés' : 'Language: English. Tap to switch to Spanish'}" title="${getLang() === 'es' ? 'Cambiar a English' : 'Switch to Español'}">${getLang() === 'es' ? 'ES' : 'EN'}</button>
             <button type="button" id="fc-refresh-btn" class="status-pill fc-a11y-toggle" onclick="forceRefreshApp()" aria-label="${getLang() === 'es' ? 'Forzar actualización (no borra tus datos)' : 'Force refresh (keeps your data)'}" title="${getLang() === 'es' ? 'Forzar actualización · versión ' : 'Force refresh · version '}${APP_BUILD}">${ic('refresh', 18)}</button>
             <button type="button" id="fc-sun-toggle" class="status-pill fc-a11y-toggle" onclick="toggleSunMode()" aria-pressed="${document.documentElement.classList.contains('fc-sun')}" aria-label="${getLang() === 'es' ? 'Modo sol: tema claro para leer al aire libre' : 'Sun mode: light theme for outdoor reading'}" title="${getLang() === 'es' ? 'Modo sol (tema claro)' : 'Sun mode (light theme)'}">${ic('sun', 18)}</button>
             <div class="status-pill" onclick="switchView('profile')">${getLang() === 'es' ? 'PERFIL' : 'PROFILE'}</div>
@@ -14153,16 +14422,346 @@ function fcCalCardHtml() {
       return { bad: bad.slice(0, 8), good: good.slice(0, 8), fix: fix.slice(0, 8) };
     }
 
+    // ═══ 2026.11.25-1: ESCUCHAR (voz del teléfono: speechSynthesis; funciona sin internet si el teléfono tiene la voz en español) ═══
+    let _fcSayBtn = null;
+    // 2026.11.25-2: limpia según el idioma del texto (es/en); el idioma lo decide fcSayLangOf.
+    function fcSayLangOf(t) {
+      const x = ' ' + String(t || '').toLowerCase() + ' ';
+      const es = (x.match(/[ñáéíóú¿¡]| (de|la|el|los|las|del|que|con|para|una|por|millas|sesión|después|antes|ritmo|zona) /g) || []).length;
+      const en = (x.match(/ (the|and|with|of|to|your|you|this|miles|session|after|before|pace|zone|heart|rate|from|is|are) /g) || []).length;
+      if (!es && !en) return getLang();
+      return es > en * 1.3 ? 'es' : en > es * 1.3 ? 'en' : getLang();
+    }
+    function fcSayClean(t, lang) {
+      const es = (lang || getLang()) === 'es';
+      let x = String(t || '')
+        .replace(/[▲▼◆✕✓✗⚡☂🔊⏹▾▸]/g, ' ').replace(/\[(M|I|E|H|regla|M\/I|M\/E)\]/g, ' ');
+      if (es) return x.replace(/≈\s?/g, 'aproximadamente ')
+        .replace(/(\d+:\d{2})\/mi/g, '$1 por milla').replace(/\/mi\b/g, ' por milla').replace(/\/10\b/g, ' de 10').replace(/\/5\b/g, ' de 5')
+        .replace(/\blpm\b/g, 'pulsaciones').replace(/\bbpm\b/g, 'pulsaciones').replace(/°F/g, ' grados').replace(/(\d)\s?%/g, '$1 por ciento')
+        .replace(/\bZ([1-5])\b/g, 'zona $1').replace(/\bZ([1-5])–Z([1-5])\b/g, 'zonas $1 a $2').replace(/\bFC\b/g, 'frecuencia cardíaca').replace(/\bHRV\b/g, 'variabilidad')
+        .replace(/(\d)\s?oz\b/g, '$1 onzas').replace(/(\d)\s?mi\b/g, '$1 millas').replace(/(\d)\s?h\b/g, '$1 horas').replace(/(\d)\s?min\b/g, '$1 minutos').replace(/(\d)\s?s\b/g, '$1 segundos')
+        .replace(/(\d)\s?–\s?(\d)/g, '$1 a $2')
+        .replace(/≥/g, ' mayor o igual a ').replace(/≤/g, ' menor o igual a ').replace(/</g, ' menos de ').replace(/>/g, ' más de ').replace(/→/g, ' a ').replace(/×/g, ' por ').replace(/[·•|]/g, ', ')
+        .replace(/\s+/g, ' ').trim();
+      return x.replace(/≈\s?/g, 'about ')
+        .replace(/(\d+:\d{2})\/mi/g, '$1 per mile').replace(/\/mi\b/g, ' per mile').replace(/\/10\b/g, ' out of 10').replace(/\/5\b/g, ' out of 5')
+        .replace(/\b(bpm|lpm)\b/g, 'beats per minute').replace(/°F/g, ' degrees').replace(/(\d)\s?%/g, '$1 percent')
+        .replace(/\bZ([1-5])–Z([1-5])\b/g, 'zones $1 to $2').replace(/\bZ([1-5])\b/g, 'zone $1').replace(/\bHR\b/g, 'heart rate').replace(/\bLTHR\b/g, 'lactate threshold heart rate')
+        .replace(/(\d)\s?oz\b/g, '$1 ounces').replace(/(\d)\s?mi\b/g, '$1 miles').replace(/(\d)\s?h\b/g, '$1 hours').replace(/(\d)\s?min\b/g, '$1 minutes').replace(/(\d)\s?s\b/g, '$1 seconds')
+        .replace(/(\d)\s?–\s?(\d)/g, '$1 to $2')
+        .replace(/≥/g, ' at least ').replace(/≤/g, ' at most ').replace(/</g, ' under ').replace(/>/g, ' over ').replace(/→/g, ' to ').replace(/×/g, ' times ').replace(/[·•|]/g, ', ')
+        .replace(/\s+/g, ' ').trim();
+    }
+    function fcSayStop() {
+      try { window.speechSynthesis && speechSynthesis.cancel(); } catch (e) {}
+      if (_fcSayBtn) { _fcSayBtn.classList.remove('on'); _fcSayBtn.textContent = _fcSayBtn.dataset.lbl || '🔊'; }
+      _fcSayBtn = null;
+    }
+    function fcSay(text, btn) {
+      if (!('speechSynthesis' in window)) { alert(getLang() === 'es' ? 'Este teléfono no tiene lectura en voz alta en el navegador.' : 'No text-to-speech in this browser.'); return; }
+      const same = btn && _fcSayBtn === btn;
+      fcSayStop();
+      if (same) return;
+      // La voz sigue el idioma escogido arriba (ES/EN). Si parte del texto está en el otro idioma
+      // (p. ej. el análisis del entrenador, que se escribe en español), esa parte se lee con la voz de su idioma.
+      const es = getLang() === 'es';
+      const vs = speechSynthesis.getVoices();
+      const voiceFor = l => l === 'es'
+        ? (vs.find(v => /^es[-_](US|MX|PR|419)/i.test(v.lang)) || vs.find(v => /^es/i.test(v.lang)))
+        : (vs.find(v => /^en[-_]US/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)));
+      const groups = [];
+      String(text || '').split(/(?<=[.!?:])\s+/).forEach(x => {
+        if (!x.trim()) return;
+        const l = x.length < 25 ? (groups.length ? groups[groups.length - 1].l : getLang()) : fcSayLangOf(x);
+        const g = groups[groups.length - 1];
+        if (g && g.l === l) g.t += ' ' + x; else groups.push({ l, t: x });
+      });
+      if (!groups.length) return;
+      if (btn) { btn.dataset.lbl = btn.dataset.lbl || btn.textContent; _fcSayBtn = btn; btn.classList.add('on'); btn.textContent = '⏹' + (btn.dataset.lbl.length > 3 ? ' ' + (es ? 'DETENER' : 'STOP') : ''); }
+      groups.forEach((g, i) => {
+        const u = new SpeechSynthesisUtterance(fcSayClean(g.t, g.l));
+        const pick = voiceFor(g.l);
+        if (pick) u.voice = pick;
+        u.lang = pick ? pick.lang : (g.l === 'es' ? 'es-US' : 'en-US');
+        u.rate = 1;
+        if (i === groups.length - 1) u.onend = () => { if (_fcSayBtn === btn) fcSayStop(); };
+        u.onerror = () => { if (_fcSayBtn === btn) fcSayStop(); };
+        speechSynthesis.speak(u);
+      });
+    }
+    function fcSayTextOf(nodes) {
+      const parts = [];
+      nodes.forEach(n => {
+        const c = n.cloneNode(true);
+        // Los formularios no se leen (etiqueta + unidad suena a ruido): se lee el resultado, el veredicto y los textos.
+        // 2026.11.25-2: en Reglas vigentes se lee cada regla con su valor; los <details> cerrados no se leen.
+        c.querySelectorAll('.fc-rl-row input').forEach(i => i.replaceWith(document.createTextNode(': ' + (i.value || i.getAttribute('value') || '') + ' ')));
+        c.querySelectorAll('details:not([open])').forEach(d => d.remove());
+        c.querySelectorAll('input, select, textarea').forEach(i => { const p = i.closest('label, .fc-cf, .form-group, .manual-field-row, .fc-row2'); if (p && p !== c) p.remove(); });
+        c.querySelectorAll('.fc-q, .fc-chips, .fc-cond .fc-mini').forEach(x => x.remove());
+        c.querySelectorAll('button, input, select, textarea, svg, canvas, script, style, .fc-say, [aria-hidden="true"]').forEach(x => x.remove());
+        c.querySelectorAll('div, p, li, tr, h1, h2, h3, h4, label, summary, td').forEach(x => x.appendChild(document.createTextNode('. ')));
+        parts.push(c.textContent);
+      });
+      return parts.join('. ').replace(/(\s*\.\s*){2,}/g, '. ');
+    }
+    function fcSayCard(btn) {
+      // 2026.11.25-2: encabezados que se minimizan (Reglas vigentes, Calibración, tablero…): se lee el título y el cuerpo;
+      // si la tarjeta está cerrada, se abre primero.
+      const dh = btn.closest('.dash-head');
+      if (dh) {
+        const w = dh.closest('[data-w]'); if (!w) return;
+        const key = w.getAttribute('data-w');
+        let body = w.querySelector('.dash-body');
+        if (!body && typeof dashCollapse === 'function') {
+          dashCollapse(key);
+          const w2 = document.querySelector(`[data-w="${key}"]`);
+          body = w2 && w2.querySelector('.dash-body');
+          btn = (w2 && w2.querySelector('.dash-head .fc-say')) || btn;
+          if (!body) return;
+        }
+        const t = (dh.querySelector('.fc-say-txt') || dh).textContent.replace(/[▾▸🔊]/g, '').trim();
+        fcSay(t + '. ' + fcSayTextOf([body]), btn);
+        return;
+      }
+      const lbl = btn.closest('.sitrep-label');
+      let nodes = [];
+      if (lbl) {
+        nodes.push(lbl);
+        for (let n = lbl.nextElementSibling; n && !n.classList.contains('sitrep-label'); n = n.nextElementSibling) nodes.push(n);
+      } else {
+        const card = btn.closest('.card'); if (card) nodes.push(card);
+      }
+      if (!nodes.length) return;
+      fcSay(fcSayTextOf(nodes), btn);
+    }
+    function fcSayActivity(id, btn) {
+      const a = (state.tcxSessions || []).find(x => x.id === id); if (!a) return;
+      const es = getLang() === 'es';
+      let f = { bad: [], good: [], fix: [] }; try { f = coachFeedback(a); } catch (e) {}
+      const hms = sec => { sec = Math.round(sec || 0); const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return (h ? h + (es ? ' hora' + (h > 1 ? 's' : '') + ' ' : ' h ') : '') + m + (es ? ' minutos' : ' minutes'); };
+      const pace = sp => sp ? Math.floor(sp / 60) + ':' + String(Math.round(sp % 60)).padStart(2, '0') : '';
+      let kindLbl = ''; try { kindLbl = activityKind(a).label; } catch (e) {}
+      const z = a.analysis?.timeInZones?.pct || {};
+      const sp = (a.analysis?.realSplitsMi || []).filter(x => x.distM > 1500);
+      const fast = sp.length ? sp.reduce((m, x) => x.paceSecPerUnit < m.paceSecPerUnit ? x : m) : null;
+      const slow = sp.length ? sp.reduce((m, x) => x.paceSecPerUnit > m.paceSecPerUnit ? x : m) : null;
+      const day = parseISODateLocal(a.dateISO).toLocaleDateString(es ? 'es-PR' : 'en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+      const cut = arr => arr.map(x => String(x).replace(/[.\s]+$/, ''));
+      f = { bad: cut(f.bad.map(fcTx)), good: cut(f.good.map(fcTx)), fix: cut(f.fix.map(fcTx)) };
+      const L = [];
+      if (es) {
+        L.push(`Análisis de la sesión del ${day}. ${kindLbl}.`);
+        L.push(`Distancia ${(a.totalDistMi || 0).toFixed(2)} millas en ${hms(a.totalTimeSec)}, ritmo promedio ${pace(a.avgPaceSecPerMi)} por milla. Frecuencia cardíaca promedio ${Math.round(a.avgHR || 0)}, máxima ${Math.round(a.maxHR || 0)}.`);
+        if (z.z1 != null) L.push(`Tiempo en zonas: zona 1, ${z.z1} por ciento; zona 2, ${z.z2}; zona 3, ${z.z3}; zona 4, ${z.z4}; zona 5, ${z.z5} por ciento.`);
+        L.push(`La ruta: subiste ${Math.round(a.elevGainM || 0)} metros y bajaste ${Math.round(a.elevLossM || 0)}${a.maxGradeUp != null ? `, con pendiente máxima de ${Math.round(a.maxGradeUp)} por ciento de subida y ${Math.abs(Math.round(a.maxGradeDown || 0))} de bajada` : ''}.`);
+        if (fast && slow && sp.length > 1) L.push(`La milla más rápida fue la ${fast.splitNum}, a ${pace(fast.paceSecPerUnit)}, con frecuencia ${Math.round(fast.avgHR)}. La más lenta fue la ${slow.splitNum}, a ${pace(slow.paceSecPerUnit)}, con frecuencia ${Math.round(slow.avgHR)}.`);
+        L.push(f.bad.length ? 'Lo que hiciste mal: ' + f.bad.join('. ') + '.' : 'Lo que hiciste mal: nada fuera de las reglas en esta sesión.');
+        if (f.good.length) L.push('Lo que hiciste bien, y que debes mantener: ' + f.good.join('. ') + '.');
+        L.push(f.fix.length ? 'Cómo mejorarlo: ' + f.fix.join('. ') + '.' : 'Cómo mejorarlo: mantén lo mismo en la próxima.');
+      } else {
+        L.push(`Analysis of the session of ${day}. ${kindLbl}.`);
+        L.push(`Distance ${(a.totalDistMi || 0).toFixed(2)} miles in ${hms(a.totalTimeSec)}, average pace ${pace(a.avgPaceSecPerMi)} per mile. Average heart rate ${Math.round(a.avgHR || 0)}, max ${Math.round(a.maxHR || 0)}.`);
+        if (z.z1 != null) L.push(`Time in zones: zone 1, ${z.z1} percent; zone 2, ${z.z2}; zone 3, ${z.z3}; zone 4, ${z.z4}; zone 5, ${z.z5} percent.`);
+        L.push(`The route: you climbed ${Math.round(a.elevGainM || 0)} meters and descended ${Math.round(a.elevLossM || 0)}${a.maxGradeUp != null ? `, with a steepest grade of ${Math.round(a.maxGradeUp)} percent up and ${Math.abs(Math.round(a.maxGradeDown || 0))} percent down` : ''}.`);
+        if (fast && slow && sp.length > 1) L.push(`The fastest mile was mile ${fast.splitNum}, at ${pace(fast.paceSecPerUnit)}, heart rate ${Math.round(fast.avgHR)}. The slowest was mile ${slow.splitNum}, at ${pace(slow.paceSecPerUnit)}, heart rate ${Math.round(slow.avgHR)}.`);
+        L.push('What went wrong:'); L.push(f.bad.length ? f.bad.join('. ') + '.' : 'Nothing outside the rules in this session.');
+        if (f.good.length) { L.push('What went well, and what to keep:'); L.push(f.good.join('. ') + '.'); }
+        L.push('How to improve:'); L.push(f.fix.length ? f.fix.join('. ') + '.' : 'Keep the same next time.');
+      }
+      fcSay(L.join(' '), btn);
+    }
+    function fcSayInject() {
+      try {
+        document.querySelectorAll('.card-title, .sitrep-label, .dash-head > span:first-child').forEach(el => {
+          if (el.querySelector('.fc-say') || el.closest('.modal, #tst')) return;
+          if (!el.textContent.trim()) return;
+          // Dentro de un encabezado que ya es botón (tarjetas que se minimizan) no se puede poner otro <button>:
+          // va como <span role="button"> y no deja que el toque minimice la tarjeta.
+          const inBtn = !!el.closest('button, summary, a, [role="button"]');
+          const b = document.createElement(inBtn ? 'span' : 'button');
+          if (inBtn) { b.setAttribute('role', 'button'); b.tabIndex = 0; b.setAttribute('onkeydown', "if(event.key==='Enter'||event.key===' '){event.preventDefault();event.stopPropagation();fcSayCard(this)}"); }
+          else b.type = 'button';
+          b.className = 'fc-say'; b.textContent = '🔊';
+          b.setAttribute('aria-label', getLang() === 'es' ? 'Escuchar esta sección' : 'Listen to this section');
+          b.setAttribute('onclick', 'event.stopPropagation(); event.preventDefault(); fcSayCard(this)');
+          if (getComputedStyle(el).display !== 'flex') {
+            const txt = document.createElement('span'); txt.className = 'fc-say-txt';
+            while (el.firstChild) txt.appendChild(el.firstChild);
+            el.appendChild(txt); el.classList.add('fc-say-row');
+          }
+          el.appendChild(b);
+        });
+      } catch (e) { console.warn('fcSayInject', e); }
+    }
+    window.addEventListener('pagehide', () => { try { speechSynthesis.cancel(); } catch (e) {} });
+    if ('speechSynthesis' in window) { try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } catch (e) {} }
+
+    // ═══ 2026.11.25-2: traducción al mostrar. El entrenador y los hallazgos se escriben en español (así van al informe
+    // y al conteo de fallas); en inglés se traducen solo en pantalla y en la voz. Lo que se escribe en inglés
+    // (deriva cardíaca, proyección del VDOT) se traduce al español del mismo modo. ═══
+    const FC_TX_EN = [
+      [/^Nada fuera de las reglas en esta sesión\.?$/, 'Nothing outside the rules in this session.'],
+      [/^(\S+) en Z3(?: y (\S+) en Z4–Z5)? \((\d+) % del tiempo sobre 148 lpm\)\. Un día (largo|fácil) se queda en Z2\.$/, (m, a, b, p, d) => `${a} in Z3${b ? ` and ${b} in Z4–Z5` : ''} (${p} % of the time above 148 bpm). A ${d === 'largo' ? 'long' : 'easy'} day stays in Z2.`],
+      [/^Pon la alerta del reloj en 145 \(con calor\); cuando suene, baja el ritmo o camina 20–30 s hasta ~135 y retoma\.$/, 'Set the watch alert at 145 (when hot); when it sounds, slow down or walk 20–30 s until ~135 and resume.'],
+      [/^Disciplina de zona: (\d+) % del tiempo en Z1–Z2 \(solo (\S+) sobre 148 lpm\)\.$/, 'Zone discipline: $1 % of the time in Z1–Z2 (only $2 above 148 bpm).'],
+      [/^Milla 1 con FC (\d+) lpm: saliste más rápido de lo que pide la zona\.$/, 'Mile 1 at HR $1 bpm: you started faster than the zone allows.'],
+      [/^Los primeros 10 min a ritmo fijo y suave, sin dejarte llevar por el ritmo promedio del reloj\.$/, 'First 10 min at a steady, easy pace, without chasing the watch\'s average pace.'],
+      [/^Cadencia de (\d+) spm \(meta ≥168\)\.$/, 'Cadence of $1 spm (goal ≥168).'],
+      [/^Pasos más cortos y rápidos, sobre todo en las bajadas\.$/, 'Shorter, quicker steps, especially on downhills.'],
+      [/^Desacople de ([\d.]+) %: base aeróbica sólida en esta sesión\.$/, 'Decoupling of $1 %: solid aerobic base in this session.'],
+      [/^Desacople de ([\d.]+) % \(meta <7\.5 %\)\.$/, 'Decoupling of $1 % (goal <7.5 %).'],
+      [/^Desacople de ([\d.]+) %$/, 'Decoupling of $1 %'],
+      [/^Baja el ritmo para que la FC no suba a mitad de sesión y revisa hidratación y calor\.$/, 'Slow down so HR does not climb mid-session, and check hydration and heat.'],
+      [/^(\d+) caminata\(s\) \((\S+) en total\) en una sesión continua\.$/, '$1 walk break(s) ($2 in total) in a continuous session.'],
+      [/^Baja el ritmo antes de que la FC pase de 148 para no tener que parar\.$/, 'Slow down before HR passes 148 so you do not have to stop.'],
+      [/^Sesión continua, sin caminatas\.$/, 'Continuous session, no walk breaks.'],
+      [/^Esfuerzo percibido (\d+)\/10 en un día fácil \(se siente ≤4\)\.$/, 'Perceived effort $1/10 on an easy day (should feel ≤4).'],
+      [/^Revisa calor, hidratación, comida previa y la carga de los días anteriores\.$/, 'Check heat, hydration, pre-run food and the load of the previous days.'],
+      [/^Prueba por sensación: tus estimados de FC fallaron por (\d+) lpm de promedio \(≤5\): tu sensación está calibrada\.$/, 'Feel test: your HR guesses were off by $1 bpm on average (≤5): your feel is calibrated.'],
+      [/^Prueba por sensación: tus estimados de FC fallaron por (\d+) lpm de promedio\.$/, 'Feel test: your HR guesses were off by $1 bpm on average.'],
+      [/^Sigue usando la alerta de FC en 145 y repite la prueba en 2 semanas\.$/, 'Keep using the HR alert at 145 and repeat the test in 2 weeks.'],
+      [/^Z3 en los 40 min sin mirar el reloj: (\d+) %(?: \(después, con el reloj: (\d+) %\))?\.( Por sensación te quedaste en Z2\.)?$/, (m, a, b, c) => `Z3 in the 40 min without looking at the watch: ${a} %${b ? ` (afterwards, with the watch: ${b} %)` : ''}.${c ? ' By feel you stayed in Z2.' : ''}`],
+      [/^A ciegas subes a Z3: en los fáciles sigue la alerta de FC en 145\.$/, 'Running blind you drift into Z3: on easy runs keep the HR alert at 145.'],
+      [/^(\d+) de (\d+) repeticiones completadas\.$/, '$1 of $2 reps completed.'],
+      [/^Solo (\d+) de (\d+) repeticiones detectadas\.$/, 'Only $1 of $2 reps detected.'],
+      [/^Marca una vuelta por repetición \(usa el entrenamiento del reloj\)\.$/, 'Mark one lap per rep (use the watch workout).'],
+      [/^Ritmo parejo entre repeticiones \(CV ([\d.]+) %\)\.$/, 'Even pace across reps (CV $1 %).'],
+      [/^Ritmo irregular entre repeticiones \(CV ([\d.]+) %\)\.$/, 'Uneven pace across reps (CV $1 %).'],
+      [/^Busca el mismo ritmo de la repetición 2 a la última\.$/, 'Aim for the same pace from rep 2 to the last one.'],
+      [/^Cerraste igual o más fuerte: (.+)$/, 'You finished as strong or stronger: $1'],
+      [/^Te frenaste: (.+)$/, 'You faded: $1'],
+      [/^Sal 5–10 s\/mi más suave en la repetición 1 para no pagarlo al final\.$/, 'Start rep 1 5–10 s/mi easier so you do not pay for it at the end.'],
+      [/^Solo (\d+) % de las repeticiones en Z4–Z5 \(meta ≥50 %\)\.$/, 'Only $1 % of the reps in Z4–Z5 (goal ≥50 %).'],
+      [/^(\d+) % de las repeticiones en Z4–Z5 \(meta ≥50 %\)\.$/, '$1 % of the reps in Z4–Z5 (goal ≥50 %).'],
+      [/^Sal al ritmo objetivo desde el primer minuto y busca FC 165 antes del minuto 2: .+$/, 'Go out at target pace from the first minute and reach HR 165 before minute 2: on short reps HR rises late, and the first ones come out soft if you start easy.'],
+      [/^Aceleraciones de 20 s rápidas y sueltas \(~8:00–8:30\/mi\), con 1 min caminando\.$/, '20 s strides, fast and relaxed (~8:00–8:30/mi), with 1 min walking.'],
+      [/^Calentamiento de 12–15 min en Z2: baja el ritmo si ves 149\.$/, '12–15 min warm-up in Z2: slow down if you see 149.'],
+      [/^Repetición 1 a esfuerzo 7, sin pico de salida\.$/, 'Rep 1 at effort 7, no spike at the start.'],
+      [/^3 min caminando; después trota suave solo si la FC está en (\d+) o menos \(caminar cuenta\)\.$/, '3 min walking; then jog easy only if HR is at $1 or lower (walking counts).'],
+      [/^3 min caminando; después trota suave solo si la FC está en (\d+) o menos; si no, camina \(caminar cuenta como cumplido\)\.$/, '3 min walking; then jog easy only if HR is at $1 or lower; otherwise walk (walking counts as done).'],
+      [/^Calentamiento y aceleraciones dentro de lo planeado\.$/, 'Warm-up and strides as planned.'],
+      [/^Trote final: trotaste (\d+) % del tiempo con la FC sobre (\d+) lpm\.$/, 'Cooldown: you jogged $1 % of the time with HR above $2 bpm.'],
+      [/^Trote final según la regla \((\d+) % caminando, FC promedio (\d+)\): caminar cuenta como cumplido\.$/, 'Cooldown per the rule ($1 % walking, average HR $2): walking counts as done.'],
+      [/^Solo (\d+) % del bloque en (\d+)–(\d+) lpm \(meta ≥70 %\)\.$/, 'Only $1 % of the block at $2–$3 bpm (goal ≥70 %).'],
+      [/^(\d+) % del bloque en (\d+)–(\d+) lpm \(meta ≥70 %\)\.$/, '$1 % of the block at $2–$3 bpm (goal ≥70 %).'],
+      [/^Después del arranque, ritmo fijo de ~10:20–10:30\/mi .+$/, 'After the opening, a fixed pace of ~10:20–10:30/mi for the first 4 min even if HR reads 158–164 (do not chase it); slow down when you see 172.'],
+      [/^Arranque a (.+) \(objetivo 12:00–12:30\/mi\)\.$/, 'Opening at $1 (target 12:00–12:30/mi).'],
+      [/^Los 2 min del arranque a 12:00–12:30 de verdad: el ritmo sostenido empieza después\.$/, 'The 2-min opening truly at 12:00–12:30: the threshold pace starts after that.'],
+      [/^Seguiste a ritmo sostenido ~(\S+) después del fin del bloque\.$/, 'You kept going at threshold pace ~$1 after the block ended.'],
+      [/^Cuando el reloj cambie de paso, se acabó la parte dura: .+$/, 'When the watch changes step, the hard part is over: tone and vibration on, and the time left in the step on screen.'],
+      [/^Racha de (\d+) s sobre 174 lpm \(máximo 60 s\)\.$/, 'Streak of $1 s above 174 bpm (max 60 s).'],
+      [/^Baja el ritmo al ver 172, antes de pasar el umbral\.$/, 'Slow down when you see 172, before crossing the threshold.'],
+      [/^Racha máxima sobre 174 lpm de (\d+) s \(≤60 s\)\.$/, 'Longest streak above 174 bpm: $1 s (≤60 s).'],
+      [/^Milla 1: solo (\d+) % en 165–172 lpm\.$/, 'Mile 1: only $1 % at 165–172 bpm.'],
+      [/^Milla 1: (\d+) % en 165–172 lpm\.$/, 'Mile 1: $1 % at 165–172 bpm.'],
+      [/^En la subida de la milla 1, ritmo por FC: si pasa de 172, acorta el paso\.$/, 'On the mile 1 climb, pace by HR: if it passes 172, shorten your stride.'],
+      [/^Millas 2–5: (\S+) sobre el techo de 174 lpm\.$/, 'Miles 2–5: $1 above the 174 bpm ceiling.'],
+      [/^En las bajadas, quédate 2–4 lpm bajo el techo( \(con calor, techo de 170–172\))?: .+$/, (m, h) => `On the downhills, stay 2–4 bpm under the ceiling${h ? ' (when hot, ceiling 170–172)' : ''}: if miles 2–5 ride the ceiling, mile 6 starts with HR already high.`],
+      [/^Millas 2–5 bajo el techo de 174 lpm \((\S+) sobre él\)\.$/, 'Miles 2–5 under the 174 bpm ceiling ($1 above it).'],
+      [/^Milla 6: (\S+) sobre 180 lpm \(máximo 30 s\)\.$/, 'Mile 6: $1 above 180 bpm (max 30 s).'],
+      [/^En los repechos de la milla 6, al ver 180 afloja hasta bajar de 175\.$/, 'On the mile 6 rises, when you see 180 ease off until under 175.'],
+      [/^Milla 6 dentro del tope de 180 lpm\.$/, 'Mile 6 within the 180 bpm cap.'],
+      [/^Calentamiento en Z2 \(FC promedio (\d+)\)\.$/, 'Warm-up in Z2 (average HR $1).'],
+      [/^Calentamiento con FC promedio (\d+) \(sobre Z2\)\.$/, 'Warm-up at average HR $1 (above Z2).'],
+      [/^Equivalente 10K (\S+) contra (\S+) del (\S+) \((.+)\)\.$/, '10K equivalent $1 vs $2 on $3 ($4).'],
+      [/^Compara con las condiciones de ese día .+$/, 'Compare with that day\'s conditions (heat, time, energy, water) before drawing conclusions.'],
+      [/^Dormiste ([\d.]+) h antes de la sesión\.$/, 'You slept $1 h before the session.'],
+      [/^Energía (\d+)\/10 antes de una sesión de calidad\.$/, 'Energy $1/10 before a quality session.'],
+      [/^Con energía ≤4, revisa comida, sueño y carga antes de salir; considera pasar la sesión a Z2\.$/, 'With energy ≤4, check food, sleep and load before going out; consider switching the session to Z2.'],
+      [/^Comida previa: (.+)\.$/, 'Pre-run food: $1.'],
+      [/^Merienda 1\.5–2 h antes con 30–50 g de carbohidrato.+$/, 'Snack 1.5–2 h before with 30–50 g of carbohydrate, low fat and low fiber (for example, a banana with 2 soda crackers and honey).'],
+      [/^Comida completa (.+) antes de la calidad\.$/, 'Full meal $1 before the quality session.'],
+      [/^Comida completa 3–4 h antes y, si hace falta, merienda ligera 1\.5–2 h antes\.$/, 'Full meal 3–4 h before and, if needed, a light snack 1.5–2 h before.'],
+      [/^Merienda entre 1 y 2 h antes\.$/, 'Snack between 1 and 2 h before.'],
+      [/^Merienda ligera 1\.5–2 h antes; menos de 1 h solo si es algo muy pequeño \(medio guineo\)\.$/, 'Light snack 1.5–2 h before; under 1 h only if it is very small (half a banana).'],
+      [/^Agua en el recorrido: (.+)\.$/, 'Water on the course: $1.'],
+      [/^Ensaya tomar en las millas 2 y 4, como en la carrera\.$/, 'Practice drinking at miles 2 and 4, as in the race.'],
+      [/^Sal al recorrido a las 4:00 pm, .+$/, 'Start the course at 4:00 pm, race time, so the comparison is fair.'],
+      [/^FC sobre 150 lpm: (.+) \(máxima (\d+)\)\.$/, (m, a, b) => `HR above 150 bpm: ${a === 'unos segundos' ? 'a few seconds' : a} (max ${b}).`],
+      [/^En las subidas, paso más corto hasta bajar de 150; la regla es ≤150 toda la marcha\.$/, 'On climbs, shorter steps until under 150; the rule is ≤150 for the whole march.'],
+      [/^FC dentro de ≤150 lpm durante la marcha\.$/, 'HR within ≤150 bpm during the march.'],
+      [/^Chaleco de (\S+) lb \(noviembre: fijo en 20 lb, agua incluida\)\.$/, 'Vest at $1 lb (November: fixed at 20 lb, water included).'],
+      [/^Vuelve a 20 lb\.$/, 'Go back to 20 lb.'],
+      [/^Pies: (.+)\.$/, 'Feet: $1.'],
+      [/^Revisa los pies en la milla 1 y cambia las medias si hace falta\.$/, 'Check your feet at mile 1 and change socks if needed.'],
+      [/^Dormiste ([\d.]+) h \(<6 h\): la regla pide pasar a Z2 o cancelar la calidad\.$/, 'You slept $1 h (<6 h): the rule says switch to Z2 or cancel the quality session.'],
+      [/^Protege ≥7 h la noche antes de una sesión de calidad\.$/, 'Protect ≥7 h of sleep the night before a quality session.'],
+      [/^FC de reposo (\d+) \(≥60\): la regla pide pasar a Z2 o cancelar\.$/, 'Resting HR $1 (≥60): the rule says switch to Z2 or cancel.'],
+      [/^HRV de (\d+) ms \(≤34\): la regla pide pasar a Z2 o cancelar\.$/, 'HRV of $1 ms (≤34): the rule says switch to Z2 or cancel.'],
+      [/^Revisa sueño, hidratación y carga antes de volver a la calidad\.$/, 'Check sleep, hydration and load before returning to quality.'],
+      [/^Sensación térmica de (\d+) °F \(>90\): la regla pide pasar a Z2 o cancelar\.$/, 'Heat index of $1 °F (>90): the rule says switch to Z2 or cancel.'],
+      [/^Mueve la sesión a una hora más fresca\.$/, 'Move the session to a cooler time.'],
+      [/^Con (\d+) °F de sensación: alerta de FC en 145 y pasos cortos en las bajadas\.$/, 'At a $1 °F heat index: HR alert at 145 and short steps on downhills.'],
+      [/^Anota las onzas que tomaste durante \(por ejemplo, 12\), no solo la bebida\.$/, 'Log the ounces you drank during (for example, 12), not just the drink.'],
+      [/^Agua durante la sesión: ([\d.]+) oz \(regla: (\d+) oz o más\)\.$/, 'Water during the session: $1 oz (rule: $2 oz or more).'],
+      [/^Agua durante la sesión: ([\d.]+) oz \(regla: 8 oz o más, en sorbos\)\.$/, 'Water during the session: $1 oz (rule: 8 oz or more, in sips).'],
+      [/^Sorbos de 2–3 oz: después del calentamiento, a mitad y al final del bloque\.$/, '2–3 oz sips: after the warm-up, midway and at the end of the block.'],
+      [/^Síntomas reportados: (.+)\.$/, (m, a) => 'Symptoms reported: ' + a.replace(/mareo \(/g, 'dizziness (').replace(/molestia en el pecho \(/g, 'chest discomfort (') + '.'],
+      [/^Dolor de pecho, mareo o FC anormal: .+$/, 'Chest pain, dizziness or abnormal HR: stop and get a medical evaluation; do not judge it with watch data.'],
+      [/^Sin mareo ni molestia en el pecho\.$/, 'No dizziness or chest discomfort.'],
+      [/^Piernas pesadas desde el inicio\.$/, 'Heavy legs from the start.'],
+      [/^Revisa sueño, la carga de los días anteriores y la fuerza; considera pasar la próxima calidad a Z2\.$/, 'Check sleep, the load of the previous days and strength work; consider making the next quality session Z2.'],
+      [/^Pantorrillas en (\d+)\/10 después de la sesión\.$/, 'Calves at $1/10 after the session.'],
+      [/^Ese día se quitan los saltos; revisa la regla de cancelar antes de la próxima sesión\.$/, 'No jumps that day; check the cancel rule before the next session.'],
+      [/^No pudiste respirar por la nariz en un día fácil\.$/, 'You could not breathe through your nose on an easy day.'],
+      [/^Baja el ritmo hasta poder respirar por la nariz con la FC dentro de Z2\.$/, 'Slow down until you can nose-breathe with HR inside Z2.'],
+      [/^La alerta de FC sonó y no bajaste el ritmo\.$/, 'The HR alert sounded and you did not slow down.'],
+      [/^Cuando suene, baja el ritmo en ese momento\.$/, 'When it sounds, slow down right then.'],
+      [/^No diste pasos cortos en las bajadas\.$/, 'You did not take short steps on the downhills.'],
+      [/^Bajadas con pasos cortos y cadencia de 168 o más: .+$/, 'Downhills with short steps and cadence of 168 or more: less braking, and it protects quads and calves.'],
+      // Ejecución (executionAlerts) — pueden venir con el prefijo "Ejecución: "
+      [/^Ejecución: /, 'Execution: '],
+      [/Aceleraciones lentas: (\d+) de (\d+) más lentas que (las repeticiones|el bloque de ritmo sostenido) \((.+) vs (.+)\)\. Deben ser rápidas y sueltas, con la pausa caminando\.$/, (m, a, b, r, x, y) => `Slow strides: ${a} of ${b} slower than ${r === 'las repeticiones' ? 'the reps' : 'the threshold block'} (${x} vs ${y}). They should be fast and relaxed, with a walking recovery.`],
+      [/Calentamiento por encima de Z2: (.*)\. Debe quedarse en ≤(\d+), aunque el ritmo sea lento\.$/, (m, a, c) => `Warm-up above Z2: ${a.replace(/ % del tiempo sobre /, ' % of the time above ').replace('FC media de los trotes entre aceleraciones', 'average HR of the jogs between strides')}. It should stay ≤${c}, even if the pace is slow.`],
+      [/Primera repetición (\d+) s\/mi más rápida que el promedio de las demás \((.+) vs (.+)\)\. Arranca la 1 a esfuerzo 7\.$/, 'First rep $1 s/mi faster than the average of the rest ($2 vs $3). Start rep 1 at effort 7.'],
+      [/Trote final caminado \((\S+) a (.+)\)\.$/, 'Cooldown walked ($1 at $2).'],
+      [/Esfuerzo percibido (\d+)\/10, por encima del plan \((.+)\)\. Revisa .+$/, 'Perceived effort $1/10, above plan ($2). Check heat, hydration, pre-run food and the load of the previous days.'],
+      // Hallazgos clave
+      [/^Decoupling no válido — (.+)\.$/, (m, r) => 'Decoupling not valid — ' + fcTxReason(r) + '.'],
+      [/^Eficiencia mejoró ([\d.]+)% en la segunda mitad$/, 'Efficiency improved $1% in the second half'],
+      [/^Decoupling ([\d.]+)% — baja la intensidad hasta quedar bajo 7\.5%$/, 'Decoupling $1% — lower the intensity until under 7.5%'],
+      [/^Decoupling ([\d.]+)% — aceptable, apunta a menos de 7\.5%$/, 'Decoupling $1% — acceptable, aim for under 7.5%'],
+      [/^Decoupling ([\d.]+)% — base aeróbica sólida$/, 'Decoupling $1% — solid aerobic base'],
+      [/^VDOT suprimido — (.+)\. No es un esfuerzo de carrera\.$/, (m, r) => 'VDOT suppressed — ' + fcTxReason(r) + '. Not a race effort.'],
+      [/^Calidad de señal FC baja \((\d+)% de la sesión con saltos implausibles\) — .+$/, 'Low HR signal quality ($1% of the session with implausible jumps) — use the chest strap next time, especially in high humidity.'],
+      [/^Nota provisional — .+$/, 'Provisional note — link the session to a plan day or tag its type to grade zone adherence.'],
+      [/^Corriendo \/ caminando: (\d+)% corriendo, (\d+) pausa\(s\) de caminata$/, 'Run / walk: $1% running, $2 walk break(s)'],
+      [/^Bloque de trabajo: (.+)$/, (m, a) => 'Work block: ' + a.replace(/ en (\d)/, ' at $1').replace('racha máx. sobre', 'max streak above').replace('desacople', 'decoupling')]
+    ];
+    const FC_TX_ES = [
+      [/^Cardiac drift \+([\d.]+)% \((\d+)→(\d+) bpm\) — check hydration\/heat$/, 'Deriva cardíaca +$1% ($2→$3 lpm): revisa hidratación y calor'],
+      [/^VDOT ([\d.]+) → 5K projection: (.+)$/, 'VDOT $1 → proyección de 5K: $2']
+    ];
+    function fcTxReason(r) {
+      return String(r)
+        .replace(/^sesión estructurada \(calentamiento, aceleraciones o repeticiones\): se evalúa el bloque de trabajo$/, 'structured session (warm-up, strides or reps): the work block is graded')
+        .replace(/^incluye caminatas \((\d+) % del tiempo\)$/, 'includes walking ($1 % of the time)')
+        .replace(/incluye (\d+) % de caminata/, 'includes $1 % walking').replace('bloque de menos de 10 min', 'block under 10 min')
+        .replace(/perfil de elevación asimétrico \((\d+) m(?: de diferencia neta entre mitades)?\)/, 'asymmetric elevation profile ($1 m)')
+        .replace('datos insuficientes', 'insufficient data').replace('no aplica a ciclismo', 'does not apply to cycling').replace('sesión fácil/recuperación', 'easy/recovery session')
+        .replace(/terreno \((\d+) m\/mi de desnivel\)/, 'terrain ($1 m/mi of climb)').replace('esfuerzo menor a 8 minutos', 'effort under 8 minutes')
+        .replace(/esfuerzo aeróbico \(FC prom (\d+) < (\d+) bpm de umbral\)/, 'aerobic effort (avg HR $1 < $2 bpm threshold)');
+    }
+    function fcTx(text) {
+      const s = String(text == null ? '' : text);
+      const list = getLang() === 'es' ? FC_TX_ES : FC_TX_EN;
+      let o = s;
+      for (const [r, e] of list) { if (r.test(o)) { o = o.replace(r, e); if (r.source.startsWith('^') && r.source.endsWith('$')) break; } }
+      return o;
+    }
     function renderCoachCard(act) {
       const es = getLang() === 'es';
       let f; try { f = coachFeedback(act); } catch (e) { console.warn('coachFeedback', e); return ''; }
       if (!f || (!f.bad.length && !f.good.length && !f.fix.length)) return '';
       const grp = (title, items, type, empty) => `
         <div style="font-family:var(--font-mono);font-size:11px;color:var(--paper-dim);margin:12px 0 4px;letter-spacing:.04em;">${title}</div>
-        ${items.length ? items.map(i => `<div class="finding-line finding-${type}"><span>${type === 'pos' ? '▲' : type === 'warn' ? '◆' : '✕'}</span><span>${esc(i)}</span></div>`).join('') : `<p style="font-size:12px;color:var(--paper-dim);">${empty}</p>`}`;
+        ${items.length ? items.map(i => `<div class="finding-line finding-${type}"><span>${type === 'pos' ? '▲' : type === 'warn' ? '◆' : '✕'}</span><span>${esc(fcTx(i))}</span></div>`).join('') : `<p style="font-size:12px;color:var(--paper-dim);">${empty}</p>`}`;
       return `
         <div class="sitrep-label">${es ? 'ENTRENADOR · QUÉ AJUSTAR' : 'COACH · WHAT TO ADJUST'}</div>
         <div class="card">
+          <button type="button" class="btn btn-primary fc-say-all" style="width:100%; min-height:44px;" onclick="fcSayActivity('${act.id}', this)">🔊 ${es ? 'ESCUCHAR EL ANÁLISIS COMPLETO' : 'LISTEN TO THE FULL ANALYSIS'}</button>
           ${grp(es ? 'LO QUE HICISTE MAL' : 'WHAT WENT WRONG', f.bad, 'crit', es ? 'Nada fuera de las reglas en esta sesión.' : 'Nothing outside the rules in this session.')}
           ${grp(es ? 'LO QUE HICISTE BIEN' : 'WHAT WENT WELL', f.good, 'pos', es ? 'Sin datos suficientes todavía.' : 'Not enough data yet.')}
           ${grp(es ? 'CÓMO MEJORARLO' : 'HOW TO IMPROVE', f.fix, 'warn', es ? 'Mantén lo mismo en la próxima.' : 'Keep doing the same next time.')}
@@ -16076,6 +16675,12 @@ function fcCalCardHtml() {
     // have nothing to "Next" into. This intercepts Enter/"Next", remembers where focus should
     // land, blurs (which fires the normal save+render), then refocuses the new element —
     // all inside the same keydown call stack so the on-screen keyboard never has to close.
+    // 2026.11.25-1: cuando un campo pierde el foco porque tocaste otro campo (o la flecha "Siguiente" del teclado),
+    // el guardado hace render() y rehace la pantalla; esto recuerda el campo de destino para devolverle el foco.
+    document.addEventListener('blur', (e) => {
+      const nx = e.relatedTarget;
+      if (nx && nx.id && /^(INPUT|TEXTAREA|SELECT)$/.test(nx.tagName) && !_focusAfterRender) _focusAfterRender = nx.id;
+    }, true);
     function handleEnterNext(event, nextFieldId) {
       const isEnter = event.key === 'Enter' || event.keyCode === 13 || event.which === 13;
       if (!isEnter) return;
@@ -16092,6 +16697,7 @@ function fcCalCardHtml() {
     //  • form rows whose <label> is not bound to its control get an aria-label
     function enhanceA11y() {
       const es = getLang() === 'es';
+      fcSayInject();
       try {
         document.documentElement.lang = es ? 'es' : 'en';
         document.querySelectorAll('[onclick]').forEach(el => {
@@ -16207,7 +16813,7 @@ function fcCalCardHtml() {
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.24-4';
+    const APP_BUILD = '2026.11.25-3';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
