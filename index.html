@@ -2281,6 +2281,9 @@ function fcSundayISO(iso) { const d = parseISODateLocal(iso || todayISO()); retu
 let _fcMirrorT = null;
 function fcMirrorState(now) {
   clearTimeout(_fcMirrorT);
+  // 2026.11.25-4: no copiar al almacén interno hasta que el arranque decida cuál copia es la buena.
+  // Antes, con el espacio lleno, la copia vieja del teléfono pisaba la buena del almacén y se perdían actividades.
+  if (!window._fcBootDone) { window._fcMirrorPending = true; return; }
   const run = async () => {
     try {
       const json = JSON.stringify(state);
@@ -2293,35 +2296,41 @@ function fcMirrorState(now) {
         for (const k of old) await fcIdbDel(k);
       }
       if (window._fcSaveFailed) fcSaveAlertIdb();
-    } catch (e) { window._fcIdbOk = false; console.warn('almacén interno', e); }
+    } catch (e) { window._fcIdbOk = false; console.warn('almacén interno', e); if (window._fcSaveFailed && typeof fcSaveAlert === 'function') fcSaveAlert(true); }
   };
   if (now) run(); else _fcMirrorT = setTimeout(run, 600);
 }
 function fcSaveAlertIdb() {
+  // 2026.11.25-4: si el almacén interno guarda bien, no hay nada que hacer: el aviso se quita y no vuelve en esta sesión.
   const el = document.getElementById('fc-save-alert');
-  if (!el) return;
-  el.style.background = 'var(--signal-amber, #b8860b)';
-  el.innerHTML = '<b>Espacio del navegador lleno</b> — tus datos <b>sí</b> se están guardando en el almacén interno de la app. Exporta un respaldo .json cuando puedas.';
+  if (el) el.remove();
+  if (!window._fcIdbNoticeShown) { window._fcIdbNoticeShown = true; try { showToast(getLang() === 'es' ? 'Datos guardados en el almacén interno de la app ✓' : 'Data saved in the app\'s internal store ✓'); } catch (e) {} }
 }
 async function fcBootRestore() {
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (e) {}
   try {
     const raw = await fcIdbGet('state');
-    if (!raw) { fcMirrorState(true); return; }
+    if (!raw) { window._fcBootDone = true; fcMirrorState(true); return; }
     const idb = JSON.parse(raw);
     const lsRaw = localStorage.getItem(STORAGE_KEY);
-    const lsAt = Number(state.savedAt) || 0, idbAt = Number(idb.savedAt) || 0;
+    // Se compara con lo que de verdad quedó guardado en el teléfono (state.savedAt cambia en memoria aunque el guardado falle).
+    const lsAt = Number(window._fcLsSavedAt) || 0, idbAt = Number(idb.savedAt) || 0;
     const lsEmpty = !lsRaw || !state.profile;
-    if ((lsEmpty && idb.profile) || idbAt > lsAt + 2000) {
+    const idbMore = (idb.tcxSessions || []).length > (state.tcxSessions || []).length;
+    if ((lsEmpty && idb.profile) || idbAt > lsAt + 2000 || (window._fcLsSlim && idbAt >= lsAt - 2000) || (idbMore && idbAt >= lsAt)) {
+      window._fcBootDone = true;
       const merged = { ...DEFAULT_STATE, ...idb };
       merged.settings = { ...DEFAULT_STATE.settings, ...(idb.settings || {}) };
+      delete merged._slim;
       state = merged;
-      try { localStorage.setItem(STORAGE_KEY, raw); } catch (e) {}
+      window._fcBootDone = true;
+      try { saveState(); } catch (e) {}
       if (currentView === 'onboarding' && state.profile) currentView = 'home';
       render();
-      showToast('✓ Datos recuperados del almacén interno (' + (state.tcxSessions || []).length + ' actividades)');
-    } else fcMirrorState(true);
-  } catch (e) { console.warn('restaurar', e); }
+      if (!window._fcLsSlim) showToast((getLang() === 'es' ? '✓ Datos recuperados del almacén interno (' : '✓ Data restored from the internal store (') + (state.tcxSessions || []).length + (getLang() === 'es' ? ' actividades)' : ' activities)'));
+      fcMirrorState(true);
+    } else { window._fcBootDone = true; fcMirrorState(true); }
+  } catch (e) { console.warn('restaurar', e); window._fcBootDone = true; }
 }
 async function fcSnapshotsHtmlFill() {
   const el = document.getElementById('fc-snaps'); if (!el) return;
@@ -3364,6 +3373,8 @@ function fcCalCardHtml() {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (!saved) return { ...DEFAULT_STATE };
         const parsed = JSON.parse(saved);
+        // 2026.11.25-4: lo que de verdad había guardado en el teléfono (no cambia aunque luego falle un guardado)
+        window._fcLsSavedAt = Number(parsed.savedAt) || 0; window._fcLsSlim = !!parsed._slim;
         // Merge onto defaults so new fields (schemaVersion, lastBackupISO, etc.) always exist.
         const merged = { ...DEFAULT_STATE, ...parsed };
         // settings is a nested object — a shallow merge above would drop new sub-keys
@@ -3371,6 +3382,7 @@ function fcCalCardHtml() {
         merged.settings = { ...DEFAULT_STATE.settings, ...(parsed.settings || {}) };
         merged.settings.bodyMeasVisible = { ...DEFAULT_STATE.settings.bodyMeasVisible, ...(parsed.settings?.bodyMeasVisible || {}) };
         merged.schemaVersion = SCHEMA_VERSION;
+        delete merged._slim;
         return merged;
       } catch (e) {
         return { ...DEFAULT_STATE };
@@ -3655,7 +3667,7 @@ function fcCalCardHtml() {
         if (!show) { if (el) el.remove(); return; }
         const r = fcStorageReport(), es = getLang() === 'es';
         if (!el) { el = document.createElement('div'); el.id = 'fc-save-alert'; el.setAttribute('role', 'alert'); document.body.appendChild(el); }
-        el.innerHTML = `<b>${es ? '⚠ NO SE ESTÁ GUARDANDO' : '⚠ NOT SAVING'}</b> — ${es ? 'el almacenamiento del teléfono para esta página está lleno' : 'storage for this page is full'} (${r.kb} KB). ${es ? 'Lo que hagas se pierde al cerrar la app. Exporta un respaldo (Más) y libera espacio.' : 'Changes are lost when the app closes. Export a backup and free space.'}<br><small>${r.top}</small>`;
+        el.innerHTML = `<b>${es ? '⚠ NO SE ESTÁ GUARDANDO' : '⚠ NOT SAVING'}</b> — ${es ? 'el almacenamiento del teléfono para esta página está lleno' : 'storage for this page is full'} (${r.kb} KB). ${es ? 'Lo que hagas se pierde al cerrar la app. Exporta un respaldo (Más) y libera espacio.' : 'Changes are lost when the app closes. Export a backup and free space.'}<br><small>${r.top}</small> <button type="button" onclick="this.parentNode.remove()" aria-label="${es ? 'Cerrar aviso' : 'Close notice'}" style="float:right;min-width:44px;min-height:36px;background:transparent;color:#fff;border:1px solid #fff;border-radius:6px;font-weight:800">✕</button>`;
       } catch (e) {}
     }
     function saveState() {
@@ -3669,7 +3681,18 @@ function fcCalCardHtml() {
         try {
           if (fcCompactOldSessions(21) > 0) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); window._fcSaveFailed = false; fcSaveAlert(false); return true; }
         } catch (e1) {}
-        window._fcSaveFailed = true; fcSaveAlert(true);
+        // 2026.11.25-4: copia liviana en el teléfono (sin las trazas segundo a segundo, que pesan ~70 % de cada actividad).
+        // La copia completa queda en el almacén interno (IndexedDB) y es la que se usa al abrir la app.
+        try {
+          const slim = JSON.stringify(Object.assign({}, state, { _slim: true }), (k, v) => (k === 'trace5' || k === 'series') ? undefined : v);
+          localStorage.setItem(STORAGE_KEY, slim);
+          window._fcLsSlim = true; window._fcLsSavedAt = state.savedAt;
+          window._fcSaveFailed = false; fcSaveAlert(false);
+          return true;
+        } catch (e2) {}
+        window._fcSaveFailed = true;
+        // Si el almacén interno funciona, los datos están a salvo: no se tapa la pantalla con el aviso rojo.
+        if (window._fcIdbOk === false || !('indexedDB' in window)) fcSaveAlert(true);
         const e = e0;
         // Most likely QuotaExceededError from too many stored TCX sessions with detailed splits.
         console.error('saveState failed:', e);
@@ -16813,7 +16836,7 @@ function fcCalCardHtml() {
     // Without a visible version there is no way to tell a deploy that failed from one that
     // succeeded but is being served from cache. Shown in More → Settings and printed to the
     // console on every load.
-    const APP_BUILD = '2026.11.25-3';
+    const APP_BUILD = '2026.11.25-4';
     console.log('%cFitCoach Táctico build ' + APP_BUILD, 'font-weight:bold');
 
     // ── PWA: offline support via a real service worker file (sw.js) ──
